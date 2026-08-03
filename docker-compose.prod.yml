@@ -32,6 +32,11 @@ services:
 
   frontend:
     restart: unless-stopped
+    # Базовый compose запускает `npm install && npm run dev`: в деве это удобно —
+    # правка package.json подхватывается без пересборки образа. В проде зависимости
+    # уже установлены на этапе сборки, а повторный npm install поверх анонимного
+    # volume /app/node_modules падает с ENOTEMPTY и загоняет контейнер в restart-loop.
+    command: npm run dev
 
   db:
     restart: unless-stopped
@@ -62,11 +67,22 @@ services:
 
   nginx:
     restart: unless-stopped
-    # 3000 — дев-привычка, наружу в проде не нужен.
+    # Только 443. :80 (redirect на https) и :3000 (дев-привычка) наружу не
+    # публикуем — на этой машине 80 занят посторонним сервисом. Следствие:
+    # http://<адрес> не отвечает, адрес надо набирать с https:// явно.
     ports: !override
-      - "80:80"
       - "443:443"
     # Адрес для SAN сертификата (deploy.sh экспортирует из .env.prod).
     environment:
       CERT_IP: ${CERT_IP:-}
       CERT_HOST: ${CERT_HOST:-}
+
+# MTU compose-сети. Docker создаёт user-defined bridge с MTU 1500 и НЕ наследует
+# `mtu` из daemon.json, поэтому хостинг, где реальный path MTU ниже, а ICMP
+# "fragmentation needed" режется, даёт blackhole: мелкие ответы проходят,
+# крупные (метаданные npm, тарболлы, apt) виснут в таймаут. Значение берётся из
+# .env.prod; 1500 — обычный случай, снижать только если наблюдается такой симптом.
+networks:
+  default:
+    driver_opts:
+      com.docker.network.driver.mtu: ${DOCKER_NETWORK_MTU:-1500}
