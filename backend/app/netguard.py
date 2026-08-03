@@ -1,8 +1,8 @@
 """Сетевые предикаты для SSRF-защиты — без зависимостей от БД и моделей.
 
-Вынесено из JiraIntegrationService, чтобы модули рекон-фермы (farm.core,
-farm.resolver) могли пользоваться теми же правилами, не втягивая app.services
-со всей ORM. JiraIntegrationService._is_disallowed_ip делегирует сюда.
+Вынесено отдельным модулем, чтобы рекон-ферма (farm.core, farm.resolver) и
+прикладные сервисы пользовались одними правилами, не втягивая app.services
+со всей ORM.
 """
 
 from __future__ import annotations

@@ -290,33 +290,6 @@ class ProjectMember(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class JiraInstance(Base, TimestampMixin):
-    """Глобальная конфигурация Jira для backend-only интеграции."""
-
-    __tablename__ = "jira_instances"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, default="default", server_default="default")
-    base_url: Mapped[str] = mapped_column(String(1024), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
-    api_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
-    default_issue_type: Mapped[str] = mapped_column(String(100), nullable=False, default="Task", server_default="Task")
-    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-
-
-class ProjectJiraLink(Base, TimestampMixin):
-    """Привязка проекта PCF к Jira project key."""
-
-    __tablename__ = "project_jira_links"
-    __table_args__ = (UniqueConstraint("project_id", name="uq_project_jira_link_project"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    jira_project_key: Mapped[str] = mapped_column(String(32), nullable=False)
-    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-
-
 class ProjectNote(Base, TimestampMixin):
     """Вложенная заметка проекта (Confluence-like)."""
 
@@ -733,25 +706,6 @@ class VulnerabilityAsset(Base):
     )
     asset_type: Mapped[AssetType] = mapped_column(Enum(AssetType, name="asset_type"), nullable=False)
     asset_id: Mapped[int] = mapped_column(Integer, nullable=False)
-
-
-class JiraIssueLink(Base, TimestampMixin):
-    """Связь уязвимости PCF с issue в Jira."""
-
-    __tablename__ = "jira_issue_links"
-    __table_args__ = (UniqueConstraint("vulnerability_id", name="uq_jira_issue_link_vulnerability"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    vulnerability_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("vulnerabilities.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    jira_issue_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    jira_issue_url: Mapped[str] = mapped_column(String(1024), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="linked", server_default="linked")
-    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class File(Base):

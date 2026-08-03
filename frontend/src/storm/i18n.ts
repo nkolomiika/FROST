@@ -262,30 +262,11 @@ const RU: Record<string, string> = {
   "No activity yet.": "Пока нет активности.",
   "Loading activity…": "Загрузка активности…",
 
-  // ── export / jira ──
+  // ── export ──
   Export: "Экспорт",
-  Exporting: "Экспорт",
   "Export report": "Экспорт отчёта",
-  "Export to Jira": "Экспорт в Jira",
-  "Export all to Jira": "Экспортировать всё в Jira",
-  "Export finished": "Экспорт завершён",
-  "Open in Jira": "Открыть в Jira",
-  "Open Jira": "Открыть Jira",
-  "Checking status…": "Проверка статуса…",
-  "Already exported:": "Уже выгружено:",
-  "Already linked (skipped):": "Уже связано (пропущено):",
-  "Failed:": "Ошибок:",
   "Selected:": "Выбрано:",
   "% elapsed": "% прошло",
-  "A Jira issue (": "Задача в Jira (",
-  ") will be created in To Do with the finding details, a start date of today and a due date in 2 weeks.":
-    ") будет создана в To Do с деталями уязвимости, датой начала сегодня и сроком через 2 недели.",
-  "This will create a Jira issue (in To Do) for each of the": "Будет создана задача в Jira (в To Do) для каждой из",
-  "Exports whatever is left after the page filters —": "Выгружает всё, что осталось после фильтров страницы —",
-  "(page filters apply). Already-linked findings are skipped.":
-    "(с учётом фильтров страницы). Уже связанные уязвимости пропускаются.",
-  ". To export something else, change the filters and reopen the export.":
-    ". Чтобы выгрузить другое, измените фильтры и откройте экспорт заново.",
 
   // ── profile / settings ──
   "Profile Settings": "Настройки профиля",
@@ -364,7 +345,6 @@ const RU: Record<string, string> = {
   "Start date": "Дата начала",
   "End date": "Дата окончания",
   Created: "Создан",
-  "Created:": "Создан:",
   Actions: "Действия",
   Project: "Проект",
   "Click to view": "Нажмите для просмотра",

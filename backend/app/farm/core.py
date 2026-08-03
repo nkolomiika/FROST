@@ -78,8 +78,8 @@ def _cf_from_headers(headers) -> bool:
 
 
 class ProbeTransport(httpx.AsyncHTTPTransport):
-    """Как _SafeJiraTransport: повторно резолвит host и отклоняет приватные IP
-    (защита от DNS-rebinding между нашим резолвом и реальным подключением)."""
+    """Повторно резолвит host и отклоняет приватные IP (защита от DNS-rebinding
+    между нашим резолвом и реальным подключением)."""
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         host = request.url.host

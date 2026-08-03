@@ -6,7 +6,7 @@ _ids = _id_count(1)
 
 import pytest
 
-from app.services import AssetService, JiraIntegrationService
+from app.services import AssetService
 
 
 def test_normalize_endpoint_path_replaces_uuid_segments() -> None:
@@ -98,13 +98,6 @@ def test_normalize_host_ip_entries_deduplicates_and_marks_primary() -> None:
 
     assert [entry["ip_address"] for entry in entries] == ["10.0.0.1", "10.0.0.2"]
     assert [entry["is_primary"] for entry in entries] == [False, True]
-
-
-def test_jira_secret_roundtrip_does_not_store_plain_text() -> None:
-    encrypted = JiraIntegrationService._encrypt_secret("jira-secret")
-
-    assert encrypted != "jira-secret"
-    assert JiraIntegrationService._decrypt_secret(encrypted) == "jira-secret"
 
 
 def _compiled_where(query) -> str:

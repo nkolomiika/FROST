@@ -195,8 +195,6 @@
 | POST | `/vulnerabilities/{vid}/comments` | Добавить комментарий с `@mention` | participant |
 | PUT | `/vulnerabilities/comments/{comment_id}` | Изменить комментарий | автор |
 | DELETE | `/vulnerabilities/comments/{comment_id}` | Удалить комментарий | автор / admin |
-| POST | `/vulnerabilities/{vid}/jira/export` | Экспорт уязвимости в Jira issue | participant |
-| GET | `/vulnerabilities/{vid}/jira` | Информация о связи с Jira | participant |
 
 ### 3.7. Импорт и отчёты
 
@@ -221,17 +219,7 @@
 |-------|------|------------|------|
 | GET | `/audit-logs` | Чтение журнала с фильтрами + full-text-поиск | admin |
 
-### 3.10. Интеграция с Jira (`/api/v1/jira`)
-
-| Метод | Путь | Назначение | Роли |
-|-------|------|------------|------|
-| GET | `/jira/config` | Текущая конфигурация Jira | admin |
-| PUT | `/jira/config` | Создать/обновить конфигурацию | admin |
-| DELETE | `/jira/config` | Удалить конфигурацию | admin |
-| PUT | `/projects/{id}/jira-link` | Привязать проект к Jira-проекту | admin |
-| DELETE | `/projects/{id}/jira-link` | Отвязать проект от Jira | admin |
-
-### 3.11. Agent-токены (`/api/v1/agent-tokens`)
+### 3.10. Agent-токены (`/api/v1/agent-tokens`)
 
 | Метод | Путь | Назначение | Роли |
 |-------|------|------------|------|
@@ -725,54 +713,7 @@ flowchart TD
     I --> Z([200 ImportResult])
 ```
 
-### Процесс 13. Экспорт уязвимости в Jira
-
-**Назначение.** Создать issue в Jira с описанием уязвимости и привязать его к записи.
-
-**Используемые endpoints.**
-- `PUT /api/v1/jira/config` (один раз — admin)
-- `PUT /api/v1/projects/{id}/jira-link`
-- `POST /api/v1/projects/{id}/vulnerabilities/{vid}/jira/export`
-- `GET .../vulnerabilities/{vid}/jira`
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as Пентестер
-    participant B as Backend
-    participant DB as PostgreSQL
-    participant J as Jira REST
-
-    U->>B: POST /vulnerabilities/{vid}/jira/export
-    B->>B: require_project_access
-    B->>DB: SELECT vulnerability, project, project_jira_link, jira_instance
-    B->>B: Проверить SSRF (base_url: https, не localhost, не private IP)
-    B->>B: Расшифровать api_token
-    B->>J: POST /rest/api/3/issue\n{ project_key, summary, description, issuetype }
-    alt 2xx
-        J-->>B: 201 issue { key, self }
-        B->>DB: UPSERT jira_issue_link\n(status='linked', jira_issue_key, jira_issue_url)
-        B->>DB: INSERT audit_logs (UPDATE)
-        B-->>U: 200 JiraExportResult
-    else 4xx/5xx
-        J-->>B: error
-        B->>DB: UPSERT jira_issue_link\n(status='error', last_error)
-        B-->>U: 502 JiraError
-    end
-```
-
-```mermaid
-flowchart TD
-    A([База: jira_instance + project_jira_link]) --> B{Конфиг есть?}
-    B -- "нет" --> X1([400: Jira не настроена])
-    B -- "да" --> C{base_url валидный<br/>не SSRF?}
-    C -- "нет" --> X2([400: SSRF-нарушение])
-    C -- "да" --> D{api_token есть?}
-    D -- "нет" --> X3([400: токен не задан])
-    D -- "да" --> E([Готово к экспорту])
-```
-
-### Процесс 14. Генерация Word-отчётов
+### Процесс 13. Генерация Word-отчётов
 
 **Назначение.** Сформировать DOCX-отчёт «План пентеста» (ПП) или «Состояние защищённости» (СЗИ) по данным проекта.
 
@@ -795,7 +736,7 @@ sequenceDiagram
     B-->>U: 200 application/vnd.openxmlformats...\nContent-Disposition: attachment; filename*=UTF-8''Report.docx
 ```
 
-### Процесс 15. Управление профилем и аватаром
+### Процесс 14. Управление профилем и аватаром
 
 **Используемые endpoints.**
 - `GET /api/v1/users/me`, `GET /api/v1/users/me/profile`
@@ -821,7 +762,7 @@ flowchart TD
     G --> Y
 ```
 
-### Процесс 16. Выпуск Bearer-токена для AI-агента
+### Процесс 15. Выпуск Bearer-токена для AI-агента
 
 **Используемые endpoints.**
 - `POST /api/v1/agent-tokens` (создать)
@@ -850,7 +791,7 @@ sequenceDiagram
     Note over A,B: Значение token показывается ОДИН раз
 ```
 
-### Процесс 17. Работа AI-агента через `/api/v2`
+### Процесс 16. Работа AI-агента через `/api/v2`
 
 **Используемые endpoints.** все `/api/v2/...` (см. раздел 4).
 
@@ -877,7 +818,7 @@ sequenceDiagram
 - Скоупа не хватает → `403`;
 - Проект недоступен (нет `all_projects` и нет grant) → `403`.
 
-### Процесс 18. Просмотр журнала аудита
+### Процесс 17. Просмотр журнала аудита
 
 **Используемые endpoints.** `GET /api/v1/audit-logs`.
 
@@ -896,7 +837,7 @@ flowchart TD
 **Поля каждой записи.** `created_at`, `username`, `action`, `entity_type`,
 `entity_id`, `ip_address`, `user_agent`, `details (JSON)`.
 
-### Процесс 19. Real-time обновления через WebSocket
+### Процесс 18. Real-time обновления через WebSocket
 
 **Используемые каналы.** `/ws/notifications`, `/ws/projects/{id}`, `/ws/projects-index`.
 
@@ -929,12 +870,12 @@ sequenceDiagram
 |----------|------------------|
 | `enforce_csrf` (Origin whitelist) | Все state-changing методы `/api/v1` |
 | `get_current_user` (JWT cookie) | Все `/api/v1` кроме `/auth/login` и `/auth/refresh` |
-| `require_admin` | Управление пользователями, agent-токенами, конфигом Jira, чтение audit-logs |
+| `require_admin` | Управление пользователями, agent-токенами, чтение audit-logs |
 | `require_project_access` | Все эндпоинты под `/projects/{id}/...` |
 | `get_agent_token_context` + `require_agent_scope` | Все `/api/v2/...` |
 | `require_agent_project_access` | Все `/api/v2/projects/{id}/...` |
 | MIME-whitelist + size-check + filename sanitize | Все upload-эндпоинты файлов |
-| SSRF-валидация | Конфигурация Jira `base_url` |
+| SSRF-валидация | Исходящие запросы рекон-фермы (`app/netguard.py`) |
 | Markdown URL whitelist (http/https/mailto + data:image) | `MarkdownEditor` и рендер на фронте |
 | `audit_logs` запись | Все мутирующие операции и события аутентификации |
 

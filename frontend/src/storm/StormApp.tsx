@@ -94,8 +94,6 @@ import {
   setupTwoFactor as apiSetupTwoFactor,
   confirmTwoFactor as apiConfirmTwoFactor,
   disableTwoFactor as apiDisableTwoFactor,
-  exportVulnerabilityToJira as apiExportVulnerabilityToJira,
-  getVulnerabilityJiraLink as apiGetVulnerabilityJiraLink,
 } from "../api";
 import { calculateCvssScore, severityFromCvssScore } from "../cvss";
 import { PROJECT_STATUS_ORDER } from "../projectStatus";
@@ -116,7 +114,6 @@ import type {
   Port as ApiPort,
   Service as ApiService,
   Vulnerability as ApiVulnerability,
-  JiraIssueLink,
   Invitation as ApiInvitation,
 } from "../types";
 import {
@@ -418,24 +415,6 @@ interface StormState {
   /** Real backend vulnerability id (not a list index) — it is part of the URL. */
   openVulnId: number | null;
   vulnDetailForm: VulnDetailForm;
-  // ---- Jira export modal ----
-  jiraExportOpen: boolean;
-  jiraExportVulnId: number | null;
-  jiraExportChecking: boolean; // идёт начальная проверка (уже экспортировано? проект привязан?)
-  jiraExportBusy: boolean; // идёт сам экспорт
-  jiraExportLink: JiraIssueLink | null; // существующая/созданная связь с задачей
-  jiraExportError: string | null;
-  // ---- Bulk Jira export (все уязвимости раздела) ----
-  jiraBulkOpen: boolean;
-  jiraBulkRunning: boolean;
-  jiraBulkDone: number;
-  jiraBulkTotal: number;
-  jiraBulkCreated: number;
-  jiraBulkSkipped: number;
-  jiraBulkFailed: number;
-  jiraBulkFinished: boolean;
-  /** Ссылка на Jira-проект — выводится из URL созданной задачи, для кнопки «Open Jira». */
-  jiraBulkProjectUrl: string | null;
 }
 
 const initialState: StormState = {
@@ -594,21 +573,6 @@ const initialState: StormState = {
   vulnFilterHost: "",
   openVulnId: null,
   vulnDetailForm: {},
-  jiraExportOpen: false,
-  jiraExportVulnId: null,
-  jiraExportChecking: false,
-  jiraExportBusy: false,
-  jiraExportLink: null,
-  jiraExportError: null,
-  jiraBulkOpen: false,
-  jiraBulkRunning: false,
-  jiraBulkDone: 0,
-  jiraBulkTotal: 0,
-  jiraBulkCreated: 0,
-  jiraBulkSkipped: 0,
-  jiraBulkFailed: 0,
-  jiraBulkFinished: false,
-  jiraBulkProjectUrl: null,
 };
 
 const CARD: CSSProperties = { background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 16 };
@@ -2269,96 +2233,6 @@ export function StormApp() {
       setState({ exportBusy: false });
       pushToast(getApiErrorMessage(e, "Couldn't generate report"), "error");
     }
-  };
-
-  // ================= Jira export =================
-  const openJiraExport = (vulnId: number) => {
-    const pid = state.openProjectId;
-    if (pid == null) return;
-    setState({
-      jiraExportOpen: true,
-      jiraExportVulnId: vulnId,
-      jiraExportChecking: true,
-      jiraExportBusy: false,
-      jiraExportLink: null,
-      jiraExportError: null,
-    });
-    // Jira настроена на уровне деплоя — проверяем только, не экспортирована ли уже находка.
-    void apiGetVulnerabilityJiraLink(pid, vulnId)
-      .catch(() => null)
-      .then((link) => setState({ jiraExportChecking: false, jiraExportLink: link }));
-  };
-  const closeJiraExport = () => setState({ jiraExportOpen: false });
-  const doJiraExport = async () => {
-    const pid = state.openProjectId;
-    const vid = state.jiraExportVulnId;
-    if (pid == null || vid == null) return;
-    setState({ jiraExportBusy: true, jiraExportError: null });
-    try {
-      const link = await apiExportVulnerabilityToJira(pid, vid);
-      setState({ jiraExportBusy: false, jiraExportLink: link });
-      pushToast(`Exported to Jira: ${link.jira_issue_key || "issue created"}`, "success");
-    } catch (e) {
-      const msg = getApiErrorMessage(e, "Couldn't export to Jira");
-      setState({ jiraExportBusy: false, jiraExportError: msg });
-      pushToast(msg, "error");
-    }
-  };
-
-  // ---- Bulk export: every vulnerability currently listed (respecting filters) ----
-  const openBulkJira = () => {
-    const pid = state.openProjectId;
-    if (pid == null) return;
-    setState({
-      jiraBulkOpen: true,
-      jiraBulkRunning: false,
-      jiraBulkFinished: false,
-      jiraBulkDone: 0,
-      jiraBulkTotal: 0,
-      jiraBulkCreated: 0,
-      jiraBulkSkipped: 0,
-      jiraBulkFailed: 0,
-      jiraBulkProjectUrl: null,
-    });
-  };
-  const closeBulkJira = () => {
-    if (!state.jiraBulkRunning) setState({ jiraBulkOpen: false });
-  };
-  const doBulkJiraExport = async () => {
-    const pid = state.openProjectId;
-    if (pid == null) return;
-    const ids = vulns.map((v) => v.id);
-    setState({ jiraBulkRunning: true, jiraBulkFinished: false, jiraBulkTotal: ids.length, jiraBulkDone: 0, jiraBulkCreated: 0, jiraBulkSkipped: 0, jiraBulkFailed: 0 });
-    let created = 0;
-    let skipped = 0;
-    let failed = 0;
-    // Ссылку на Jira-проект выводим из URL любой задачи: .../browse/STORM-29 -> .../browse/STORM
-    let projectUrl: string | null = null;
-    const rememberProjectUrl = (issueUrl?: string) => {
-      if (projectUrl || !issueUrl) return;
-      const m = issueUrl.match(/^(.*\/browse\/[A-Za-z][A-Za-z0-9_]*)-\d+/);
-      if (m) projectUrl = m[1];
-    };
-    for (const id of ids) {
-      try {
-        const existing = await apiGetVulnerabilityJiraLink(pid, id).catch(() => null);
-        if (existing && existing.status === "linked" && existing.jira_issue_key) {
-          skipped++;
-          rememberProjectUrl(existing.jira_issue_url);
-        } else {
-          const link = await apiExportVulnerabilityToJira(pid, id);
-          created++;
-          rememberProjectUrl(link.jira_issue_url);
-        }
-      } catch {
-        failed++;
-      }
-      setState((s) => ({ jiraBulkDone: s.jiraBulkDone + 1, jiraBulkCreated: created, jiraBulkSkipped: skipped, jiraBulkFailed: failed }));
-    }
-    setState({ jiraBulkProjectUrl: projectUrl });
-    setState({ jiraBulkRunning: false, jiraBulkFinished: true });
-    reloadVulns();
-    pushToast(`Jira export finished — ${created} created, ${skipped} already linked, ${failed} failed`, failed ? "warning" : "success");
   };
 
   // ================= detail: hosts / recon =================
@@ -4440,14 +4314,8 @@ export function StormApp() {
                   <Icon name="search" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Select domains & scan")}
                 </button>
               )}
-              {/* В карточке уязвимости кнопка живёт в строке «All findings» (см. renderVulnDetail). */}
               {sec === "vulns" && state.openVulnId == null && (
-                <>
-                  <button className="clk" onClick={openBulkJira} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="upload" size={15} sw={2.2} color="var(--st-accent-2)" />{t("Export all to Jira")}
-                  </button>
-                  <button className="addbtn clk" onClick={() => openEditor("vuln", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add issue")}</button>
-                </>
+                <button className="addbtn clk" onClick={() => openEditor("vuln", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add issue")}</button>
               )}
               {sec === "notes" && (
                 <button className="addbtn clk" onClick={() => openNoteEditor("add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add note")}</button>
@@ -5390,7 +5258,6 @@ export function StormApp() {
               <div className="mono" style={{ fontSize: 12, color: "var(--st-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.author}</div>
               <div className="mono" style={{ fontSize: 11.5, color: "var(--st-text-faint)" }}>{v.updated}</div>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
-                <div className="actbtn" title={t("Export to Jira")} onClick={(e) => { e.stopPropagation(); openJiraExport(v.id); }}><Icon name="upload" size={15} /></div>
                 <div className="actbtn" onClick={v.onEdit}><Icon name="edit" size={15} /></div>
                 <div className="actbtn del" onClick={v.onDelete}><Icon name="trash" size={15} /></div>
               </div>
@@ -5428,9 +5295,6 @@ export function StormApp() {
           <span className="clk" onClick={closeVulnDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
             <Icon name="chevron-left" size={15} />{t("All findings")}
           </span>
-          <button className="addbtn clk" onClick={() => state.openVulnId != null && openJiraExport(state.openVulnId)} style={{ height: 38, flex: "none" }}>
-            <Icon name="upload" size={15} color="var(--st-on-accent)" sw={2.4} />{t("Export to Jira")}
-          </button>
         </div>
         <div style={{ ...CARD, padding: "26px 28px" }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
@@ -6214,13 +6078,13 @@ export function StormApp() {
           <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{state.wsUserMode === "add" ? "Invite member" : "Edit member"}</h2>
           {state.wsUserMode === "add" ? (
             <>
-              <div style={{ marginTop: 16 }}><label className="flabel">{t("Email")}</label><input className="finp" placeholder={t("user@example.com")} value={state.wsUserEmail} onChange={(e) => setState({ wsUserEmail: e.target.value })} /></div>
+              <div style={{ marginTop: 16 }}><label className="flabel">{t("Email")}</label><input className="finp" placeholder={t("user@company.com")} value={state.wsUserEmail} onChange={(e) => setState({ wsUserEmail: e.target.value })} /></div>
             </>
           ) : (
             <>
               {/* Юзернейм неизменяем (даже админом) — как и email: только для чтения. */}
               <div style={{ marginTop: 20 }}><label className="flabel">{t("Username")}</label><input className="finp" value={state.wsUserName} disabled style={{ background: "var(--st-elevated)", color: "var(--st-text-3)" }} /></div>
-              <div style={{ marginTop: 16 }}><label className="flabel">{t("Email")}</label><input className="finp" placeholder={t("user@example.com")} value={state.wsUserEmail} disabled style={{ background: "var(--st-elevated)", color: "var(--st-text-3)" }} /></div>
+              <div style={{ marginTop: 16 }}><label className="flabel">{t("Email")}</label><input className="finp" placeholder={t("user@company.com")} value={state.wsUserEmail} disabled style={{ background: "var(--st-elevated)", color: "var(--st-text-3)" }} /></div>
             </>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
@@ -6418,131 +6282,6 @@ export function StormApp() {
             </button>
           </div>
         </>
-      )}
-
-      {/* export: single vulnerability -> Jira issue */}
-      {modalShell(
-        state.jiraExportOpen,
-        closeJiraExport,
-        60,
-        460,
-        (() => {
-          const v = state.jiraExportVulnId != null ? d.vulns.find((x) => x.id === state.jiraExportVulnId) : undefined;
-          const link = state.jiraExportLink;
-          const isLinked = !!(link && link.status === "linked" && link.jira_issue_key);
-          const exportDisabled = state.jiraExportBusy || state.jiraExportChecking;
-          return (
-            <>
-              <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{t("Export to Jira")}</h2>
-
-              {v && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16, padding: "12px 14px", border: "1px solid var(--st-divider)", borderRadius: 12 }}>
-                  <span style={{ font: "700 10px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", borderRadius: 7, padding: "4px 9px", background: SEV[v.sev].bg, color: SEV[v.sev].color, flex: "none" }}>{v.sev}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ font: "600 14px Inter,sans-serif", color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title}</div>
-                    <div className="mono" style={{ fontSize: 12, color: "var(--st-text-3)", marginTop: 2 }}>{v.host}</div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: 16, minHeight: 40 }}>
-                {state.jiraExportChecking ? (
-                  <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text-3)" }}>{t("Checking status…")}</div>
-                ) : isLinked ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--st-success-soft)", background: "var(--st-success-soft)", borderRadius: 12, padding: "13px 15px" }}>
-                    <Icon name="check-circle" size={18} color="var(--st-success)" sw={2.2} />
-                    <div style={{ font: "600 13.5px Inter,sans-serif", color: "var(--st-text)" }}>
-                      {t("Already exported:")}{" "}
-                      <a href={link!.jira_issue_url} target="_blank" rel="noreferrer" style={{ color: "var(--st-accent)", fontWeight: 700 }}>{link!.jira_issue_key}</a>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text-2)", lineHeight: 1.5 }}>
-                    {t("A Jira issue (")}<span className="mono" style={{ color: "var(--st-text)" }}>{t("STORM-")}{state.jiraExportVulnId}</span>{t(") will be created in To Do with the finding details, a start date of today and a due date in 2 weeks.")}
-                    {state.jiraExportError && (
-                      <div style={{ marginTop: 10, color: "var(--st-danger)", font: "600 12.5px Inter,sans-serif" }}>{state.jiraExportError}</div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
-                {isLinked ? (
-                  <>
-                    <a className="clk" href={link!.jira_issue_url} target="_blank" rel="noreferrer" style={{ height: 42, padding: "0 20px", borderRadius: 11, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", display: "inline-flex", alignItems: "center", textDecoration: "none" }}>{t("Open in Jira")}</a>
-                    <button className="clk" onClick={closeJiraExport} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Done")}</button>
-                  </>
-                ) : (
-                  <>
-                    <button className="clk" onClick={closeJiraExport} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-                    <button className="clk" onClick={doJiraExport} disabled={exportDisabled} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: exportDisabled ? "var(--st-accent-muted)" : "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: exportDisabled ? "default" : "pointer" }}>
-                      {state.jiraExportBusy ? t("Exporting…") : t("Export")}
-                    </button>
-                  </>
-                )}
-              </div>
-            </>
-          );
-        })()
-      )}
-
-      {/* export: all listed vulnerabilities -> Jira issues */}
-      {modalShell(
-        state.jiraBulkOpen,
-        closeBulkJira,
-        60,
-        460,
-        (() => {
-          const total = vulns.length;
-          const pct = state.jiraBulkTotal > 0 ? Math.round((state.jiraBulkDone / state.jiraBulkTotal) * 100) : 0;
-          return (
-            <>
-              <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{t("Export all to Jira")}</h2>
-
-              <div style={{ marginTop: 16 }}>
-                {state.jiraBulkFinished ? (
-                  <div style={{ border: "1px solid var(--st-success-soft)", background: "var(--st-success-soft)", borderRadius: 12, padding: "14px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}><Icon name="check-circle" size={18} color="var(--st-success)" sw={2.2} /><span style={{ font: "700 13.5px Inter,sans-serif", color: "var(--st-text)" }}>{t("Export finished")}</span></div>
-                    <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text-2)", lineHeight: 1.7 }}>
-                      {t("Created:")} <b>{state.jiraBulkCreated}</b><br />
-                      {t("Already linked (skipped):")} <b>{state.jiraBulkSkipped}</b><br />
-                      {t("Failed:")} <b style={{ color: state.jiraBulkFailed ? "var(--st-danger)" : "var(--st-text-2)" }}>{state.jiraBulkFailed}</b>
-                    </div>
-                  </div>
-                ) : state.jiraBulkRunning ? (
-                  <div>
-                    <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text-2)", marginBottom: 10 }}>{t("Exporting")} {state.jiraBulkDone} / {state.jiraBulkTotal}…</div>
-                    <div style={{ height: 8, background: "var(--st-divider)", borderRadius: 6, overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: "var(--st-accent)", transition: "width .2s" }} />
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text-2)", lineHeight: 1.5 }}>
-                    {t("This will create a Jira issue (in To Do) for each of the")} <b style={{ color: "var(--st-text)" }}>{total}</b> {t("listed")} {total === 1 ? "vulnerability" : "vulnerabilities"} {t("(page filters apply). Already-linked findings are skipped.")}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
-                {state.jiraBulkFinished ? (
-                  <>
-                    {state.jiraBulkProjectUrl && (
-                      <a className="clk" href={state.jiraBulkProjectUrl} target="_blank" rel="noreferrer" style={{ height: 42, padding: "0 20px", borderRadius: 11, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", display: "inline-flex", alignItems: "center", textDecoration: "none" }}>{t("Open Jira")}</a>
-                    )}
-                    <button className="clk" onClick={closeBulkJira} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Done")}</button>
-                  </>
-                ) : (
-                  <>
-                    <button className="clk" onClick={closeBulkJira} disabled={state.jiraBulkRunning} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)", cursor: state.jiraBulkRunning ? "default" : "pointer" }}>{t("Cancel")}</button>
-                    <button className="clk" onClick={doBulkJiraExport} disabled={state.jiraBulkRunning || total === 0} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: state.jiraBulkRunning || total === 0 ? "var(--st-accent-muted)" : "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: state.jiraBulkRunning || total === 0 ? "default" : "pointer" }}>
-                      {state.jiraBulkRunning ? t("Exporting…") : `${t("Export")} ${total}`}
-                    </button>
-                  </>
-                )}
-              </div>
-            </>
-          );
-        })()
       )}
 
       {/* entity editor */}

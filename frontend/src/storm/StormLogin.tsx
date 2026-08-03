@@ -153,7 +153,7 @@ export function StormLogin() {
                   type="email"
                   autoComplete="email"
                   autoFocus
-                  placeholder="user@example.com"
+                  placeholder="user@company.com"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                 />

@@ -68,18 +68,6 @@ class Settings(BaseSettings):
     # аккаунт и сразу даёт сессию, поэтому окно тоже держим коротким (сутки).
     reactivation_expire_hours: int = 24
 
-    # --- Jira: единая интеграция на уровне деплоя (не настраивается через веб) ---
-    jira_base_url: str = ""
-    jira_email: str = ""
-    jira_api_token: str = ""
-    jira_default_issue_type: str = "Task"
-    # Все задачи создаются в этом Jira-проекте (напр. "SEC").
-    jira_default_project_key: str = ""
-    jira_enabled: bool = True
-    # Дата начала = сегодня, срок выполнения = сегодня + jira_due_in_days.
-    # ID поля «Дата начала» специфичен для сайта (кастомное поле); пусто = не проставлять.
-    jira_start_date_field: str = "customfield_10015"
-    jira_due_in_days: int = 14
 
     # --- Recon farm: серверный пробив вставленных списков хостов и IP ---
     # Максимум различных хостов на один импорт (защита от network-amplification).
@@ -165,11 +153,6 @@ class Settings(BaseSettings):
     portscan_timeout_seconds: float = 300.0
     # Максимум целей на один скан (nmap запускается одной командой на пачку).
     portscan_max_targets: int = 64
-
-    @property
-    def jira_configured(self) -> bool:
-        """Заданы ли все обязательные параметры подключения к Jira."""
-        return bool(self.jira_base_url and self.jira_email and self.jira_api_token)
 
     @field_validator("jwt_secret_key")
     @classmethod

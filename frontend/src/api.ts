@@ -39,9 +39,6 @@ import type {
   Vulnerability,
   VulnerabilityAsset,
   AgentApiToken,
-  JiraIssueLink,
-  ProjectJiraLink,
-  JiraConfig,
 } from "./types";
 
 const api = axios.create({
@@ -939,45 +936,6 @@ export async function updateVulnerability(
 
 export async function deleteVulnerability(projectId: number, vulnerabilityId: number): Promise<void> {
   await api.delete(`/projects/${projectId}/vulnerabilities/${vulnerabilityId}`);
-}
-
-export async function getVulnerabilityJiraLink(projectId: number, vulnerabilityId: number): Promise<JiraIssueLink | null> {
-  const { data } = await api.get<JiraIssueLink | null>(`/projects/${projectId}/vulnerabilities/${vulnerabilityId}/jira`);
-  return data;
-}
-
-export async function exportVulnerabilityToJira(projectId: number, vulnerabilityId: number): Promise<JiraIssueLink> {
-  const { data } = await api.post<JiraIssueLink>(`/projects/${projectId}/vulnerabilities/${vulnerabilityId}/jira/export`);
-  return data;
-}
-
-export async function getProjectJiraLink(projectId: number): Promise<ProjectJiraLink | null> {
-  const { data } = await api.get<ProjectJiraLink | null>(`/projects/${projectId}/jira-link`);
-  return data;
-}
-
-export async function saveProjectJiraLink(projectId: number, jiraProjectKey: string): Promise<ProjectJiraLink> {
-  assertRequired(jiraProjectKey, "Jira project key");
-  const { data } = await api.put<ProjectJiraLink>(`/projects/${projectId}/jira-link`, { jira_project_key: jiraProjectKey });
-  return data;
-}
-
-export async function getJiraConfig(): Promise<JiraConfig | null> {
-  const { data } = await api.get<JiraConfig | null>("/jira/config");
-  return data;
-}
-
-export async function saveJiraConfig(payload: {
-  base_url: string;
-  email: string;
-  api_token?: string;
-  default_issue_type?: string;
-  is_enabled?: boolean;
-}): Promise<JiraConfig> {
-  assertRequired(payload.base_url, "Jira base URL");
-  assertRequired(payload.email, "Email");
-  const { data } = await api.put<JiraConfig>("/jira/config", { name: "default", ...payload });
-  return data;
 }
 
 export async function getVulnerability(projectId: number, vulnerabilityId: number): Promise<VulnerabilityDetails> {

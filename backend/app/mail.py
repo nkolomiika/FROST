@@ -2,7 +2,6 @@ import base64
 import time
 from email.message import EmailMessage
 from email.utils import formataddr
-from pathlib import Path
 
 import aiosmtplib
 import httpx
@@ -28,27 +27,11 @@ ACCENT = "#2E5FBF"
 INK = "#0F1B2D"
 MUTED = "#5A6B84"
 FAINT = "#8A97AB"
-FOOTER = "Licensed to SberTech · Copyright © 2026. All rights reserved."
-
-# Логотип вкладывается в письмо и подключается через cid: — внешние картинки
-# почтовики блокируют по умолчанию, а SVG (как в вебе) Gmail вырезает совсем.
-# Версия белая и лежит на тёмной плашке: тёмная тема почты инвертирует текст,
-# но НЕ картинки, поэтому тёмный логотип на инвертированном фоне пропадал.
-# Явно тёмный фон шапки клиенты не инвертируют — белое остаётся читаемым везде.
-LOGO_CID = "sbermark"
-LOGO_PATH = Path(__file__).parent / "assets" / "sber-mark-white.png"
-
-
-def load_logo_bytes() -> bytes | None:
-    """Читает PNG-логотип. None — если файла нет: письмо уйдёт без картинки."""
-    try:
-        return LOGO_PATH.read_bytes()
-    except OSError:
-        return None
+FOOTER = "Copyright © 2026. All rights reserved."
 
 
 def _html_shell(*, heading: str, intro: str, inner: str, outro: str) -> str:
-    """Общий каркас письма: шапка (лого SberTech + STORM), карточка, подвал."""
+    """Общий каркас письма: шапка (текстовый логотип STORM), карточка, подвал."""
     return f"""\
 <!doctype html>
 <html lang="ru">
@@ -61,9 +44,6 @@ def _html_shell(*, heading: str, intro: str, inner: str, outro: str) -> str:
             <tr><td style="padding:12px 22px;">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="padding-right:10px;" valign="middle">
-                    <img src="cid:{LOGO_CID}" width="26" height="26" alt="SberTech" style="display:block;border:0;outline:none;text-decoration:none;">
-                  </td>
                   <td valign="middle">
                     <span style="font:800 20px/1 Arial,Helvetica,sans-serif;letter-spacing:3px;color:#ffffff;">{BRAND}</span>
                   </td>
@@ -291,20 +271,6 @@ async def send_plain_text_email(
     message.set_content(body, charset="utf-8")
     if html_body:
         message.add_alternative(html_body, subtype="html", charset="utf-8")
-        logo = load_logo_bytes()
-        if logo:
-            # add_related на HTML-части превращает её в multipart/related, где
-            # картинка лежит рядом с разметкой и доступна по cid. Заголовок
-            # Content-ID email-пакет оборачивает в <>, в src его писать не нужно.
-            html_part = message.get_payload()[-1]
-            html_part.add_related(
-                logo,
-                maintype="image",
-                subtype="png",
-                cid=f"<{LOGO_CID}>",
-                filename="sber-mark.png",
-                disposition="inline",
-            )
     # Порт 465 → implicit TLS (use_tls=True). Порт 587 → STARTTLS (start_tls=True).
     use_tls = bool(settings.smtp_use_ssl)
     start_tls = bool(settings.smtp_use_tls) and not use_tls

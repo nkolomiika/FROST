@@ -127,19 +127,7 @@
 - [ ] PDF-экспорт
 - [ ] Кастомные шаблоны отчётов на стороне admin
 
-## Эпик 11. Интеграция с Jira
-
-- [x] Глобальный конфиг Jira (`jira_instances`): URL, email, API-токен (шифрование at rest)
-- [x] `GET/PUT /api/v1/jira/config` (admin)
-- [x] Привязка проекта STORM к Jira project key (`project_jira_links`)
-- [x] `POST .../vulnerabilities/{vid}/jira/export` — создание Jira issue
-- [x] Хранение `JiraIssueLink` (key, URL, status, last_error)
-- [x] Просмотр привязки `GET .../vulnerabilities/{vid}/jira`
-- [ ] Двусторонняя синхронизация статусов (Jira → STORM)
-- [ ] Webhooks из Jira
-- [ ] Поддержка нескольких Jira-инстансов
-
-## Эпик 12. Audit log
+## Эпик 11. Audit log
 
 - [x] Запись действий в PostgreSQL (`audit_logs`) — единый источник правды
 - [x] Эндпоинт `GET /api/v1/audit-logs` (admin) с фильтрами
@@ -149,7 +137,7 @@
 - [ ] Экспорт журнала в CSV/JSON
 - [ ] Алерты на подозрительные паттерны
 
-## Эпик 13. AI Agent API v2
+## Эпик 12. AI Agent API v2
 
 - [x] `agent_api_tokens` — Bearer-токен с `name`, `scopes`, `token_hash`, `token_prefix`
 - [x] `expires_at`, `revoked_at`, `last_used_at`
@@ -166,7 +154,7 @@
 - [ ] Rate-limiting per-token
 - [ ] Удаление уязвимостей и операции с активами через v2
 
-## Эпик 14. Real-time / WebSocket
+## Эпик 13. Real-time / WebSocket
 
 - [x] `/ws/projects-index` — обновления списка проектов
 - [x] `/ws/notifications` — персональные уведомления
@@ -176,7 +164,7 @@
 - [ ] Server-side rebroadcast событий с фильтрами по подсущностям
 - [ ] WebSocket-канал для admin-mass-actions
 
-## Эпик 15. Mail (RabbitMQ + SMTP)
+## Эпик 14. Mail (RabbitMQ + SMTP)
 
 - [x] `mail_jobs` — очередь писем (`pending` → `sent` / `failed`)
 - [x] Публикация задания в RabbitMQ при сбросе пароля
@@ -186,7 +174,7 @@
 - [ ] Шаблон уведомления об упоминании
 - [ ] Дайджест по проекту раз в день
 
-## Эпик 16. Frontend (React + MUI)
+## Эпик 15. Frontend (React + MUI)
 
 - [x] Страницы: Login, ForceChangePassword, Profile, Projects, ProjectDetail, HostDetail, UsersAdmin, AuditLogs, AiAgentIntegration
 - [x] Компоненты: ProjectTreeNav, ProjectNotesSection / TreePopover, ProjectHostsTreePopover, MarkdownEditor / Image / OutlinedReadonlyField, VulnerabilityStagesEditor
@@ -199,7 +187,7 @@
 - [ ] PWA / offline-режим
 - [ ] i18n (en/ru)
 
-## Эпик 17. Инфраструктура и DevOps
+## Эпик 16. Инфраструктура и DevOps
 
 - [x] FastAPI + SQLAlchemy 2.x async + asyncpg
 - [x] Alembic миграции (включая `mail_jobs`)

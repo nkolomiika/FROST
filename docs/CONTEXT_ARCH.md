@@ -7,7 +7,7 @@
 
 ## 1. Что это
 
-**STORM** (Offensive Security Research & Management) — внутренняя платформа SberTech для управления пентест-проектами. Закрытая система: самостоятельной регистрации нет, аккаунты создаёт администратор.
+**STORM** (Offensive Security Research & Management) — внутренняя платформа для управления пентест-проектами. Закрытая система: самостоятельной регистрации нет, аккаунты создаёт администратор.
 
 Основные возможности:
 - проекты, папки проектов; аккаунтная роль `admin / pentester`, проектная (глобальная) `lead / pentester`;
@@ -17,7 +17,6 @@
 - импорт/экспорт PCF-JSON и OpenAPI/Swagger по эндпоинтам;
 - Confluence-like заметки проекта;
 - Word-отчёты (СЗИ и ПП — у ПП все страницы в landscape);
-- Jira-интеграция (экспорт уязвимости в issue) — SSRF + DNS-rebind защита, claim-row anti-race;
 - audit-журнал (Postgres), AI-агент API `/api/v2` по bearer-токенам;
 - асинхронная отправка писем через RabbitMQ + SMTP (Gmail/корпоративный — настраивается `.env`).
 
@@ -34,9 +33,9 @@
 | Auth | JWT (python-jose), bcrypt (passlib) — HttpOnly cookies, не Bearer |
 | Файлы | MinIO 7.2.x (S3-совместимое) |
 | Очередь | RabbitMQ + aio-pika |
-| SMTP | aiosmtplib (Gmail / sbertech / mailpit — конфиг через .env) |
+| SMTP | aiosmtplib (Gmail / корпоративный SMTP / mailpit — конфиг через .env) |
 | Отчёты | python-docx (Word) |
-| HTTP-клиент | httpx 0.28 (+ кастомный transport для DNS-rebind protection в Jira) |
+| HTTP-клиент | httpx 0.28 (+ кастомный transport для DNS-rebind protection в рекон-ферме) |
 | Frontend | React 18 + TypeScript, Vite 6, MUI 6, Zustand, axios, TipTap |
 | БД | PostgreSQL 16 (единое хранилище доменных данных и audit-журнала) |
 
@@ -105,7 +104,7 @@ STORM/
 │       ├── worker/mail_worker.py   # отдельный процесс (sidecar в compose)
 │       └── routers/           # 14 роутеров: auth, users, projects, project_notes,
 │                              # assets, vulnerabilities, files, comments,
-│                              # notifications, import_, jira, reports,
+│                              # notifications, import_, reports,
 │                              # audit_logs, agent_tokens, v2_agent, websocket
 └── frontend/
     ├── package.json, vite.config.ts
@@ -157,7 +156,6 @@ ClickHouse удалён из стека — audit_logs пишутся напря
 | `comments`, `comment_mentions` | комментарии и `@mention` |
 | `project_notes`, `project_note_comments` | Confluence-like заметки и обсуждения |
 | `notifications` | in-app уведомления |
-| `jira_instances`, `project_jira_links`, `jira_issue_links` | Jira-интеграция |
 | `audit_logs` | единый журнал действий |
 
 Ключевые enums (`enums.py`):
@@ -201,7 +199,6 @@ ClickHouse удалён из стека — audit_logs пишутся напря
 | Notifications | `/notifications/...` |
 | Import / Export OpenAPI | `/projects/{id}/import/...`, `/hosts/{id}/(import|export)-openapi` |
 | Reports | `/projects/{id}/reports/(szi|pp)` |
-| Jira | `/jira/config`, `/projects/{id}/jira-link`, `/vulnerabilities/{id}/jira-export` |
 | Agent tokens | `/agent-tokens/...` (admin) |
 | Audit logs | `/audit-logs` (admin) — фильтры + full-text по action/entity_type/ip/username/details |
 | WebSocket | `/ws/notifications`, `/ws/projects/{id}`, `/ws/projects-index` |
@@ -212,11 +209,11 @@ ClickHouse удалён из стека — audit_logs пишутся напря
 
 ### Backend
 - **Layered**: Router → Service → Model. Repository-pattern не используется — сервисы работают с `AsyncSession` напрямую.
-- **Service Layer** в одном файле `services.py` (~4000 строк): UserService, ProjectService, AssetService, VulnerabilityService, FileService, CommentService, ProjectNoteService, NotificationService, ImportService, ReportService, AgentTokenService, JiraIntegrationService, AuditService, AuthService.
+- **Service Layer** в одном файле `services.py` (~4000 строк): UserService, ProjectService, AssetService, VulnerabilityService, FileService, CommentService, ProjectNoteService, NotificationService, ImportService, ReportService, AgentTokenService, AuditService, AuthService.
 - **DI**: FastAPI `Depends()` для `AsyncSession` и текущего пользователя.
 - **WebSocket ConnectionManager** (`ws_manager.py`): broadcast по `project_id`, `notify_user` по `user_id`, общий канал `projects-index`.
 - **Outbox + Worker**: письма создаются как `MailJob(status=pending)` → publish в RabbitMQ → `mail_worker` отправляет по SMTP. Перепубликация зависших pending'ов через `relay_pending_jobs`.
-- **Jira SSRF**: `_validate_external_url` (запрет loopback/private/link-local/multicast/reserved/unspecified) + кастомный `_SafeJiraTransport` (повторная DNS-валидация перед каждым запросом) + claim-row pattern против race condition при параллельных export'ах.
+- **SSRF исходящих запросов**: `app/netguard.py` — блок-лист loopback/private/link-local/multicast/reserved/unspecified + кастомный httpx-transport с повторной DNS-валидацией перед каждым запросом (защита от DNS-rebinding).
 
 ### Frontend
 - **Zustand** для глобального state (auth + toasts), без Redux/Context-overkill.
@@ -251,9 +248,8 @@ ClickHouse удалён из стека — audit_logs пишутся напря
 | SQLi | SQLAlchemy ORM, параметризованные запросы |
 | IDOR | `require_project_access` проверяет принадлежность ресурса проекту на каждый запрос |
 | Утечка токена | Токен только в HttpOnly cookie |
-| SSRF (Jira) | URL-валидация + блок-лист приватных IP + `_SafeJiraTransport` (DNS-rebind защита) + `follow_redirects=False` |
-| Race condition (Jira export) | UNIQUE `(vulnerability_id)` + claim-row до HTTP-вызова |
-| Утечка Jira API token | Хранится Fernet-encrypted (ключ от SHA-256(jwt_secret_key)) |
+| SSRF (рекон-ферма) | URL-валидация + блок-лист приватных IP + повторная DNS-валидация в transport (DNS-rebind защита) + `follow_redirects=False` |
+| Утечка секретов интеграций | Хранятся Fernet-encrypted (ключ от SHA-256(jwt_secret_key)) |
 | Brute-force | (рекомендовано) rate limiting на nginx/reverse proxy |
 | Секреты | Только `.env` + `pydantic-settings` |
 
@@ -265,7 +261,7 @@ ClickHouse удалён из стека — audit_logs пишутся напря
 
 1. **mailpit** (dev) — `SMTP_HOST=mailpit`, без TLS, без auth.
 2. **Gmail** (тесты) — `smtp.gmail.com:587`, STARTTLS, App password (требует 2FA на аккаунте).
-3. **sbertech** (prod) — корпоративный SMTP, STARTTLS, реальные креды из vault.
+3. **corporate** (prod) — корпоративный SMTP, STARTTLS, реальные креды из vault.
 
 `From` собирается через `email.utils.formataddr` — корректно кодирует кириллицу/спец-символы в display name. Для Gmail `SMTP_FROM_EMAIL` должен совпадать с `SMTP_USERNAME`, иначе Gmail rewrite/refuses.
 

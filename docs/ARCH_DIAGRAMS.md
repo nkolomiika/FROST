@@ -23,15 +23,13 @@ flowchart LR
         Worker["mail-worker<br/>(sidecar)"]
     end
 
-    JiraCloud[("Jira Cloud /<br/>Self-hosted")]
-    SMTP[("Корпоративный SMTP<br/>Gmail / sbertech")]
+    SMTP[("Корпоративный SMTP<br/>Gmail / corporate")]
 
     Pentester -->|HTTPS<br/>cookie-auth| Frontend
     Developer -->|HTTPS<br/>cookie-auth| Frontend
     Admin -->|HTTPS<br/>cookie-auth| Frontend
     Frontend -->|REST + WebSocket| Backend
     AIAgent -->|HTTPS<br/>Bearer-token| Backend
-    Backend -->|REST API| JiraCloud
     Backend -->|Publish job| Worker
     Worker -->|SMTP| SMTP
 ```
@@ -65,7 +63,7 @@ flowchart TB
         end
     end
 
-    ExternalSMTP[("Прод SMTP<br/>(Gmail / sbertech)")]
+    ExternalSMTP[("Прод SMTP<br/>(Gmail / corporate)")]
 
     ClientApp -.->|HTTPS| Frontend
     Frontend -->|proxy /api| Backend
@@ -107,7 +105,6 @@ flowchart TB
         NotesR["project_notes"]
         NotifR["notifications"]
         ImportR["import_"]
-        JiraR["jira"]
         ReportsR["reports"]
         AgentR["agent_tokens"]
         AuditR["audit_logs"]
@@ -132,7 +129,6 @@ flowchart TB
         NoteSrv["ProjectNoteService"]
         NotifSrv["NotificationService"]
         ImpSrv["ImportService"]
-        JiraSrv["JiraIntegrationService"]
         RepSrv["ReportService"]
         AgentSrv["AgentTokenService"]
         AuditSrv["AuditService"]
@@ -145,7 +141,6 @@ flowchart TB
     subgraph External["External"]
         MinIOExt[("MinIO")]
         RabbitExt[("RabbitMQ")]
-        JiraExt[("Jira REST")]
     end
 
     HTTP --> CORS --> Routers
@@ -153,7 +148,6 @@ flowchart TB
     Services --> Models --> DB
     FileSrv --> MinIOExt
     UserSrv --> RabbitExt
-    JiraSrv --> JiraExt
     Services -->|при ошибке| ErrorHandlers
     ErrorHandlers -->|JSONResponse| HTTP
 ```
@@ -337,7 +331,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant MQ as RabbitMQ pcf.mail
     participant W as mail-worker
-    participant SMTP as SMTP сервер<br/>(mailpit / Gmail / sbertech)
+    participant SMTP as SMTP сервер<br/>(mailpit / Gmail / corporate)
 
     API->>DB: INSERT MailJob (status="pending")
     DB-->>API: job.id
@@ -371,111 +365,31 @@ sequenceDiagram
 
 ---
 
-## 11. Jira export — все защитные слои
+## 11. SSRF & DNS-rebind защита — внутренности
 
-Самая «тяжёлая» по защитам цепочка: SSRF + DNS rebind + race condition + сетевые ошибки.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant FE as Frontend
-    participant R as POST /vulnerabilities/{id}/jira-export
-    participant JS as JiraIntegrationService
-    participant DB as PostgreSQL
-    participant TR as _SafeJiraTransport
-    participant J as Jira REST<br/>(публичный хост)
-
-    FE->>R: запрос экспорта
-    R->>JS: export_vulnerability(...)
-
-    JS->>DB: SELECT JiraInstance
-    DB-->>JS: config (api_token Fernet-encrypted)
-    JS->>DB: SELECT ProjectJiraLink
-    DB-->>JS: link
-
-    Note over JS: ── 1) Проверяем уже существующий линк ──
-    JS->>DB: SELECT JiraIssueLink<br/>WHERE vuln_id=?
-    DB-->>JS: existing
-    alt existing.status == "linked"
-        JS-->>R: existing
-        R-->>FE: 200 (idempotent)
-    end
-
-    Note over JS,DB: ── 2) Claim-row anti-race ──
-    JS->>DB: INSERT JiraIssueLink<br/>(status="pending", placeholders="")
-    alt IntegrityError (UNIQUE vuln_id)
-        DB-->>JS: race — другой запрос успел
-        JS->>DB: SELECT существующий линк
-        DB-->>JS: link from competitor
-        JS-->>R: возвращаем его
-    else success
-        DB-->>JS: claim acquired
-    end
-
-    Note over JS: ── 3) SSRF re-validation ──
-    JS->>JS: _validate_external_url<br/>(scheme, host, getaddrinfo + блок-лист IP)
-
-    Note over JS,TR: ── 4) DNS-rebind защита ──
-    JS->>TR: httpx.AsyncClient(transport=_SafeJiraTransport())
-    TR->>TR: handle_async_request:<br/>повторный getaddrinfo,<br/>проверка _is_disallowed_ip
-    alt DNS вернул запрещённый IP
-        TR-->>JS: httpx.ConnectError
-        JS->>DB: UPDATE link.status="error", last_error=...
-        JS-->>R: ValidationError
-    end
-
-    TR->>J: POST /rest/api/3/issue<br/>auth=(email, decrypted_token)
-    Note right of J: TLS, follow_redirects=False
-    alt сеть упала / таймаут / non-JSON
-        J-->>TR: httpx.HTTPError / JSONDecodeError
-        TR-->>JS: exception
-        JS->>DB: UPDATE link.status="error", last_error=...
-        JS-->>R: ValidationError (не 500)
-    else HTTP 4xx/5xx
-        J-->>TR: error body
-        TR-->>JS: response (status>=400)
-        JS->>DB: UPDATE link.status="error", last_error=body
-        JS-->>R: ValidationError
-    else success
-        J-->>TR: 201 {key: "PROJ-123"}
-        TR-->>JS: data
-        JS->>DB: UPDATE link<br/>jira_issue_key="PROJ-123",<br/>jira_issue_url=safe_base_url+"/browse/PROJ-123",<br/>status="linked", last_error=NULL
-        JS->>DB: audit_logs INSERT (CREATE jira_issue_link)
-        JS-->>R: link
-        R-->>FE: 201 JiraIssueLink
-    end
-```
-
----
-
-## 12. SSRF & DNS-rebind защита — внутренности
+Исходящие HTTP-запросы делает только рекон-ферма. Предикат `is_disallowed_ip`
+(`app/netguard.py`) — единый блок-лист внутренних адресов; `ProbeTransport`
+(`app/farm/core.py`) применяет его повторно прямо перед connect, закрывая окно
+DNS-rebinding между резолвом и подключением.
 
 ```mermaid
 flowchart TB
-    Validate["_validate_external_url(base_url)"]
-    Validate --> CheckScheme{"scheme<br/>http/https?"}
-    CheckScheme -->|нет| Reject1["ValidationError"]
-    CheckScheme -->|да| ProdHttp{"http && !DEBUG?"}
-    ProdHttp -->|да| Reject1
-    ProdHttp -->|нет| HostBlock["host.lower() in<br/>{localhost, metadata.google.internal,<br/>instance-data}?"]
-    HostBlock -->|да| Reject1
-    HostBlock -->|нет| Resolve["getaddrinfo(host)"]
-    Resolve -->|gaierror| Reject1
+    Client["httpx.AsyncClient(<br/>transport=ProbeTransport())"]
+    Client --> Request["client.request(...)"]
+    Request --> TransportCheck["ProbeTransport.handle_async_request"]
+    TransportCheck --> Resolve["getaddrinfo(host)<br/>(в отдельном потоке)"]
+    Resolve -->|gaierror| ConnectError["httpx.ConnectError"]
     Resolve --> ForEach["for ip in resolved:"]
-    ForEach --> Disallowed{"_is_disallowed_ip<br/>(loopback / private /<br/>link_local / reserved /<br/>multicast / unspecified)"}
-    Disallowed -->|да| Reject1
-    Disallowed -->|нет| Pass["return safe_base_url"]
-
-    Pass --> CreateTransport["httpx.AsyncClient(<br/>transport=_SafeJiraTransport())"]
-    CreateTransport --> Request["client.post(...)"]
-    Request --> TransportCheck["_SafeJiraTransport.handle_async_request:<br/>повторный getaddrinfo (~ms до connect)"]
-    TransportCheck -->|disallowed IP| ConnectError["httpx.ConnectError"]
-    TransportCheck -->|ok| ParentTransport["AsyncHTTPTransport.handle_async_request<br/>(реальный socket connect)"]
+    ForEach --> Disallowed{"is_disallowed_ip<br/>(loopback / private /<br/>link_local / reserved /<br/>multicast / unspecified /<br/>нераспознанный)"}
+    Disallowed -->|да| ConnectError
+    Disallowed -->|нет| Embedded{"встроенный в IPv6 IPv4<br/>(mapped / 6to4 / Teredo)<br/>тоже внутренний?"}
+    Embedded -->|да| ConnectError
+    Embedded -->|нет| ParentTransport["AsyncHTTPTransport.handle_async_request<br/>(реальный socket connect)"]
 ```
 
 ---
 
-## 13. WebSocket — каналы и события
+## 12. WebSocket — каналы и события
 
 Backend держит три типа каналов через `ConnectionManager`.
 
@@ -522,7 +436,7 @@ flowchart TB
 
 ---
 
-## 14. AI Agent API `/api/v2` — scoping и проверка доступа
+## 13. AI Agent API `/api/v2` — scoping и проверка доступа
 
 Отдельное FastAPI-приложение, смонтированное на `/api/v2`. Аутентификация — Bearer-токен, выпущенный администратором.
 
@@ -574,7 +488,7 @@ flowchart LR
 
 ---
 
-## 15. Audit log — запись и чтение
+## 14. Audit log — запись и чтение
 
 Единое хранилище — PostgreSQL. Запись синхронная с основной транзакцией, чтение через фильтры с full-text по action / entity_type / ip / username / cast(details::text).
 
@@ -603,7 +517,7 @@ flowchart TB
 
 ---
 
-## 16. Word-отчёты — конвейер генерации
+## 15. Word-отчёты — конвейер генерации
 
 ПП = все страницы landscape, СЗИ = portrait. Общая логика в `_build_common`.
 
@@ -638,7 +552,7 @@ flowchart TB
 
 ---
 
-## 17. Импорт OpenAPI/Swagger по endpoint'ам
+## 16. Импорт OpenAPI/Swagger по endpoint'ам
 
 Импорт спецификации в каталог endpoint'ов хоста.
 
@@ -672,7 +586,7 @@ sequenceDiagram
 
 ---
 
-## 18. PCF JSON импорт — атомарный
+## 17. PCF JSON импорт — атомарный
 
 Полный rollback при любой ошибке. Идемпотентность по идентифицирующим полям.
 
@@ -698,7 +612,7 @@ flowchart TB
 
 ---
 
-## 19. Frontend — высокоуровневая структура
+## 18. Frontend — высокоуровневая структура
 
 ```mermaid
 flowchart TB
@@ -709,7 +623,7 @@ flowchart TB
 
     subgraph API["api.ts (axios singleton)"]
         Intercept["request: withCredentials=true<br/>response: on 401 → /auth/refresh → retry"]
-        Funcs["функции: login, getProjects,<br/>createVulnerability, exportToJira, ..."]
+        Funcs["функции: login, getProjects,<br/>createVulnerability, ..."]
     end
 
     subgraph Pages
@@ -748,7 +662,7 @@ flowchart TB
 
 ---
 
-## 20. ER-диаграмма (укорочённая)
+## 19. ER-диаграмма (укорочённая)
 
 Полное описание — в [DB_SCHEMA.md](DB_SCHEMA.md). Здесь укрупнённая карта связей.
 
@@ -764,7 +678,6 @@ erDiagram
     PROJECTS ||--o{ HOSTS : contains
     PROJECTS ||--o{ VULNERABILITIES : contains
     PROJECTS ||--o{ PROJECT_NOTES : contains
-    PROJECTS ||--o| PROJECT_JIRA_LINKS : linked_to
     PROJECT_FOLDERS ||--o{ PROJECTS : groups
 
     HOSTS ||--o{ HOST_IP_ADDRESSES : has
@@ -775,7 +688,6 @@ erDiagram
     VULNERABILITIES ||--o{ VULNERABILITY_ASSETS : "linked to assets"
     VULNERABILITIES ||--o{ FILES : evidence
     VULNERABILITIES ||--o{ COMMENTS : has
-    VULNERABILITIES ||--o| JIRA_ISSUE_LINKS : exported_to
 
     COMMENTS ||--o{ COMMENT_MENTIONS : mentions
     COMMENTS ||--o{ NOTIFICATIONS : triggers
@@ -783,6 +695,4 @@ erDiagram
     PROJECT_NOTES ||--o{ PROJECT_NOTE_COMMENTS : has
 
     AGENT_API_TOKENS ||--o{ AGENT_API_TOKEN_PROJECT_GRANTS : restricted_to
-
-    JIRA_INSTANCES ||--o{ PROJECT_JIRA_LINKS : configured_via
 ```

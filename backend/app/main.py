@@ -19,7 +19,6 @@ from app.routers import (
     files,
     images,
     import_,
-    jira,
     notifications,
     projects,
     project_credentials,
@@ -71,7 +70,6 @@ def _register_routes() -> None:
     app.include_router(comments.router, prefix=prefix)
     app.include_router(notifications.router, prefix=prefix)
     app.include_router(import_.router, prefix=prefix)
-    app.include_router(jira.router, prefix=prefix)
     app.include_router(reports.router, prefix=prefix)
     app.include_router(audit_logs.router, prefix=prefix)
     agent_api_v2.include_router(v2_agent.router)

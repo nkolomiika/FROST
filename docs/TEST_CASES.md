@@ -20,12 +20,12 @@
 | Backend (схемы Pydantic) | `pytest`, `pydantic.ValidationError` | `pytest tests/test_schemas.py` |
 | Backend (Word-отчёты) | `pytest`, `python-docx` (чтение результата) | `pytest tests/test_word_builder.py` |
 | Frontend (компоненты/страницы) | `vitest`, `@testing-library/react`, `userEvent`, `vi.mock`, `vi.hoisted` | `cd frontend && npm run test` |
-| Тестовая БД | In-memory SQLite (fallback) или PostgreSQL test DB; внешние зависимости (MinIO, SMTP, Jira) — мокаются через `monkeypatch` | — |
+| Тестовая БД | In-memory SQLite (fallback) или PostgreSQL test DB; внешние зависимости (MinIO, SMTP) — мокаются через `monkeypatch` | — |
 
 ### 1.3 Стратегия
-- Сервисный слой — основной объект юнит-тестирования (`AssetService`, `VulnerabilityService`, `ProjectService`, `ProjectNoteService`, `CommentService`, `ImportService`, `JiraIntegrationService`, `UserService`, `ReportService`).
+- Сервисный слой — основной объект юнит-тестирования (`AssetService`, `VulnerabilityService`, `ProjectService`, `ProjectNoteService`, `CommentService`, `ImportService`, `UserService`, `ReportService`).
 - Pydantic-схемы покрываются граничными значениями (длина пароля, диапазоны портов, обязательность полей).
-- Безопасность: cookie-флаги, CSRF Origin-валидация, проверка типов JWT, SSRF-защита Jira, ACL аватаров, шифрование api_token (Fernet).
+- Безопасность: cookie-флаги, CSRF Origin-валидация, проверка типов JWT, SSRF-защита исходящих запросов, ACL аватаров, шифрование секретов (Fernet).
 - Интеграционных тестов через `httpx.AsyncClient` сейчас нет — соответствующие кейсы для роутеров и WebSocket помечены как «Запланирован».
 
 ### 1.4 Условные обозначения
@@ -250,26 +250,7 @@
 | TC-REPORT-007 | POST /reports/pp аналогично | Member | POST `/reports/pp` | 200, корректный stream | Запланирован |
 | TC-REPORT-008 | Reports без membership → 403 | Pentester не member | POST `/reports/szi` | 403 | Запланирован |
 
-### 2.12 Jira Integration (TC-JIRA-NNN)
-
-Связано с: `app/services.JiraIntegrationService`, `app/routers/jira.py`.
-
-| ID | Название | Предусловия | Шаги | Ожидаемый результат | Статус |
-|---|---|---|---|---|---|
-| TC-JIRA-001 | api_token шифруется (Fernet) | — | `JiraIntegrationService._encrypt_secret("jira-secret")`, затем `_decrypt_secret(...)` (`tests/test_asset_service.py`) | encrypted != "jira-secret"; round-trip даёт исходное значение | Реализован |
-| TC-JIRA-002 | SSRF: пустой base_url отклоняется | — | `_validate_external_url("")` | `ValidationError("не может быть пустым")` | Запланирован |
-| TC-JIRA-003 | SSRF: схема не http/https отклоняется | — | `_validate_external_url("ftp://jira.local")` | `ValidationError("https:// или http://")` | Запланирован |
-| TC-JIRA-004 | SSRF: http в production запрещён | `settings.debug=False` | `_validate_external_url("http://jira.example.com")` | `ValidationError("в production должен использовать https")` | Запланирован |
-| TC-JIRA-005 | SSRF: localhost запрещён | — | `_validate_external_url("https://localhost/jira")` | `ValidationError("запрещённый хост")` | Запланирован |
-| TC-JIRA-006 | SSRF: cloud metadata host запрещён | — | `_validate_external_url("https://metadata.google.internal/")` | `ValidationError("запрещённый хост")` | Запланирован |
-| TC-JIRA-007 | SSRF: private/loopback/link-local/reserved/multicast IP запрещены | DNS резолв в `10.0.0.1` | `_validate_external_url("https://internal.invalid/")` (мокнуть `socket.getaddrinfo`) | `ValidationError("внутренний/приватный IP")` | Запланирован |
-| TC-JIRA-008 | SSRF: некорректный host (gaierror) отклоняется | DNS error | `_validate_external_url("https://no-such-host.invalid")` | `ValidationError("Не удалось разрешить host Jira")` | Запланирован |
-| TC-JIRA-009 | First config без api_token отклоняется | Нет JiraInstance | `upsert_config({base_url, name, email})` без `api_token` | `ValidationError("Для первой настройки Jira нужен api_token")` | Запланирован |
-| TC-JIRA-010 | get_jira_config доступен только admin | Pentester | GET `/api/v1/jira/config` | 403 | Запланирован |
-| TC-JIRA-011 | Export vulnerability to Jira | Member, link настроен | POST `/api/v1/projects/{id}/vulnerabilities/{vid}/jira/export` | 200, `JiraIssueLinkOut` с `issue_key` | Запланирован |
-| TC-JIRA-012 | Project Jira link upsert (admin) | Admin | PUT `/api/v1/projects/{id}/jira-link` `{jira_project_key="ABC"}` | 200 | Запланирован |
-
-### 2.13 Agent API v2 (TC-AGENT-NNN)
+### 2.12 Agent API v2 (TC-AGENT-NNN)
 
 Связано с: `app/routers/v2_agent.py`, `app/routers/agent_tokens.py`, `app/services.AgentTokenService`, `app/dependencies.{require_agent_scope,require_agent_project_access}`.
 
@@ -286,7 +267,7 @@
 | TC-AGENT-009 | Создание заметки требует `notes:write` | Token со scope `notes:read` | POST `/api/v2/projects/{id}/notes` | 403 | Запланирован |
 | TC-AGENT-010 | Создание уязвимости через v2 (`vulns:write`) | Token со scope | POST `/api/v2/projects/{id}/vulnerabilities` `{title, severity, host_id}` | 201, `VulnerabilityOut` | Запланирован |
 
-### 2.14 Audit logs (TC-AUDIT-NNN)
+### 2.13 Audit logs (TC-AUDIT-NNN)
 
 Связано с: `app/services.AuditService`, `app/routers/audit_logs.py` (хранилище — PostgreSQL).
 
@@ -297,7 +278,7 @@
 | TC-AUDIT-004 | Фильтрация audit logs по entity_type | Логи разных типов | GET `/audit-logs?entity_type=project` | Только records с `entity_type=project` | Запланирован |
 | TC-AUDIT-005 | Поиск по `query` затрагивает username и details | Логи с разными username/details | GET `/audit-logs?query=foo` | Возвращены записи, где `foo` встречается в action / entity_type / ip / username / cast(details::text) | Запланирован |
 
-### 2.15 Pagination (TC-PAG-NNN)
+### 2.14 Pagination (TC-PAG-NNN)
 
 Связано с: `app/pagination.py`.
 
@@ -310,7 +291,7 @@
 | TC-PAG-005 | size=0 отклоняется | — | `PageParams(page=1, size=0)` | `pydantic.ValidationError` | Реализован |
 | TC-PAG-006 | size слишком большой (10000) отклоняется | — | `PageParams(page=1, size=10000)` | `pydantic.ValidationError` | Реализован |
 
-### 2.16 WebSocket (TC-WS-NNN)
+### 2.15 WebSocket (TC-WS-NNN)
 
 Связано с: `app/routers/websocket.py`, `ws_manager`.
 
@@ -323,7 +304,7 @@
 
 ---
 
-### 2.17 Frontend (TC-UI-NNN)
+### 2.16 Frontend (TC-UI-NNN)
 
 Связано с: `frontend/src/App.tsx`, `frontend/src/pages/{LoginPage, ForceChangePasswordPage}.tsx`, `frontend/src/components/ProjectTreeNav.tsx`, `frontend/src/markdownUrlTransform.ts`.
 
@@ -363,7 +344,7 @@
 | `backend/tests/test_user_service_security.py` | 3 | TC-AUTH-019, TC-USER-003, TC-USER-004 |
 | `backend/tests/test_project_service.py` | 5 | TC-PROJ-001..006 |
 | `backend/tests/test_project_note_service.py` | 2 | TC-NOTE-001, TC-NOTE-002 |
-| `backend/tests/test_asset_service.py` | 7 | TC-ASSET-001..006, TC-JIRA-001 |
+| `backend/tests/test_asset_service.py` | 6 | TC-ASSET-001..006 |
 | `backend/tests/test_vulnerability_workflow.py` | 12 | TC-VULN-001..012 |
 | `backend/tests/test_comment_service.py` | 3 | TC-COMM-001..003 |
 | `backend/tests/test_import_service.py` | 13 | TC-IMP-001..015 (часть) |
@@ -399,7 +380,6 @@ npm run test -- src/App.test.tsx      # один файл
 - Нет интеграционных тестов через `httpx.AsyncClient` для роутеров — большинство кейсов «Запланирован» в этом документе адресует именно их.
 - WebSocket-сценарии (TC-WS-NNN) не покрыты — стоит добавить fixture с `WebSocketTestSession`.
 - File upload security (TC-FILE-NNN) полностью отсутствует в автотестах: критично, так как используются `python-magic`, sanitization filename и MinIO ACL.
-- SSRF-защита Jira (`_validate_external_url`) покрыта только косвенно через шифрование секрета — рекомендуется параметризованный тест по серии URL (TC-JIRA-002..008).
 - Frontend: компоненты редактирования (VulnerabilityStagesEditor, HostDetailPage) и страницы Projects/Profile/AuditLogs не покрыты — добавить компонентные сценарии рендера/взаимодействия.
 - markdownUrlTransform: ключевая защита от XSS через `data:text/html` — нужно завести unit-тест в `frontend/src/markdownUrlTransform.test.ts`.
 
@@ -409,4 +389,4 @@ npm run test -- src/App.test.tsx      # один файл
 
 | Дата | Изменение |
 |---|---|
-| 2026-05-13 | Полная переактуализация под текущий состав `backend/tests/` (добавлены модули assets/jira/word_builder/project_notes), reorganизация по новой иерархии `TC-<MODULE>-<NNN>`, добавлен раздел Agent API v2 и Pagination. |
+| 2026-05-13 | Полная переактуализация под текущий состав `backend/tests/` (добавлены модули assets/word_builder/project_notes), reorganизация по новой иерархии `TC-<MODULE>-<NNN>`, добавлен раздел Agent API v2 и Pagination. |

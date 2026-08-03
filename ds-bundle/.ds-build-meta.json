@@ -1,9 +1,0 @@
-{
-  "namespace": "SberDesignKit",
-  "source": "sberpcf-design-kit@1.0.0",
-  "shape": "package",
-  "provider": "SberThemeProvider",
-  "componentCount": 51,
-  "skippedStoryIds": [],
-  "runtimeFontPrefixes": []
-}

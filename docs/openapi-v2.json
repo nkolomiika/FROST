@@ -58,6 +58,64 @@
         }
       }
     },
+    "/projects/{project_id}": {
+      "get": {
+        "tags": [
+          "agent-v2"
+        ],
+        "summary": "Get Agent Project",
+        "operationId": "get_agent_project_projects__project_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{project_id}/hosts": {
       "get": {
         "tags": [
@@ -71,8 +129,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Project Id"
             }
           },
@@ -142,6 +199,75 @@
         }
       }
     },
+    "/projects/{project_id}/hosts/{host_id}": {
+      "get": {
+        "tags": [
+          "agent-v2"
+        ],
+        "summary": "Get Agent Host",
+        "operationId": "get_agent_host_projects__project_id__hosts__host_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Agent Host Projects  Project Id  Hosts  Host Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{project_id}/notes": {
       "get": {
         "tags": [
@@ -155,8 +281,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Project Id"
             }
           },
@@ -216,8 +341,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Project Id"
             }
           },
@@ -273,6 +397,71 @@
       }
     },
     "/projects/{project_id}/notes/{note_id}": {
+      "get": {
+        "tags": [
+          "agent-v2"
+        ],
+        "summary": "Get Agent Note",
+        "operationId": "get_agent_note_projects__project_id__notes__note_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "note_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Note Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNoteOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "put": {
         "tags": [
           "agent-v2"
@@ -285,8 +474,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Project Id"
             }
           },
@@ -295,8 +483,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Note Id"
             }
           },
@@ -351,22 +538,30 @@
         }
       }
     },
-    "/projects/{project_id}/vulnerabilities": {
+    "/projects/{project_id}/hosts/{host_id}/vulnerabilities": {
       "get": {
         "tags": [
           "agent-v2"
         ],
-        "summary": "List Agent Vulnerabilities",
-        "operationId": "list_agent_vulnerabilities_projects__project_id__vulnerabilities_get",
+        "summary": "List Agent Host Vulnerabilities",
+        "operationId": "list_agent_host_vulnerabilities_projects__project_id__hosts__host_id__vulnerabilities_get",
         "parameters": [
           {
             "name": "project_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Project Id"
+            }
+          },
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Host Id"
             }
           },
           {
@@ -417,7 +612,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response List Agent Vulnerabilities Projects  Project Id  Vulnerabilities Get"
+                  "title": "Response List Agent Host Vulnerabilities Projects  Project Id  Hosts  Host Id  Vulnerabilities Get"
                 }
               }
             }
@@ -433,7 +628,85 @@
             }
           }
         }
-      },
+      }
+    },
+    "/projects/{project_id}/hosts/{host_id}/vulnerabilities/{vulnerability_id}": {
+      "get": {
+        "tags": [
+          "agent-v2"
+        ],
+        "summary": "Get Agent Host Vulnerability",
+        "operationId": "get_agent_host_vulnerability_projects__project_id__hosts__host_id__vulnerabilities__vulnerability_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "host_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Host Id"
+            }
+          },
+          {
+            "name": "vulnerability_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vulnerability Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnerabilityOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/vulnerabilities": {
       "post": {
         "tags": [
           "agent-v2"
@@ -446,8 +719,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Project Id"
             }
           },
@@ -515,8 +787,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Project Id"
             }
           },
@@ -525,8 +796,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
+              "type": "integer",
               "title": "Vuln Id"
             }
           },
@@ -616,8 +886,7 @@
           "parent_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -646,20 +915,17 @@
       "ProjectNoteOut": {
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Id"
           },
           "project_id": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Project Id"
           },
           "parent_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -687,15 +953,24 @@
             "title": "Sort Order"
           },
           "created_by": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Created By"
+          },
+          "created_by_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Username"
           },
           "updated_by": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -762,8 +1037,7 @@
       "ProjectOut": {
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Id"
           },
           "name": {
@@ -825,8 +1099,7 @@
             "$ref": "#/components/schemas/ProjectStatus"
           },
           "created_by": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Created By"
           },
           "created_at": {
@@ -860,6 +1133,7 @@
         "type": "string",
         "enum": [
           "active",
+          "freeze",
           "handover_to_development",
           "vulnerability_recheck",
           "completed",
@@ -914,8 +1188,7 @@
       "VulnerabilityCreate": {
         "properties": {
           "host_id": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Host Id"
           },
           "title": {
@@ -936,7 +1209,8 @@
             "title": "Description"
           },
           "severity": {
-            "$ref": "#/components/schemas/Severity"
+            "$ref": "#/components/schemas/Severity",
+            "default": "info"
           },
           "cvss_version": {
             "anyOf": [
@@ -1033,21 +1307,18 @@
         "type": "object",
         "required": [
           "host_id",
-          "title",
-          "severity"
+          "title"
         ],
         "title": "VulnerabilityCreate"
       },
       "VulnerabilityOut": {
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Id"
           },
           "project_id": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Project Id"
           },
           "title": {
@@ -1155,9 +1426,19 @@
             "title": "Recommendations"
           },
           "created_by": {
-            "type": "string",
-            "format": "uuid",
+            "type": "integer",
             "title": "Created By"
+          },
+          "created_by_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Username"
           },
           "created_at": {
             "type": "string",
@@ -1367,8 +1648,7 @@
           },
           "image_file_ids": {
             "items": {
-              "type": "string",
-              "format": "uuid"
+              "type": "integer"
             },
             "type": "array",
             "title": "Image File Ids"
@@ -1376,8 +1656,7 @@
           "endpoint_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "integer"
               },
               {
                 "type": "null"

@@ -336,51 +336,6 @@ class ProjectMemberOut(BaseModel):
     added_at: datetime
 
 
-class JiraConfigUpsert(InputBaseModel):
-    name: str = Field(default="default", min_length=1, max_length=255)
-    base_url: str = Field(min_length=1, max_length=1024)
-    email: EmailStr
-    api_token: str | None = Field(default=None, min_length=1)
-    default_issue_type: str = Field(default="Task", min_length=1, max_length=100)
-    is_enabled: bool = True
-
-
-class JiraConfigOut(ORMBase):
-    id: int
-    name: str
-    base_url: str
-    email: EmailStr
-    default_issue_type: str
-    is_enabled: bool
-    created_by: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class ProjectJiraLinkUpsert(InputBaseModel):
-    jira_project_key: str = Field(min_length=1, max_length=32)
-
-
-class ProjectJiraLinkOut(ORMBase):
-    id: int
-    project_id: int
-    jira_project_key: str
-    created_by: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class JiraIssueLinkOut(ORMBase):
-    id: int
-    vulnerability_id: int
-    jira_issue_key: str
-    jira_issue_url: str
-    status: str
-    last_error: str | None
-    created_at: datetime
-    updated_at: datetime
-
-
 class ProjectNoteCreate(InputBaseModel):
     title: str = Field(min_length=1, max_length=255)
     parent_id: int | None = None
