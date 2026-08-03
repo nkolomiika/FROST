@@ -183,6 +183,8 @@ vi.mock("../api", async (importOriginal) => {
     listNotifications: vi.fn(async () => ({ items: [], total: 0, page: 1, size: 20, pages: 1 })),
     markNotificationRead: vi.fn(async () => undefined),
     listAgentTokens: vi.fn(async () => [mkToken(1, "CI pipeline", "pcf_ci"), mkToken(2, "Slack alerts bot", "pcf_sl")]),
+    changeMyPassword: vi.fn(async () => ({ id: 1, username: "admin" })),
+    logout: vi.fn(async () => undefined),
     createProject: vi.fn(async () => projects[0]),
     updateProject: vi.fn(async () => projects[0]),
     deleteProject: vi.fn(async () => undefined),
@@ -263,6 +265,10 @@ describe("StormApp (design prototype port)", () => {
     // mockResolvedValue survives the test that set it — reset it so the bell stays
     // empty for everyone else (its rows repeat project/finding names).
     vi.mocked(api.listNotifications).mockResolvedValue({ items: [], total: 0, page: 1, size: 20, pages: 1 });
+    // Счётчики вызовов тоже переживают тест: без сброса «не вызывался» ловил бы
+    // вызов из соседнего теста.
+    vi.mocked(api.changeMyPassword).mockClear();
+    vi.mocked(api.logout).mockClear();
   });
   afterEach(() => {
     useAuthStore.setState({ user: null, isInitialized: false });
@@ -511,6 +517,39 @@ describe("StormApp (design prototype port)", () => {
     expect(await screen.findByText("CI pipeline")).toBeInTheDocument();
     expect(screen.getByText("Slack alerts bot")).toBeInTheDocument();
     expect(vi.mocked(api.listAgentTokens)).toHaveBeenCalled();
+  });
+
+  it("changes the account password and signs the session out", async () => {
+    render(<MemoryRouter><StormApp /></MemoryRouter>);
+    fireEvent.click(screen.getByText("Profile"));
+    fireEvent.click(screen.getByText("Security"));
+    const [cur, next, again] = Array.from(document.querySelectorAll('input[type="password"]')) as HTMLInputElement[];
+    fireEvent.change(cur, { target: { value: "old-secret" } });
+    fireEvent.change(next, { target: { value: "brand-new-secret" } });
+    fireEvent.change(again, { target: { value: "brand-new-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Change password/i }));
+    await waitFor(() =>
+      expect(vi.mocked(api.changeMyPassword)).toHaveBeenCalledWith({
+        current_password: "old-secret",
+        new_password: "brand-new-secret",
+      }),
+    );
+    // Бэкенд отзывает все refresh-токены, включая текущий, — сессию надо закрыть,
+    // иначе она оборвалась бы позже неожиданным 401.
+    await waitFor(() => expect(vi.mocked(api.logout)).toHaveBeenCalled());
+  });
+
+  it("refuses a password change when the repeat does not match", async () => {
+    render(<MemoryRouter><StormApp /></MemoryRouter>);
+    fireEvent.click(screen.getByText("Profile"));
+    fireEvent.click(screen.getByText("Security"));
+    const [cur, next, again] = Array.from(document.querySelectorAll('input[type="password"]')) as HTMLInputElement[];
+    fireEvent.change(cur, { target: { value: "old-secret" } });
+    fireEvent.change(next, { target: { value: "brand-new-secret" } });
+    fireEvent.change(again, { target: { value: "brand-new-secrat" } });
+    fireEvent.click(screen.getByRole("button", { name: /Change password/i }));
+    expect(await screen.findByText(/do not match/i)).toBeInTheDocument();
+    expect(vi.mocked(api.changeMyPassword)).not.toHaveBeenCalled();
   });
 
   it("opens the workspace Members admin page with users from the backend", async () => {

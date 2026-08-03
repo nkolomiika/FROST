@@ -26,6 +26,7 @@ import { Icon } from "./icons";
 const StormMarkdownEditor = lazy(() => import("./StormMarkdownEditor"));
 const StormDocs = lazy(() => import("./StormDocs"));
 import { StormDatePicker } from "./StormDatePicker";
+import { PasswordInput } from "./PasswordInput";
 import { useAuthStore, useToastStore } from "../store";
 import { useThemeStore } from "./theme";
 import { StormSelect } from "./StormSelect";
@@ -93,6 +94,7 @@ import {
   downloadProjectAcceptanceReport as apiDownloadAcceptanceReport,
   setupTwoFactor as apiSetupTwoFactor,
   confirmTwoFactor as apiConfirmTwoFactor,
+  changeMyPassword as apiChangeMyPassword,
   disableTwoFactor as apiDisableTwoFactor,
 } from "../api";
 import { calculateCvssScore, severityFromCvssScore } from "../cvss";
@@ -409,6 +411,12 @@ interface StormState {
   // Диалог отключения (требует пароль аккаунта).
   twoFADisableOpen: boolean;
   twoFADisablePassword: string;
+  // ---- Смена собственного пароля (вкладка Security) ----
+  pwCurrent: string;
+  pwNew: string;
+  pwConfirm: string;
+  pwBusy: boolean;
+  pwError: string | null;
   twoFABusy: boolean;
   vulnFilterAuthor: string;
   /* Multi-select filters: every pill toggles, and an empty selection means "All"
@@ -571,6 +579,11 @@ const initialState: StormState = {
   twoFASecret: null,
   twoFADisableOpen: false,
   twoFADisablePassword: "",
+  pwCurrent: "",
+  pwNew: "",
+  pwConfirm: "",
+  pwBusy: false,
+  pwError: null,
   twoFABusy: false,
   vulnFilterAuthor: "",
   vulnFilterStatuses: [],
@@ -3272,6 +3285,36 @@ export function StormApp() {
     } catch (e) {
       setState({ twoFABusy: false });
       pushToast(getApiErrorMessage(e, "Invalid code — try again"), "error");
+    }
+  };
+  /* Смена собственного пароля. Бэкенд отзывает ВСЕ refresh-токены пользователя,
+     включая текущий: иначе украденная сессия пережила бы смену пароля, ради
+     которой её и меняют. Поэтому после успеха сразу разлогиниваем — иначе
+     access-токен дожил бы до истечения и оборвался бы посреди работы
+     непонятным 401. */
+  const PW_MIN = 8;
+  const changeOwnPassword = async () => {
+    if (state.pwBusy) return;
+    if (state.pwNew.length < PW_MIN) {
+      setState({ pwError: t("New password must be at least 8 characters.") });
+      return;
+    }
+    if (state.pwNew !== state.pwConfirm) {
+      setState({ pwError: t("The new passwords do not match.") });
+      return;
+    }
+    if (state.pwNew === state.pwCurrent) {
+      setState({ pwError: t("The new password must differ from the current one.") });
+      return;
+    }
+    setState({ pwBusy: true, pwError: null });
+    try {
+      await apiChangeMyPassword({ current_password: state.pwCurrent, new_password: state.pwNew });
+      setState({ pwBusy: false, pwCurrent: "", pwNew: "", pwConfirm: "", pwError: null });
+      pushToast(t("Password changed — sign in again with the new one."), "success");
+      await signOut();
+    } catch (e) {
+      setState({ pwBusy: false, pwError: getApiErrorMessage(e, "Couldn't change the password") });
     }
   };
   const openDisableTwoFA = () => setState({ twoFADisableOpen: true, twoFADisablePassword: "" });
@@ -6011,7 +6054,36 @@ export function StormApp() {
     );
   };
 
-  const renderProfileSecurity = () => (
+  const renderProfileSecurity = () => {
+    const pwReady = state.pwCurrent.length > 0 && state.pwNew.length >= PW_MIN && state.pwConfirm.length > 0;
+    return (
+    <>
+    <div style={{ ...CARD, padding: "22px 24px", marginBottom: 16 }}>
+      {cardHeader("lock", t("Password"), t("Changing it signs out every session, including this one"))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
+        <div>
+          <label className="flabel">{t("Current password")}</label>
+          <PasswordInput value={state.pwCurrent} onChange={(v) => setState({ pwCurrent: v, pwError: null })} autoComplete="current-password" placeholder={t("Current password")} />
+        </div>
+        <div>
+          <label className="flabel">{t("New password")}</label>
+          <PasswordInput value={state.pwNew} onChange={(v) => setState({ pwNew: v, pwError: null })} autoComplete="new-password" placeholder={t("At least 8 characters")} />
+        </div>
+        <div>
+          <label className="flabel">{t("Repeat new password")}</label>
+          <PasswordInput value={state.pwConfirm} onChange={(v) => setState({ pwConfirm: v, pwError: null })} autoComplete="new-password" placeholder={t("Repeat new password")} />
+        </div>
+      </div>
+      {state.pwError && (
+        <div style={{ marginTop: 12, font: "600 12.5px Inter,sans-serif", color: "var(--st-danger)" }}>{state.pwError}</div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
+        <button className="clk" onClick={changeOwnPassword} disabled={!pwReady || state.pwBusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: !pwReady || state.pwBusy ? "var(--st-accent-muted)" : "var(--st-accent)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: !pwReady || state.pwBusy ? "not-allowed" : "pointer" }}>
+          {state.pwBusy ? t("Changing…") : t("Change password")}
+        </button>
+        <span style={{ font: "500 12.5px Inter,sans-serif", color: "var(--st-text-faint)" }}>{t("You will be asked to sign in again.")}</span>
+      </div>
+    </div>
     <div style={{ ...CARD, padding: "22px 24px" }}>
       {cardHeader("lock", "Two-factor authentication", "Protect sign-in with a Google Authenticator code")}
       {twoFAEnabled ? (
@@ -6058,7 +6130,9 @@ export function StormApp() {
         </div>
       )}
     </div>
-  );
+    </>
+    );
+  };
 
   const renderProfileApi = () => (
     <div style={{ ...CARD, padding: "22px 24px" }}>

@@ -451,11 +451,15 @@ export interface EndpointRequestHeader {
   value: string;
 }
 
+/** HTTP-метод эндпоинта. Отдельным именем — его используют и Endpoint, и
+ *  сводка HostEndpointSummary в списке хостов. */
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS" | "QUERY";
+
 export interface Endpoint {
   id: number;
   host_id: number;
   path: string;
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS" | "QUERY" | null;
+  method: HttpMethod | null;
   description: string | null;
   query_params: EndpointQueryParam[];
   request_body: string | null;
