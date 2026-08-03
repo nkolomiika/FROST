@@ -10,13 +10,19 @@
 # ENV_FILE — здесь его не дублируем.
 #
 # Внутренние порты (8000/9000/9001/5433/1025/8025) в базовом compose
-# публикуются на 0.0.0.0. В проде закройте их облачным фаерволом Timeweb:
-# наружу оставьте только 22, 80, 443. Наружу светит лишь nginx.
+# публикуются на 0.0.0.0. Здесь они переопределяются на 127.0.0.1: docker
+# правит iptables напрямую и проходит мимо UFW/ufw-allow-листа, так что
+# «закрыть фаерволом» на самом хосте не работает — публиковать надо только
+# на loopback. Наружу светит лишь nginx (80/443); до Swagger, MinIO-консоли,
+# postgres и mailpit добираются SSH-туннелем.
+#   ssh -L 8000:127.0.0.1:8000 root@<server>
 
 services:
   backend:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:8000:8000"
 
   mail-worker:
     restart: unless-stopped
@@ -29,18 +35,37 @@ services:
 
   db:
     restart: unless-stopped
+    # Дефолтные user/password из базового compose — для дева. В проде
+    # пароль приходит из .env.prod (deploy.sh экспортирует его для интерполяции).
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан в .env.prod}
+    ports: !override
+      - "127.0.0.1:5433:5432"
 
   minio:
     restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER не задан в .env.prod}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD не задан в .env.prod}
+    ports: !override
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
 
   rabbitmq:
     restart: unless-stopped
 
   mailpit:
     restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
   nginx:
     restart: unless-stopped
+    # 3000 — дев-привычка, наружу в проде не нужен.
+    ports: !override
+      - "80:80"
+      - "443:443"
     # Адрес для SAN сертификата (deploy.sh экспортирует из .env.prod).
     environment:
       CERT_IP: ${CERT_IP:-}

@@ -25,9 +25,16 @@ fi
 
 # Значения для интерполяции в compose (nginx SAN). Берём только то, что нужно
 # самому compose-файлу; всё остальное окружение контейнеры читают из ENV_FILE.
-CERT_IP="$(grep -E '^CERT_IP=' "$ENV_PROD" | head -1 | cut -d= -f2- || true)"
-CERT_HOST="$(grep -E '^CERT_HOST=' "$ENV_PROD" | head -1 | cut -d= -f2- || true)"
-export CERT_IP CERT_HOST
+read_env() { grep -E "^$1=" "$ENV_PROD" | head -1 | cut -d= -f2- || true; }
+
+CERT_IP="$(read_env CERT_IP)"
+CERT_HOST="$(read_env CERT_HOST)"
+# Креды инфраструктуры: контейнеры postgres/minio читают их не из env_file,
+# а из своего `environment`, поэтому compose должен подставить их сам.
+POSTGRES_PASSWORD="$(read_env POSTGRES_PASSWORD)"
+MINIO_ROOT_USER="$(read_env MINIO_ROOT_USER)"
+MINIO_ROOT_PASSWORD="$(read_env MINIO_ROOT_PASSWORD)"
+export CERT_IP CERT_HOST POSTGRES_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD
 export ENV_FILE="$ENV_PROD"
 
 cmd="${1:-up}"
