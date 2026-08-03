@@ -1,0 +1,47 @@
+# Прод-оверрайд поверх docker-compose.yml. Применяется вторым -f:
+#   ENV_FILE=.env.prod docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Проще — ./deploy.sh (он же экспортирует CERT_IP/CERT_HOST для nginx).
+#
+# Что меняет относительно дева:
+#   • backend без --reload (dev-watcher в проде не нужен);
+#   • restart: unless-stopped на всех сервисах — переживают ребут сервера;
+#   • nginx получает адрес для SAN самоподписанного сертификата.
+# Окружение (origins, APP_BASE_URL, DEBUG, SMTP…) приходит из .env.prod через
+# ENV_FILE — здесь его не дублируем.
+#
+# Внутренние порты (8000/9000/9001/5433/1025/8025) в базовом compose
+# публикуются на 0.0.0.0. В проде закройте их облачным фаерволом Timeweb:
+# наружу оставьте только 22, 80, 443. Наружу светит лишь nginx.
+
+services:
+  backend:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+
+  mail-worker:
+    restart: unless-stopped
+
+  recon-worker:
+    restart: unless-stopped
+
+  frontend:
+    restart: unless-stopped
+
+  db:
+    restart: unless-stopped
+
+  minio:
+    restart: unless-stopped
+
+  rabbitmq:
+    restart: unless-stopped
+
+  mailpit:
+    restart: unless-stopped
+
+  nginx:
+    restart: unless-stopped
+    # Адрес для SAN сертификата (deploy.sh экспортирует из .env.prod).
+    environment:
+      CERT_IP: ${CERT_IP:-}
+      CERT_HOST: ${CERT_HOST:-}

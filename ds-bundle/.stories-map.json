@@ -1,0 +1,472 @@
+{
+  "global": "SberDesignKit",
+  "pkg": "sberpcf-design-kit",
+  "pkgDir": "/Users/nkolomiika/Cursor Projects/SberPCF/frontend/design-kit",
+  "extraEntries": [],
+  "exported": [
+    "Alert",
+    "AppBar",
+    "Autocomplete",
+    "Avatar",
+    "Badge",
+    "Box",
+    "Button",
+    "Card",
+    "CardContent",
+    "Checkbox",
+    "Chip",
+    "CircularProgress",
+    "Container",
+    "Dialog",
+    "DialogActions",
+    "DialogContent",
+    "DialogTitle",
+    "Divider",
+    "FormControl",
+    "FormControlLabel",
+    "FormGroup",
+    "Grid",
+    "IconButton",
+    "InputAdornment",
+    "InputLabel",
+    "LinearProgress",
+    "List",
+    "ListItem",
+    "ListItemButton",
+    "ListItemIcon",
+    "ListItemText",
+    "Menu",
+    "MenuItem",
+    "OutlinedInput",
+    "Pagination",
+    "Paper",
+    "Popover",
+    "SberThemeProvider",
+    "Select",
+    "Stack",
+    "Switch",
+    "Table",
+    "TableBody",
+    "TableCell",
+    "TableContainer",
+    "TableHead",
+    "TableRow",
+    "TextField",
+    "Toolbar",
+    "Tooltip",
+    "Typography"
+  ],
+  "storybookStatic": null,
+  "keyRecipe": 7,
+  "cfgSliceGlobal": "a81e4b5922d934d53852d467603f63ddbac5fe48067ca5d37144b14d7835d112",
+  "components": [
+    {
+      "name": "Alert",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "AppBar",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Autocomplete",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Avatar",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Badge",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Box",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Button",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "dfab616db65bb22e",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Card",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "6ed6266ef56ba569",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "CardContent",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Checkbox",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Chip",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "CircularProgress",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Container",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Dialog",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "DialogActions",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "DialogContent",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "DialogTitle",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Divider",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "FormControl",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "FormControlLabel",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "FormGroup",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Grid",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "IconButton",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "InputAdornment",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "InputLabel",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "LinearProgress",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "List",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "ListItem",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "ListItemButton",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "ListItemIcon",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "ListItemText",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Menu",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "MenuItem",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "OutlinedInput",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Pagination",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Paper",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Popover",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "SberThemeProvider",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Select",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Stack",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Switch",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Table",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "TableBody",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "TableCell",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "TableContainer",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "TableHead",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "TableRow",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "TextField",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "48aa680cbc3304e6",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Toolbar",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Tooltip",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Typography",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "2a8e7d232589f703",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    }
+  ]
+}
