@@ -173,8 +173,10 @@ type ReconView = "hosts" | "ips" | "endpoints" | "js";
 type ProfileTab = "account" | "security" | "api" | "customizing";
 /** Word report templates the backend can generate (POST /projects/{id}/reports/{kind}). */
 type ReportKind = "szi" | "pp";
-/** What the export dialog exports: the project report, or one of the recon lists. */
-type ExportScope = "report" | "hosts" | "ips" | "endpoints";
+/** What the export dialog exports: the project report, or one of the recon lists.
+ *  Находки JS-фермы выгружаются двумя раздельными списками — пути и секреты
+ *  нужны разным инструментам, и смешивать их в одном файле бессмысленно. */
+type ExportScope = "report" | "hosts" | "ips" | "endpoints" | "js-endpoints" | "js-secrets";
 /** How many type-to-search suggestions a combo field offers at once. */
 const COMBO_MAX = 5;
 const REPORT_KINDS: { kind: ReportKind; title: string; desc: string }[] = [
@@ -266,6 +268,8 @@ interface StormState {
   jsFarmJob: ApiJsFarmJob | null;
   /** Project JS files (backend-loaded). `null` = not loaded yet. */
   apiJsFiles: ApiJsFile[] | null;
+  /** Открытая карточка JS-файла (id) — как openHostId/openIp у хостов и адресов. */
+  openJsFileId: number | null;
   jsTick: number;
   jsQuery: string;
   /** Only show files that leaked at least one secret. */
@@ -454,6 +458,7 @@ const initialState: StormState = {
   ipFarmJob: null,
   jsFarmJob: null,
   apiJsFiles: null,
+  openJsFileId: null,
   jsTick: 0,
   jsQuery: "",
   jsSecretsOnly: false,
@@ -982,6 +987,11 @@ function hostCf(addrs: { is_cloudflare: boolean | null }[]): CfState {
   if (addrs.length > 0 && addrs.every((a) => a.is_cloudflare === false)) return false;
   return null;
 }
+
+/** Имя файла из URL — колонка списка и заголовок карточки показывают его, а не весь путь. */
+const fileBase = (url: string) => url.split("/").pop() || url;
+/** Человекочитаемый размер файла. */
+const kb = (n: number | null) => (n == null ? "" : n < 1024 ? `${n} B` : `${Math.round(n / 1024)} KB`);
 
 /** Merge two CF tri-states: any true → true; else any false → false; else unknown. */
 const mergeCf = (a: CfState, b: CfState): CfState =>
@@ -1928,8 +1938,8 @@ export function StormApp() {
      "Add hosts") — otherwise coming back would drop the user into a stale form
      instead of the list they asked for. */
   const setSection = (s: SectionId) =>
-    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, exportPageOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
-  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, exportPageOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, exportPageOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
 
   /* ---- URL ↔ navigation-state sync (deep links to sections / projects) ----
      Two effects mirror each other: URL → state, and state → URL. They must never
@@ -2145,6 +2155,29 @@ export function StormApp() {
      known ports still contributes its bare name — otherwise it would vanish from
      an export that is supposed to list it. */
   const exportLinesFor = (scope: ExportScope): string[] => {
+    /* Источник для JS-выгрузок: открытая карточка файла, если мы в ней, иначе
+       весь отфильтрованный список. Так кнопка «Экспорт» на странице файла даёт
+       ровно его находки, а та же кнопка в списке — находки всего раздела. */
+    if (scope === "js-endpoints" || scope === "js-secrets") {
+      const src = _jsd ? [_jsd] : jsFilesFiltered;
+      const out: string[] = [];
+      const uniq = new Set<string>();
+      for (const f of src) {
+        const lines =
+          scope === "js-endpoints"
+            ? f.endpoints
+            // Вид и значение — табом: секрет может содержать что угодно, включая
+            // двоеточия и пробелы, а таб переживает и grep, и вставку в таблицу.
+            : f.secrets.map((sec) => `${sec.kind}\t${sec.match}`);
+        for (const line of lines) {
+          const v = line.trim();
+          if (!v || uniq.has(v)) continue;
+          uniq.add(v);
+          out.push(v);
+        }
+      }
+      return out;
+    }
     if (scope === "ips") {
       // The row already carries the ports of every host sharing this address.
       return ipsRows.flatMap((r) => (r.ports.length ? r.ports.map((p) => `${r.ip}:${p.n}`) : [r.ip]));
@@ -2195,7 +2228,12 @@ export function StormApp() {
     if (state.exportScope === "endpoints" && state.exportFormat === "openapi") {
       downloadText(endpointLinesToOpenApi(lines), `${name}_endpoints.json`, "application/json");
     } else {
-      const file = state.exportScope === "hosts" ? "hosts" : state.exportScope === "ips" ? "ips" : "endpoints";
+      const file =
+        state.exportScope === "hosts" ? "hosts"
+        : state.exportScope === "ips" ? "ips"
+        : state.exportScope === "js-endpoints" ? "js_paths"
+        : state.exportScope === "js-secrets" ? "js_secrets"
+        : "endpoints";
       downloadText(lines.join("\n"), `${name}_${file}.txt`);
     }
     closeReconExport();
@@ -2239,8 +2277,10 @@ export function StormApp() {
     setState((s) => ({ epExpanded: s.epExpanded.includes(host) ? s.epExpanded.filter((x) => x !== host) : [...s.epExpanded, host] }));
   // JS files share the epExpanded set, namespaced "js:<host>" so a host and its
   // JS group don't collide.
-  const toggleJsFile = (url: string) => {
-    const key = `js:file:${url}`;
+  /* Раскрытие домена в разделе JS. Файлы больше не раскрываются на месте: клик
+     по файлу открывает его карточку, как у хостов и адресов. */
+  const toggleJsGroup = (host: string) => {
+    const key = `js:host:${host}`;
     setState((s) => ({ epExpanded: s.epExpanded.includes(key) ? s.epExpanded.filter((x) => x !== key) : [...s.epExpanded, key] }));
   };
   /* Starts the scan on exactly the domains left in the setup page's list — the
@@ -3673,6 +3713,11 @@ export function StormApp() {
       (!jsQ || f.url.toLowerCase().includes(jsQ) || f.host.toLowerCase().includes(jsQ)) &&
       (!state.jsSecretsOnly || f.secrets.length > 0),
   );
+  /** Открытая карточка JS-файла. Ищем по всему списку, а не по отфильтрованному:
+   *  карточка не должна захлопываться, если фильтр списка перестал её пропускать. */
+  const _jsd = state.openJsFileId != null ? jsFiles.find((f) => f.id === state.openJsFileId) : undefined;
+  const openJsFile = (id: number) => setState({ openJsFileId: id });
+  const closeJsFile = () => setState({ openJsFileId: null });
   const jsGroups = [...new Set(jsFilesFiltered.map((f) => f.host))].map((host) => {
     const files = jsFilesFiltered.filter((f) => f.host === host);
     // Every file in a group shares one host, so its id names the archive scope.
@@ -3718,7 +3763,7 @@ export function StormApp() {
       return s.exportText === next ? s : { ...s, exportText: next };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.exportPageOpen, state.exportScope, state.hostQuery, state.hostFilters, state.hostCfFilter, state.ipQuery, state.ipCfFilter, state.epHostQuery, state.epPathQuery, state.epMethods]);
+  }, [state.exportPageOpen, state.exportScope, state.hostQuery, state.hostFilters, state.hostCfFilter, state.ipQuery, state.ipCfFilter, state.epHostQuery, state.epPathQuery, state.epMethods, state.jsQuery, state.jsSecretsOnly]);
 
   /* Список целей скана наполняется один раз при открытии страницы и дальше живёт
      сам: фильтры раздела «Хосты» на него не влияют (см. jsScanDomains), а
@@ -3763,7 +3808,9 @@ export function StormApp() {
               ? _hd.host
               : sec === "hosts" && _ipd
                 ? _ipd.ip
-                : "";
+                : sec === "hosts" && _jsd
+                  ? fileBase(_jsd.url)
+                  : "";
 
   // ---- editor fields (options that depend on live data are filled in here) ----
   let efCfg = EDITOR_FIELDS[state.editorType] ?? [];
@@ -4319,10 +4366,20 @@ export function StormApp() {
               )}
               {/* Opens the domain picker rather than scanning straight away, so the
                   label says what the click does: choose what to scan. */}
-              {sec === "hosts" && rv === "js" && !state.jsScanSetupOpen && (
-                <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
-                  <Icon name="search" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Select domains & scan")}
-                </button>
+              {/* Пути и секреты выгружаются раздельно: это разные артефакты и
+                  разные потребители, один файл на двоих смысла не имеет. */}
+              {sec === "hosts" && rv === "js" && !state.jsScanSetupOpen && !state.exportPageOpen && !_jsd && (
+                <>
+                  <button className="clk" onClick={() => openReconExport("js-endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="upload" size={15} sw={2.2} color="var(--st-accent-2)" />{t("Export paths")}
+                  </button>
+                  <button className="clk" onClick={() => openReconExport("js-secrets")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="upload" size={15} sw={2.2} color="var(--st-accent-2)" />{t("Export secrets")}
+                  </button>
+                  <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
+                    <Icon name="search" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Select domains & scan")}
+                  </button>
+                </>
               )}
               {sec === "vulns" && state.openVulnId == null && (
                 <button className="addbtn clk" onClick={() => openEditor("vuln", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add issue")}</button>
@@ -4746,7 +4803,12 @@ export function StormApp() {
      list view renders: narrowing it there narrows what lands here. */
   const renderExport = () => {
     const scope = state.exportScope;
-    const title = scope === "hosts" ? t("Export hosts") : scope === "ips" ? t("Export IP addresses") : t("Export endpoints");
+    const title =
+      scope === "hosts" ? t("Export hosts")
+      : scope === "ips" ? t("Export IP addresses")
+      : scope === "js-endpoints" ? t("Export JS paths")
+      : scope === "js-secrets" ? t("Export JS secrets")
+      : t("Export endpoints");
     const kept = new Set(exportTextLines(state.exportText));
     const left = exportLinesFor(scope).filter((l) => kept.has(l));
     const keptCount = exportTextLines(state.exportText).length;
@@ -4754,7 +4816,15 @@ export function StormApp() {
     const paneCol: CSSProperties = { display: "flex", flexDirection: "column", minHeight: 0 };
     return (
       <div className="route">
-        {reconFilterRow(scope === "ips" ? "ips" : scope === "endpoints" ? "endpoints" : "hosts")}
+        {/* У JS-выгрузки из карточки файла набор задан самим файлом — фильтры
+            списка к нему отношения не имеют и только сбивали бы с толку. */}
+        {!(scope.startsWith("js-") && _jsd) &&
+          reconFilterRow(
+            scope === "ips" ? "ips"
+            : scope === "endpoints" ? "endpoints"
+            : scope.startsWith("js-") ? "js"
+            : "hosts",
+          )}
         {/* Height leaves room for the filter row the card now sits under. */}
         <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 318px)" }}>
           <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--st-divider)" }}>
@@ -4931,9 +5001,12 @@ export function StormApp() {
       );
     }
     if (rv === "js") {
+      if (_jsd) return renderJsFileDetail(_jsd);
       const jsRunning = isFarmJobInFlight(state.jsFarmJob?.status ?? "");
-      const fileBase = (url: string) => url.split("/").pop() || url;
-      const kb = (n: number | null) => (n == null ? "" : n < 1024 ? `${n} B` : `${Math.round(n / 1024)} KB`);
+      /* Та же сетка, что у таблицы хостов: домен — раскрывающаяся строка, файлы
+         под ним — вложенные, как поддомены. Раньше это были отдельные карточки на
+         домен, и раздел выпадал из общего стиля раздела Recon. */
+      const jsGrid = "24px minmax(0,1.6fr) 96px 96px 96px";
       return (
         <div className="route">
           {reconFilterRow("js")}
@@ -4944,72 +5017,49 @@ export function StormApp() {
               {t("Scanning")} {state.jsFarmJob?.targets_total ?? ""} {t("domains — secrets and paths appear as files are scanned.")}
             </div>
           )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {jsGroups.map((g) => (
-              <div key={g.host} style={{ background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 14, overflow: "hidden" }}>
-                <div className="prow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px" }}>
-                  <Icon name="globe2" size={16} color="var(--st-text-3)" />
-                  <span className="mono" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--st-text)", flex: 1 }}>{g.host}</span>
-                  <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--st-text-2)", background: "var(--st-hover)", borderRadius: 7, padding: "3px 9px" }}>{g.count}</span>
-                  {/* Re-downloads this host's .js into a zip (files aren't stored). */}
-                  <button className="clk" title={t("Download JS archive")} onClick={() => downloadJsArchive(g.hostId, g.host)} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", border: "1px solid var(--st-border)", borderRadius: 9, background: "var(--st-surface)", font: "700 12px Inter,sans-serif", color: "var(--st-accent-2)" }}>
-                    <Icon name="download" size={14} sw={2.2} color="var(--st-accent-2)" />{t("Archive")}
-                  </button>
-                </div>
-                <div style={{ borderTop: "1px solid var(--st-divider)" }}>
-                  {g.files.map((file) => {
-                    const open = state.epExpanded.includes(`js:file:${file.url}`);
-                    return (
-                      <div key={file.id} style={{ borderBottom: "1px solid var(--st-elevated)" }}>
-                        <div className="prow clk" onClick={() => toggleJsFile(file.url)} style={{ display: "grid", gridTemplateColumns: "18px minmax(0,1fr) 72px 72px 68px", alignItems: "center", gap: 12, padding: "12px 20px 12px 22px" }}>
-                          <Icon name="chevron-right" size={14} color="var(--st-text-faint)" sw={2.4} style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
-                          <span className="mono" title={file.url} style={{ fontSize: 12.5, color: file.status === "ok" ? "var(--st-text)" : "var(--st-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileBase(file.url)}</span>
-                          {/* Secret count is the headline signal, so it is colour-flagged. */}
-                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: file.secrets.length ? "var(--st-danger)" : "var(--st-text-faint)" }}>{file.secrets.length} {t("secrets")}</span>
+          <div style={{ ...CARD, overflow: "hidden" }}>
+            {jsGroups.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+                <div /><div>{t("Host")}</div><div>{t("Files")}</div><div>{t("Secrets")}</div><div />
+              </div>
+            )}
+            {jsGroups.map((g) => {
+              const exp = state.epExpanded.includes(`js:host:${g.host}`);
+              const groupSecrets = g.files.reduce((n, f) => n + f.secrets.length, 0);
+              return (
+                <div key={g.host} style={{ borderBottom: "1px solid var(--st-divider)" }}>
+                  <div className="prow clk" onClick={() => toggleJsGroup(g.host)} style={{ display: "grid", gridTemplateColumns: jsGrid, alignItems: "center", gap: 14, padding: "15px 20px" }}>
+                    <Icon name="chevron-right" size={15} color="var(--st-text-faint)" sw={2.4} style={{ transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                    <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.host}</span>
+                    <span className="mono" style={{ fontSize: 12, color: "var(--st-text-2)" }}>{g.count} {t("files")}</span>
+                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: groupSecrets ? "var(--st-danger)" : "var(--st-text-faint)" }}>{groupSecrets}</span>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
+                      {/* Re-downloads this host's .js into a zip (files aren't stored). */}
+                      <Tip label={t("Download JS archive")}><div className="actbtn" onClick={(ev) => { ev.stopPropagation(); downloadJsArchive(g.hostId, g.host); }}><Icon name="download" size={15} /></div></Tip>
+                    </div>
+                  </div>
+                  {exp && (
+                    <div style={{ background: "var(--st-elevated)", animation: "storm-fade .2s ease both" }}>
+                      {g.files.map((file) => (
+                        <div key={file.id} className="prow clk" onClick={() => openJsFile(file.id)} style={{ display: "grid", gridTemplateColumns: jsGrid, alignItems: "center", gap: 14, padding: "13px 20px 13px 44px", borderTop: "1px solid var(--st-divider)" }}>
+                          <span />
+                          <span className="mono hostname" title={file.url} style={{ font: "600 13px 'JetBrains Mono',monospace", color: file.status === "ok" ? "var(--st-text)" : "var(--st-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{fileBase(file.url)}</span>
                           <span className="mono" style={{ fontSize: 11.5, color: "var(--st-text-3)" }}>{file.endpoints.length} {t("paths")}</span>
+                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: file.secrets.length ? "var(--st-danger)" : "var(--st-text-faint)" }}>{file.secrets.length}</span>
                           <span className="mono" style={{ fontSize: 11, color: "var(--st-text-faint)", textAlign: "right" }}>{file.status === "ok" ? kb(file.size) : file.status}</span>
                         </div>
-                        {open && (
-                          <div style={{ padding: "4px 20px 16px 40px", animation: "storm-fade .2s ease both" }}>
-                            {file.secrets.length > 0 && (
-                              <div style={{ marginBottom: file.endpoints.length ? 14 : 0 }}>
-                                <div style={{ font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)", marginBottom: 7 }}>{t("Secrets")}</div>
-                                {file.secrets.map((sec, i) => {
-                                  const c = SECRET_SEV[sec.severity] ?? SECRET_SEV.low;
-                                  return (
-                                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5, minWidth: 0 }}>
-                                      <span className="mono" style={{ flex: "none", fontSize: 10.5, fontWeight: 700, borderRadius: 5, padding: "2px 8px", background: c.bg, color: c.color }}>{sec.kind}</span>
-                                      <span className="mono" style={{ flex: "none", fontSize: 12, color: "var(--st-text-2)" }}>{sec.match}</span>
-                                      {sec.snippet && <span className="mono" title={sec.snippet} style={{ fontSize: 11.5, color: "var(--st-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.snippet}</span>}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {file.endpoints.length > 0 && (
-                              <div>
-                                <div style={{ font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)", marginBottom: 7 }}>{t("Paths")}</div>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                  {file.endpoints.map((p, i) => (
-                                    <span key={i} className="mono" style={{ fontSize: 11.5, borderRadius: 6, padding: "2px 8px", background: "var(--st-elevated)", color: "var(--st-text-2)" }}>{p}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {file.secrets.length === 0 && file.endpoints.length === 0 && (
-                              <div style={{ font: "500 12.5px Inter,sans-serif", color: "var(--st-text-faint)" }}>{file.status === "ok" ? t("Nothing found in this file.") : t("File could not be scanned.")}</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      ))}
+                      {g.files.length === 0 && (
+                        <div style={{ padding: "13px 20px 13px 44px", borderTop: "1px solid var(--st-divider)", font: "500 12.5px Inter,sans-serif", color: "var(--st-text-faint)" }}>{t("No JS files on this host.")}</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
-            {state.apiJsFiles === null && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14, background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 14 }}>{t("Loading JS files…")}</div>}
+              );
+            })}
+            {state.apiJsFiles === null && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("Loading JS files…")}</div>}
             {state.apiJsFiles !== null && jsGroups.length === 0 && (
-              <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14, background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 14 }}>{t("No JS files yet — pick domains and scan.")}</div>
+              <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No JS files yet — pick domains and scan.")}</div>
             )}
           </div>
         </div>
@@ -5091,6 +5141,73 @@ export function StormApp() {
       </div>
     );
   };
+
+  /* Карточка одного JS-файла — тот же приём, что у хоста и адреса: список
+     остаётся списком, а разбор находок живёт на своей странице. Экспорт здесь
+     ограничен этим файлом (см. exportLinesFor: открытая карточка задаёт источник),
+     поэтому «Пути» и «Секреты» выгружаются ровно из него и по отдельности. */
+  const renderJsFileDetail = (f: JsFileEntry) => (
+    <div style={{ animation: "storm-fade .2s ease both" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+        <span className="clk" onClick={closeJsFile} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
+          <Icon name="chevron-left" size={15} />{t("All JS files")}
+        </span>
+        <div style={{ flex: 1 }} />
+        <button className="clk" onClick={() => openReconExport("js-endpoints")} disabled={f.endpoints.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 12.5px Inter,sans-serif", color: f.endpoints.length ? "var(--st-accent-2)" : "var(--st-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.endpoints.length ? "pointer" : "default" }}>
+          <Icon name="upload" size={14} sw={2.2} color={f.endpoints.length ? "var(--st-accent-2)" : "var(--st-text-faint)"} />{t("Export paths")}
+        </button>
+        <button className="clk" onClick={() => openReconExport("js-secrets")} disabled={f.secrets.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 12.5px Inter,sans-serif", color: f.secrets.length ? "var(--st-accent-2)" : "var(--st-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.secrets.length ? "pointer" : "default" }}>
+          <Icon name="upload" size={14} sw={2.2} color={f.secrets.length ? "var(--st-accent-2)" : "var(--st-text-faint)"} />{t("Export secrets")}
+        </button>
+      </div>
+      <div style={{ ...CARD, padding: "22px 24px", marginBottom: 16 }}>
+        <div className="mono" style={{ font: "800 17px 'JetBrains Mono',monospace", color: "var(--st-text)", wordBreak: "break-all" }}>{fileBase(f.url)}</div>
+        <a className="mono" href={f.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 12, color: "var(--st-accent)", wordBreak: "break-all" }}>{f.url}</a>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--st-text-2)", background: "var(--st-hover)", border: "1px solid var(--st-border-light)", borderRadius: 6, padding: "3px 9px" }}>{f.host}</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--st-text-2)", background: "var(--st-hover)", border: "1px solid var(--st-border-light)", borderRadius: 6, padding: "3px 9px" }}>{f.status === "ok" ? kb(f.size) : f.status}</span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ font: "700 13px Inter,sans-serif", color: "var(--st-text)" }}>{t("Secrets")} <span className="mono" style={{ color: "var(--st-text-3)", fontWeight: 600 }}>{f.secrets.length}</span></span>
+      </div>
+      <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
+        {f.secrets.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+            <div>{t("Kind")}</div><div>{t("Match")}</div><div>{t("Snippet")}</div>
+          </div>
+        )}
+        {f.secrets.map((sec, i) => {
+          const c = SECRET_SEV[sec.severity] ?? SECRET_SEV.low;
+          return (
+            <div key={i} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", alignItems: "center", gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--st-divider)" }}>
+              <span className="mono" style={{ justifySelf: "start", fontSize: 10.5, fontWeight: 700, borderRadius: 5, padding: "2px 8px", background: c.bg, color: c.color }}>{sec.kind}</span>
+              <span className="mono" style={{ fontSize: 12, color: "var(--st-text-2)", wordBreak: "break-all" }}>{sec.match}</span>
+              <span className="mono" title={sec.snippet ?? ""} style={{ fontSize: 11.5, color: "var(--st-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.snippet}</span>
+            </div>
+          );
+        })}
+        {f.secrets.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{f.status === "ok" ? t("No secrets in this file.") : t("File could not be scanned.")}</div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ font: "700 13px Inter,sans-serif", color: "var(--st-text)" }}>{t("Paths")} <span className="mono" style={{ color: "var(--st-text-3)", fontWeight: 600 }}>{f.endpoints.length}</span></span>
+      </div>
+      <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
+        {f.endpoints.map((path, i) => (
+          <div key={i} className="prow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)" }}>
+            <span className="mono" style={{ fontSize: 12.5, color: "var(--st-text)", wordBreak: "break-all" }}>{path}</span>
+          </div>
+        ))}
+        {f.endpoints.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{t("No paths in this file.")}</div>
+        )}
+      </div>
+    </div>
+  );
 
   const renderHostDetail = (h: Host) => {
     return (

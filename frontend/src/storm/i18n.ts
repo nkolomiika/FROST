@@ -266,6 +266,18 @@ const RU: Record<string, string> = {
   Export: "Экспорт",
   "Export report": "Экспорт отчёта",
   "Selected:": "Выбрано:",
+  "Export paths": "Экспорт путей",
+  "Export secrets": "Экспорт секретов",
+  "Export JS paths": "Экспорт путей из JS",
+  "Export JS secrets": "Экспорт секретов из JS",
+  "All JS files": "Все JS-файлы",
+  "No secrets in this file.": "В этом файле секретов нет.",
+  "No paths in this file.": "В этом файле путей нет.",
+  "No JS files on this host.": "На этом домене JS-файлов нет.",
+  Kind: "Тип",
+  Match: "Значение",
+  Snippet: "Фрагмент",
+  files: "файлов",
   "% elapsed": "% прошло",
 
   // ── profile / settings ──

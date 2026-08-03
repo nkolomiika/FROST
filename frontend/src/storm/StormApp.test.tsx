@@ -628,22 +628,51 @@ describe("StormApp (design prototype port)", () => {
     fireEvent.click(jsItem as HTMLElement);
   };
 
-  it("lists JS files grouped by host and reveals secrets + paths on expand", async () => {
+  /* Раздел JS устроен как таблица хостов: домен — свёрнутая строка, файлы под
+     ним раскрываются. Почти каждому JS-тесту нужен раскрытый домен. */
+  const openJsViewExpanded = async () => {
     await openJsView();
-    // The bundle row, collapsed, shows its secret/path counts.
+    const hostRow = (await screen.findByText("api.northwind.test", { selector: ".hostname" })).closest(".prow") as HTMLElement;
+    fireEvent.click(hostRow);
+  };
+
+  it("lists JS files under their host and opens one as its own card", async () => {
+    await openJsViewExpanded();
+    // Строка файла показывает счётчики путей и секретов.
     const fileRow = (await screen.findByText("app.bundle.js")).closest(".prow") as HTMLElement;
-    expect(within(fileRow).getByText(/1 .*secret/i)).toBeInTheDocument();
     expect(within(fileRow).getByText(/2 .*path/i)).toBeInTheDocument();
-    // Expanding reveals the actual finding: the secret kind, its redacted value, and a path.
+    // Клик по файлу открывает карточку — находки разбираются там, а не в списке.
     fireEvent.click(fileRow);
     expect(await screen.findByText("aws_access_key")).toBeInTheDocument();
     expect(screen.getByText("AKIA…MPLE")).toBeInTheDocument();
     expect(screen.getByText("/api/v1/secret-data")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Export paths/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Export secrets/i })).toBeInTheDocument();
     expect(vi.mocked(api.getJsFiles)).toHaveBeenCalledWith(2);
   });
 
+  it("exports one file's paths and secrets as separate lists", async () => {
+    await openJsViewExpanded();
+    fireEvent.click((await screen.findByText("app.bundle.js")).closest(".prow") as HTMLElement);
+    // Правая панель двухпанельного экспорта — то, что уйдёт в файл.
+    const kept = () => (Array.from(document.querySelectorAll("textarea")) as HTMLTextAreaElement[])[1];
+    // Экспорт путей: ровно пути этого файла, без секретов.
+    fireEvent.click(await screen.findByRole("button", { name: /Export paths/i }));
+    await waitFor(() => expect(kept()).toBeTruthy());
+    expect(kept().value.split("\n").sort()).toEqual(["/admin/panel", "/api/v1/secret-data"]);
+    // Возврат в карточку и экспорт секретов: вид и значение через таб.
+    // На странице несколько «Cancel» (страница экспорта и скрытые модалки) —
+    // берём тот, что рядом с кнопкой «Download» самой страницы экспорта.
+    const dl = screen.getByRole("button", { name: /^Download$/i });
+    const cancel = Array.from(dl.parentElement!.querySelectorAll("button")).find((b) => /Cancel/i.test(b.textContent || ""));
+    fireEvent.click(cancel as HTMLElement);
+    fireEvent.click(await screen.findByRole("button", { name: /Export secrets/i }));
+    await waitFor(() => expect(kept().value).toContain("aws_access_key"));
+    expect(kept().value).toBe("aws_access_key\tAKIA…MPLE");
+  });
+
   it("filters JS files to only those with secrets", async () => {
-    await openJsView();
+    await openJsViewExpanded();
     expect(await screen.findByText("app.bundle.js")).toBeInTheDocument();
     expect(screen.getByText("vendor.js")).toBeInTheDocument();
     // "With secrets" drops the clean vendor.js bundle.
@@ -654,7 +683,7 @@ describe("StormApp (design prototype port)", () => {
   });
 
   it("picks domains then starts a JS scan and polls it to completion", async () => {
-    await openJsView();
+    await openJsViewExpanded();
     await screen.findByText("app.bundle.js");
     // The header button now opens a domain picker instead of scanning straight away.
     fireEvent.click(screen.getByRole("button", { name: /Select domains & scan/i }));
