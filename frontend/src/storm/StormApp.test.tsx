@@ -539,6 +539,16 @@ describe("StormApp (design prototype port)", () => {
     expect(within(row).getByText("200")).toBeInTheDocument();
   });
 
+  it("counts nested subdomains in the hosts total", async () => {
+    await openHostsSection();
+    await screen.findByText("api.northwind.test", { selector: ".hostname" });
+    // Три хоста: api.northwind.test, test.com и вложенный в неё api.test.com.
+    // Таблица показывает поддомен внутри родителя, но в счёт он входить обязан —
+    // иначе домен с 68 поддоменами отображался бы как «1».
+    const total = screen.getByText("Total hosts").closest("span") as HTMLElement;
+    expect(within(total).getByText("3")).toBeInTheDocument();
+  });
+
   it("filters hosts by the status pills (empty = all)", async () => {
     await openHostsSection();
     await screen.findByText("api.northwind.test", { selector: ".hostname" });

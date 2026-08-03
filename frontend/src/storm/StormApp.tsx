@@ -2147,23 +2147,8 @@ export function StormApp() {
       // Only the endpoint URL — no method prefix.
       return endpointGroups.flatMap((g) => g.endpoints.map((e) => `https://${g.host}${e.p}`));
     }
-    /* The table nests subdomains under their parent, so hostsList on its own would
-       leave them out of the export. Expand every row with its subdomains and dedupe:
-       a search flattens the tree, which already lists the subdomain in its own right,
-       and subdomainsOf matches every descendant, so deeper trees repeat too. */
-    const seen = new Set<number>();
-    const rows: Host[] = [];
-    const add = (x: Host) => {
-      if (seen.has(x.id)) return;
-      seen.add(x.id);
-      rows.push(x);
-    };
-    hostsList.forEach(({ h }) => {
-      // A parent can be on the list only because one of its subdomains matched the
-      // pills — export it itself only when it matches them too.
-      if (hostMatchesFilters(h)) add(h);
-      visibleSubdomainsOf(h).forEach(add);
-    });
+    // Ровно те строки, что видны в таблице (вместе с вложенными поддоменами).
+    const rows = visibleHostRows();
     return rows.flatMap((h) => (h.ports.length ? h.ports.map((p) => `${h.host}:${p.n}`) : [h.host]));
   };
 
@@ -3456,6 +3441,30 @@ export function StormApp() {
       return !isIpFarmRow(x.h) && nameOk && nestOk && filterOk;
     });
 
+  /* Каждый хост, реально показанный в таблице: корневые строки плюс раскрытые
+     под ними поддомены, без дублей. Таблица держит поддомены вложенными, поэтому
+     hostsList сам по себе — это только корни (домен с 68 поддоменами даёт длину 1).
+     Счётчик «Total hosts», экспорт и список доменов для JS-скана обязаны видеть
+     одно и то же множество, иначе разъезжаются. Дедуп нужен, потому что поиск
+     распрямляет дерево (поддомен уже идёт отдельной строкой), а subdomainsOf
+     отдаёт всех потомков — на глубоких деревьях они повторяются. */
+  const visibleHostRows = (): Host[] => {
+    const seen = new Set<number>();
+    const rows: Host[] = [];
+    const add = (x: Host) => {
+      if (seen.has(x.id)) return;
+      seen.add(x.id);
+      rows.push(x);
+    };
+    hostsList.forEach(({ h }) => {
+      // Родитель попадает в список и тогда, когда пилюлям соответствует только его
+      // поддомен, — сам он засчитывается лишь если проходит фильтры и сам.
+      if (hostMatchesFilters(h)) add(h);
+      visibleSubdomainsOf(h).forEach(add);
+    });
+    return rows;
+  };
+
   const _hd = state.openHostId != null ? hosts.find((h) => h.id === state.openHostId) : undefined;
 
   const sevCounts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
@@ -3669,17 +3678,7 @@ export function StormApp() {
      not addresses). Subdomains are pulled up like the export does, so a parent on
      the list only because a child matched doesn't drag the child along silently. */
   const jsScanDomains = (): string[] => {
-    const seen = new Set<number>();
-    const rows: Host[] = [];
-    const add = (x: Host) => {
-      if (seen.has(x.id)) return;
-      seen.add(x.id);
-      rows.push(x);
-    };
-    hostsList.forEach(({ h }) => {
-      if (hostMatchesFilters(h)) add(h);
-      visibleSubdomainsOf(h).forEach(add);
-    });
+    const rows = visibleHostRows();
     const out: string[] = [];
     const uniq = new Set<string>();
     for (const h of rows) {
@@ -3693,7 +3692,7 @@ export function StormApp() {
   const openJsScanSetup = () => setState({ jsScanSetupOpen: true, jsScanText: jsScanDomains().join("\n") });
   const closeJsScanSetup = () => setState({ jsScanSetupOpen: false });
   /** Row count of the active recon view — shown next to the section title. */
-  const reconTotal = rv === "ips" ? ipsRows.length : rv === "endpoints" ? endpointTotal : rv === "js" ? jsFilesFiltered.length : hostsList.length;
+  const reconTotal = rv === "ips" ? ipsRows.length : rv === "endpoints" ? endpointTotal : rv === "js" ? jsFilesFiltered.length : visibleHostRows().length;
   /** Wording for that count, matching the active view. */
   const reconTotalLabel = rv === "ips" ? t("Total IPs") : rv === "endpoints" ? t("Total endpoints") : rv === "js" ? t("Total JS files") : t("Total hosts");
 
