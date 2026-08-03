@@ -249,11 +249,21 @@ export const OS_TYPE_OPTIONS: { value: OsType; label: string }[] = [
   { value: "other", label: "Другая" },
 ];
 
+/** Путь хоста в списочной выдаче: то, чем таблица Recon рисует строку. Полный
+ *  Endpoint (описание, query-параметры, тело, заголовки) отдаёт карточка хоста. */
+export interface HostEndpointSummary {
+  id: number;
+  path: string;
+  method: HttpMethod | null;
+}
+
 export interface Host {
   id: number;
   project_id: number;
   ip_address: string | null;
   ip_addresses: HostIpAddress[];
+  /** Приходят вместе со списком — фронт не добирает их запросом на каждый хост. */
+  endpoints: HostEndpointSummary[];
   hostname: string | null;
   status: "up" | "down" | "unknown";
   os_type: OsType;

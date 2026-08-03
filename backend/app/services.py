@@ -2057,7 +2057,12 @@ class AssetService:
             base_query = base_query.where(Host.status == status)
         total = await self.db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
         items_query = (
-            base_query.options(selectinload(Host.ip_addresses).selectinload(HostIpAddress.ports).selectinload(Port.services))
+            base_query.options(
+                selectinload(Host.ip_addresses).selectinload(HostIpAddress.ports).selectinload(Port.services),
+                # Пути едут вместе со списком: иначе фронт добирает их запросом на
+                # каждый хост, и открытие проекта с 69 хостами стоит 70 round-trip'ов.
+                selectinload(Host.endpoints),
+            )
             .order_by(Host.created_at.desc())
             .offset((page - 1) * size)
             .limit(size)

@@ -186,7 +186,11 @@ vi.mock("../api", async (importOriginal) => {
     createProject: vi.fn(async () => projects[0]),
     updateProject: vi.fn(async () => projects[0]),
     deleteProject: vi.fn(async () => undefined),
-    getHosts: vi.fn(async () => ({ items: hosts, total: hosts.length, page: 1, size: 100, pages: 1 })),
+    // Как реальный HostOut: пути едут внутри списка, отдельного запроса на хост нет.
+    getHosts: vi.fn(async () => ({
+      items: hosts.map((h) => ({ ...h, endpoints: endpointsByHost[h.id] ?? [] })),
+      total: hosts.length, page: 1, size: 100, pages: 1,
+    })),
     getHost: vi.fn(async (_projectId: number, hostId: number) => ({
       ...hosts.find((h) => h.id === hostId),
       endpoints: endpointsByHost[hostId] ?? [],
@@ -568,7 +572,9 @@ describe("StormApp (design prototype port)", () => {
     const group = screen.getAllByText("api.northwind.test").find((n) => n.closest(".prow"));
     fireEvent.click(group as HTMLElement);
     expect(await screen.findByText("/v1/orders")).toBeInTheDocument();
-    expect(vi.mocked(api.getHost)).toHaveBeenCalledWith(2, 11);
+    // Пути пришли со списком: запроса на каждый хост быть не должно — именно он
+    // превращал открытие проекта с 69 хостами в 70 round-trip'ов.
+    expect(vi.mocked(api.getHost)).not.toHaveBeenCalled();
   });
 
   it("bulk-adds endpoints from a pasted URL list, matching hosts by name", async () => {
@@ -659,6 +665,24 @@ describe("StormApp (design prototype port)", () => {
     // A running job shows the banner, then polling flips it to done and reloads.
     expect(await screen.findByText(/Scanning 1/)).toBeInTheDocument();
     await waitFor(() => expect(vi.mocked(api.getJsScanJob)).toHaveBeenCalled(), { timeout: 3000 });
+  });
+
+  it("keeps the hosts-tab filter out of the JS scan target list", async () => {
+    await openHostsSection();
+    await screen.findByText("api.northwind.test", { selector: ".hostname" });
+    // Пилюля "up" прячет test.com из таблицы хостов (она unknown)...
+    fireEvent.click(screen.getByText("up"));
+    expect(screen.queryByText("test.com", { selector: ".hostname" })).not.toBeInTheDocument();
+    // ...но на выбор целей JS-скана это влиять не должно: скан идёт по всем
+    // доменам проекта, включая вложенный поддомен api.test.com.
+    const jsItem = screen.getAllByText("JS").find((n) => n.closest(".menu"));
+    fireEvent.click(jsItem as HTMLElement);
+    fireEvent.click(await screen.findByRole("button", { name: /Select domains & scan/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Start scan/i }));
+    const sent = vi.mocked(api.startJsScan).mock.calls[0][1] as string;
+    expect(sent.split("\n").map((x) => x.trim()).filter(Boolean).sort()).toEqual([
+      "api.northwind.test", "api.test.com", "test.com",
+    ]);
   });
 
   it("collapses one address into a single row listing every hostname", async () => {

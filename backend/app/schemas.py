@@ -482,12 +482,26 @@ class HostUpdate(InputBaseModel):
     notes: str | None = None
 
 
+class HostEndpointSummary(ORMBase):
+    """Путь хоста в списочной выдаче — только то, чем таблица Recon рисует строку.
+
+    Полный EndpointOut (описание, query-параметры, тело, заголовки) отдаёт
+    карточка хоста; в списке на десятки хостов он раздул бы ответ на порядок,
+    ничего не добавив к отображению.
+    """
+
+    id: int
+    path: str
+    method: HttpMethod | None
+
+
 class HostOut(ORMBase):
     id: int
     project_id: int
     ip_address: str | None
     """Primary IP — синоним для is_primary=true записи в ip_addresses."""
     ip_addresses: list[HostIpAddressOut] = Field(default_factory=list)
+    endpoints: list[HostEndpointSummary] = Field(default_factory=list)
     hostname: str | None
     status: HostStatus
     os_type: OsType = OsType.UNKNOWN

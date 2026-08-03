@@ -423,6 +423,16 @@ class Host(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="HostIpAddress.created_at",
     )
+    # Нужен, чтобы список хостов отдавал пути одним selectinload. Без него фронт
+    # добирал их по одному запросу на хост (70 round-trip'ов на 69 хостах).
+    # passive_deletes: удаление хоста разбирает БД по FK ON DELETE CASCADE. Без
+    # этого флага SQLAlchemy при db.delete(host) сам подгрузил бы коллекцию и
+    # попытался обнулить endpoints.host_id — а колонка NOT NULL.
+    endpoints: Mapped[list["Endpoint"]] = relationship(
+        "Endpoint",
+        order_by="Endpoint.id",
+        passive_deletes=True,
+    )
 
 
 class HostIpAddress(Base, TimestampMixin):

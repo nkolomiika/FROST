@@ -1497,6 +1497,13 @@ export function StormApp() {
   /* Endpoints are fetched up-front alongside the list because the Recon →
      Endpoints view aggregates them across every host, so loading them lazily on
      row expand would leave that view permanently empty. */
+  /* Последний удачно загруженный список хостов на проект. Уход со страницы проекта
+     обнуляет apiHosts, и без кэша возврат снова упирался в пустой экран «Loading
+     hosts…» на всю загрузку — при том, что данные почти всегда те же самые.
+     Держим их здесь и на входе показываем сразу, а сеть догоняет в фоне
+     (stale-while-revalidate): экран заполнен мгновенно, свежесть не теряется.
+     Ref, а не state: подмена кэша не должна сама по себе вызывать ререндер. */
+  const hostsCacheRef = useRef<Map<number, Host[]>>(new Map());
   const reloadHosts = () => setStateRaw((s) => ({ ...s, hostsTick: s.hostsTick + 1 }));
   useEffect(() => {
     const pid = state.openProjectId;
@@ -1515,24 +1522,23 @@ export function StormApp() {
       }
     })();
     void (async () => {
-      setStateRaw((s) => ({ ...s, hostsLoading: true }));
+      const cached = hostsCacheRef.current.get(pid);
+      // Есть кэш — рисуем его тут же и молча обновляем: спиннер поверх готовых
+      // строк выглядел бы как повторная загрузка, хотя данные уже на экране.
+      setStateRaw((s) => (cached ? { ...s, apiHosts: cached, hostsLoading: false } : { ...s, hostsLoading: true }));
       try {
         const res = await apiGetHosts(pid);
-        const rows = await Promise.all(
-          res.items.map(async (h) => {
-            try {
-              const det = await apiGetHost(pid, h.id);
-              return toStormHost(h, det.endpoints.map((e) => ({ id: e.id, m: toStormMethod(e.method), p: e.path })));
-            } catch {
-              // Best-effort: a host whose detail fails still belongs in the list.
-              return toStormHost(h);
-            }
-          })
+        // Пути приезжают внутри списка (HostOut.endpoints) — раньше здесь был
+        // запрос на каждый хост, и проект с 69 хостами открывался за 70 round-trip'ов.
+        const rows = res.items.map((h) =>
+          toStormHost(h, (h.endpoints ?? []).map((e) => ({ id: e.id, m: toStormMethod(e.method), p: e.path })))
         );
+        hostsCacheRef.current.set(pid, rows);
         if (!cancelled) setStateRaw((s) => ({ ...s, apiHosts: rows, hostsLoading: false }));
       } catch (e) {
         if (!cancelled) {
-          setStateRaw((s) => ({ ...s, apiHosts: [], hostsLoading: false }));
+          // Кэш при ошибке не трогаем: показанные строки честнее пустой таблицы.
+          setStateRaw((s) => ({ ...s, apiHosts: cached ?? [], hostsLoading: false }));
           handleProjectError(e, "Couldn't load hosts");
         }
       }
@@ -3673,12 +3679,17 @@ export function StormApp() {
     return { host, hostId: files[0]?.hostId, files, count: files.length };
   });
 
-  /* The domains the JS scan can target: every project domain the host filters
-     leave on screen, minus IP-origin rows and IP literals (the farm scans names,
-     not addresses). Subdomains are pulled up like the export does, so a parent on
-     the list only because a child matched doesn't drag the child along silently. */
+  /* Домены, доступные JS-скану: ВСЕ домены проекта, кроме IP-строк фермы и
+     IP-литералов (ферма ходит по именам, а не по адресам). Поддомены попадают
+     наравне с корнями — в списке хостов они лежат вложенными, но целями скана
+     являются сами по себе.
+     Фильтры раздела «Хосты» сюда намеренно не переносятся: пилюли статусов и
+     поиск — это способ разглядывать таблицу, а не выбор целей скана. Раньше
+     оставленный включённым фильтр молча урезал набор, и скан уходил по
+     нескольким доменам вместо всех. Сузить список можно прямо в textarea на
+     странице запуска — это и есть явный выбор. */
   const jsScanDomains = (): string[] => {
-    const rows = visibleHostRows();
+    const rows = hosts;
     const out: string[] = [];
     const uniq = new Set<string>();
     for (const h of rows) {
@@ -3709,10 +3720,10 @@ export function StormApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.exportPageOpen, state.exportScope, state.hostQuery, state.hostFilters, state.hostCfFilter, state.ipQuery, state.ipCfFilter, state.epHostQuery, state.epPathQuery, state.epMethods]);
 
-  /* Same contract as the export reseed above: the JS scan page's host filters are
-     the coarse pick, the domain list the fine one, so retuning a filter reseeds the
-     list. Deps are only the host filters — a background hosts refresh must not wipe
-     hand edits. */
+  /* Список целей скана наполняется один раз при открытии страницы и дальше живёт
+     сам: фильтры раздела «Хосты» на него не влияют (см. jsScanDomains), а
+     перечитывать его на фоновом обновлении хостов нельзя — это стёрло бы правки
+     руками. Поэтому единственная зависимость — сам факт открытия страницы. */
   useEffect(() => {
     if (!state.jsScanSetupOpen) return;
     setStateRaw((s) => {
@@ -3720,7 +3731,7 @@ export function StormApp() {
       return s.jsScanText === next ? s : { ...s, jsScanText: next };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.jsScanSetupOpen, state.hostQuery, state.hostFilters, state.hostCfFilter]);
+  }, [state.jsScanSetupOpen]);
 
   // The chip shows the project's real status (active / freeze / …), not the
   // coarse active-vs-archived split the tabs use.
