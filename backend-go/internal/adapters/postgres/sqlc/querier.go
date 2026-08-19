@@ -11,6 +11,10 @@ import (
 type Querier interface {
 	ClaimPendingMailJobs(ctx context.Context, limit int32) ([]MailJob, error)
 	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
+	// ─────────── note comments ───────────
+	CountNoteComments(ctx context.Context, arg CountNoteCommentsParams) (int64, error)
+	CountProjectsAdmin(ctx context.Context, status NullProjectStatus) (int64, error)
+	CountProjectsForMember(ctx context.Context, arg CountProjectsForMemberParams) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	// Запросы контекста agenttokens (v1 CRUD + v2 bearer-auth).
 	CreateAgentToken(ctx context.Context, arg CreateAgentTokenParams) (AgentApiToken, error)
@@ -22,19 +26,40 @@ type Querier interface {
 	CreateReactivationToken(ctx context.Context, arg CreateReactivationTokenParams) (AccountReactivationToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteAgentToken(ctx context.Context, id int32) error
+	DeleteCredential(ctx context.Context, id int32) error
 	DeleteExpiredRefreshTokens(ctx context.Context) error
+	DeleteHiddenIP(ctx context.Context, arg DeleteHiddenIPParams) error
+	DeleteHostByID(ctx context.Context, id int32) error
+	DeleteMember(ctx context.Context, arg DeleteMemberParams) error
+	DeleteNote(ctx context.Context, id int32) error
+	DeleteNoteComment(ctx context.Context, id int32) error
+	DeleteProject(ctx context.Context, id int32) error
+	DeleteSubtreeFolders(ctx context.Context, path string) error
+	DeleteSubtreeProjects(ctx context.Context, folder string) error
 	DisableUserTotp(ctx context.Context, id int32) error
 	EmailExists(ctx context.Context, email string) (bool, error)
 	EnableUserTotp(ctx context.Context, id int32) error
 	ExpireUserUnusedPasswordResetTokens(ctx context.Context, userID int32) error
 	ExpireUserUnusedReactivationTokens(ctx context.Context, userID int32) error
+	FindSiblingFolderByName(ctx context.Context, arg FindSiblingFolderByNameParams) (ProjectFolder, error)
+	FindSiblingNoteTitle(ctx context.Context, arg FindSiblingNoteTitleParams) (int32, error)
 	GetActivePendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
 	GetAgentTokenByHash(ctx context.Context, tokenHash string) (AgentApiToken, error)
 	GetAgentTokenByID(ctx context.Context, id int32) (AgentApiToken, error)
+	GetCredential(ctx context.Context, arg GetCredentialParams) (GetCredentialRow, error)
+	GetFolderByID(ctx context.Context, id int32) (ProjectFolder, error)
+	GetFolderByPath(ctx context.Context, path string) (ProjectFolder, error)
 	GetInvitationByID(ctx context.Context, id int32) (Invitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (Invitation, error)
+	GetMember(ctx context.Context, arg GetMemberParams) (ProjectMember, error)
+	GetNote(ctx context.Context, arg GetNoteParams) (GetNoteRow, error)
+	GetNoteComment(ctx context.Context, arg GetNoteCommentParams) (ProjectNoteComment, error)
 	GetPasswordResetByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
+	// Запросы контекста projects: проекты, папки, участники, заметки(+комментарии),
+	// креды, hidden-ips, статистика, активность, уведомления, упоминания.
+	// ─────────── projects ───────────
+	GetProjectByID(ctx context.Context, id int32) (Project, error)
 	GetReactivationByHash(ctx context.Context, tokenHash string) (AccountReactivationToken, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetRefreshTokenForUser(ctx context.Context, arg GetRefreshTokenForUserParams) (RefreshToken, error)
@@ -45,33 +70,73 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id int32) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserRoleByID(ctx context.Context, id int32) (GetUserRoleByIDRow, error)
+	HiddenIPExists(ctx context.Context, arg HiddenIPExistsParams) (bool, error)
 	InsertAgentTokenGrant(ctx context.Context, arg InsertAgentTokenGrantParams) error
 	// Запросы контекста audit. Пишем журнал действий; чтение — в контексте audit позже.
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	InsertCredential(ctx context.Context, arg InsertCredentialParams) (ProjectCredential, error)
+	InsertFolder(ctx context.Context, arg InsertFolderParams) (ProjectFolder, error)
+	InsertHiddenIP(ctx context.Context, arg InsertHiddenIPParams) error
 	// Запросы контекста mail (outbox). Отправка писем — Phase 2 (mail-worker).
 	InsertMailJob(ctx context.Context, arg InsertMailJobParams) (MailJob, error)
+	InsertMember(ctx context.Context, arg InsertMemberParams) (ProjectMember, error)
+	InsertNote(ctx context.Context, arg InsertNoteParams) (ProjectNote, error)
+	InsertNoteComment(ctx context.Context, arg InsertNoteCommentParams) (ProjectNoteComment, error)
+	// ─────────── notifications + mentions ───────────
+	InsertNotification(ctx context.Context, arg InsertNotificationParams) error
+	InsertProject(ctx context.Context, arg InsertProjectParams) (Project, error)
 	// ─────────────────────────── refresh_tokens ───────────────────────────
 	InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) (RefreshToken, error)
+	IsProjectMember(ctx context.Context, arg IsProjectMemberParams) (bool, error)
 	ListAgentTokenGrants(ctx context.Context, tokenID int32) ([]int32, error)
 	ListAgentTokensByCreator(ctx context.Context, createdBy int32) ([]AgentApiToken, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
+	// ─────────── credentials ───────────
+	ListCredentials(ctx context.Context, projectID int32) ([]ListCredentialsRow, error)
+	// ─────────── folders ───────────
+	ListFolders(ctx context.Context) ([]ProjectFolder, error)
+	// ─────────── hidden ips ───────────
+	ListHiddenIPs(ctx context.Context, projectID int32) ([]string, error)
 	ListMemberProjectIDs(ctx context.Context, userID int32) ([]int32, error)
+	ListMemberUserIDs(ctx context.Context, projectID int32) ([]int32, error)
+	// ─────────── members ───────────
+	ListMembers(ctx context.Context, projectID int32) ([]ListMembersRow, error)
+	ListNoteComments(ctx context.Context, arg ListNoteCommentsParams) ([]ListNoteCommentsRow, error)
+	// ─────────── notes ───────────
+	ListNotes(ctx context.Context, projectID int32) ([]ListNotesRow, error)
+	// ─────────── activity ───────────
+	ListNotesActivity(ctx context.Context, arg ListNotesActivityParams) ([]ListNotesActivityRow, error)
 	ListPendingInvitations(ctx context.Context) ([]Invitation, error)
+	ListProjectActivity(ctx context.Context, arg ListProjectActivityParams) ([]ListProjectActivityRow, error)
+	ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminParams) ([]Project, error)
+	ListProjectsForMember(ctx context.Context, arg ListProjectsForMemberParams) ([]Project, error)
+	ListSiblingNotes(ctx context.Context, arg ListSiblingNotesParams) ([]ListSiblingNotesRow, error)
+	ListStandaloneIPHostIDs(ctx context.Context, arg ListStandaloneIPHostIDsParams) ([]int32, error)
+	ListSubtreeFolders(ctx context.Context, path string) ([]ProjectFolder, error)
+	ListSubtreeProjects(ctx context.Context, folder string) ([]Project, error)
 	// Запросы контекста users (роутер users.py). Часть операций переиспользует
 	// запросы из auth.sql (GetUserByID/ByUsername/ByEmail, Username/EmailExists,
 	// UpdateUserPassword, SetUserLocked/Active, EnableUserTotp/DisableUserTotp,
 	// RevokeAllUserRefreshTokens, CreateInvitation, CreateReactivationToken,
 	// ExpireUserUnusedReactivationTokens, InsertMailJob, InsertAuditLog).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	ListVulnsForActivity(ctx context.Context, ids []int32) ([]ListVulnsForActivityRow, error)
 	MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error
 	MarkMailJobFailed(ctx context.Context, arg MarkMailJobFailedParams) error
 	MarkMailJobSent(ctx context.Context, id int32) error
 	MarkPasswordResetUsed(ctx context.Context, id int32) error
 	MarkReactivationUsed(ctx context.Context, id int32) error
+	MaxSiblingSortOrder(ctx context.Context, arg MaxSiblingSortOrderParams) (int32, error)
+	MoveNote(ctx context.Context, arg MoveNoteParams) error
+	// ─────────── project stats ───────────
+	ProjectStatsAdmin(ctx context.Context) ([]ProjectStatsAdminRow, error)
+	ProjectStatsForMember(ctx context.Context, userID int32) ([]ProjectStatsForMemberRow, error)
 	ResetUserPasswordTemp(ctx context.Context, arg ResetUserPasswordTempParams) error
+	ResolveMentionUsers(ctx context.Context, arg ResolveMentionUsersParams) ([]ResolveMentionUsersRow, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID int32) error
 	RevokeInvitation(ctx context.Context, id int32) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
+	SetNoteSortOrder(ctx context.Context, arg SetNoteSortOrderParams) error
 	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
 	SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) error
 	SetUserLocked(ctx context.Context, arg SetUserLockedParams) error
@@ -79,7 +144,14 @@ type Querier interface {
 	SetUserTotpSecret(ctx context.Context, arg SetUserTotpSecretParams) error
 	SetUserTotpSecretForSetup(ctx context.Context, arg SetUserTotpSecretForSetupParams) error
 	TouchAgentTokenLastUsed(ctx context.Context, arg TouchAgentTokenLastUsedParams) error
+	UpdateCredential(ctx context.Context, arg UpdateCredentialParams) error
+	UpdateFolderPath(ctx context.Context, arg UpdateFolderPathParams) error
+	UpdateFolderPathParent(ctx context.Context, arg UpdateFolderPathParentParams) error
 	UpdateInvitationForResend(ctx context.Context, arg UpdateInvitationForResendParams) error
+	UpdateNote(ctx context.Context, arg UpdateNoteParams) error
+	UpdateNoteComment(ctx context.Context, arg UpdateNoteCommentParams) error
+	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
+	UpdateProjectFolderPath(ctx context.Context, arg UpdateProjectFolderPathParams) error
 	UpdateUserAdmin(ctx context.Context, arg UpdateUserAdminParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error

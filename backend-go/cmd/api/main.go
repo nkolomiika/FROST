@@ -22,10 +22,12 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/agenttokenrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
 	"github.com/nkolomiika/frost/internal/app/agenttokens"
 	"github.com/nkolomiika/frost/internal/app/audit"
 	"github.com/nkolomiika/frost/internal/app/auth"
+	"github.com/nkolomiika/frost/internal/app/projects"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
 	"github.com/nkolomiika/frost/internal/platform/postgres"
 )
@@ -88,7 +90,10 @@ func run() error {
 	// Контекст agenttokens (управление токенами /api/v1/agent-tokens).
 	agentTokenHandler := httpadapter.NewAgentTokenHandler(agenttokens.NewService(agenttokenrepo.New(pool), nil), authSvc, cfg.CSRFOrigins())
 
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler})
+	// Контекст projects.
+	projectsHandler := httpadapter.NewProjectsHandler(projects.NewService(projectsrepo.New(pool), cipher, nil), authSvc, cfg.CSRFOrigins())
+
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{
