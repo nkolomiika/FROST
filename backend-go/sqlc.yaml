@@ -1,0 +1,23 @@
+# sqlc: типобезопасный Go из SQL. Схема берётся из goose-миграций (baseline и далее),
+# запросы — из db/queries/*.sql. Генерирует пакет `sqlc` в adapters/postgres.
+# Запуск: `make sqlc` (нужен установленный sqlc — см. README про constrained-network).
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "db/migrations"
+    queries: "db/queries"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/adapters/postgres/sqlc"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_interface: true        # Querier-интерфейс → доменные порты/моки
+        emit_empty_slices: true
+        emit_exact_table_names: false
+        overrides:
+          # NUMERIC(4,1) для cvss_score — хотим float64/пусто, а не строку.
+          - column: "vulnerabilities.cvss_score"
+            go_type:
+              type: "float64"
+              pointer: true

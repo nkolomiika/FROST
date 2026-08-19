@@ -1,0 +1,15 @@
+# oapi-codegen: сервер-интерфейсы и типы из docs/openapi-v1.json (контракт фронта).
+# Генерируем chi-server + strict-server (типобезопасные хендлеры) + модели.
+# Запуск: `make oapi` (нужен установленный oapi-codegen).
+package: apiv1
+output: internal/adapters/http/apiv1/apiv1.gen.go
+generate:
+  models: true
+  chi-server: true
+  # strict-server отключён: он генерирует некорректные типы-обёртки для бинарных
+  # 200-ответов (download файлов/картинок/JS-архива, отчёты .docx, аватар, export
+  # OpenAPI). Работаем с обычным ServerInterface (w, r, params).
+  strict-server: false
+  embedded-spec: true
+output-options:
+  skip-prune: true

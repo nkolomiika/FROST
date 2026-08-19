@@ -1,0 +1,10 @@
+# oapi-codegen: агентский /api/v2 (bearer + scopes) из docs/openapi-v2.json.
+package: apiv2
+output: internal/adapters/http/apiv2/apiv2.gen.go
+generate:
+  models: true
+  chi-server: true
+  strict-server: true
+  embedded-spec: true
+output-options:
+  skip-prune: true
