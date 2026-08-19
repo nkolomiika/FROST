@@ -20,7 +20,7 @@ settings = get_settings()
 # авторизованное» состояние, не полноценная сессия.
 TWO_FA_PENDING_TYPE = "2fa_pending"
 TWO_FA_PENDING_TTL_MINUTES = 5
-TOTP_ISSUER = "STORM"
+TOTP_ISSUER = "FROST"
 
 
 def hash_password(password: str) -> str:

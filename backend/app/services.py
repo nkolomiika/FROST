@@ -265,7 +265,7 @@ class AgentTokenService:
                     f"Нет доступа к проектам: {', '.join(map(str, forbidden))} — токен не может превышать ваши права"
                 )
 
-        raw_token = f"storm_{secrets.token_urlsafe(32)}"
+        raw_token = f"frost_{secrets.token_urlsafe(32)}"
         token = AgentApiToken(
             name=payload["name"],
             token_hash=hash_agent_token(raw_token),

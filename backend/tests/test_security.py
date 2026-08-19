@@ -96,7 +96,7 @@ def test_provisioning_uri_and_qr_tc_auth_2fa_005() -> None:
 
     uri = totp_provisioning_uri(secret, "alice")
     assert uri.startswith("otpauth://totp/")
-    assert "issuer=STORM" in uri
+    assert "issuer=FROST" in uri
     assert secret in uri
 
     qr = totp_qr_png_data_url(uri)

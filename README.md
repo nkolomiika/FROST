@@ -1,4 +1,4 @@
-# STORM — Offensive Security Research & Management
+# FROST — Findings, Research, Offensive Security & Testing
 
 Внутренняя платформа для совместной работы команды пентестеров.
 Закрытая система — самостоятельной регистрации нет, аккаунты создаёт администратор.
@@ -25,8 +25,8 @@ Backend: Python 3.12, FastAPI, SQLAlchemy 2 async, Alembic, Pydantic 2, JWT (coo
 Storage: PostgreSQL 16, MinIO, RabbitMQ.
 Frontend: React 18 + TypeScript + Vite 6, Zustand, TipTap (редактор заметок), axios.
 
-> Интерфейс STORM (`frontend/src/storm/`) — это то, что видит пользователь: он собран на
-> обычном DOM и `storm.css`, без MUI. Страницы в `frontend/src/pages/` — прежний интерфейс
+> Интерфейс FROST (`frontend/src/frost/`) — это то, что видит пользователь: он собран на
+> обычном DOM и `frost.css`, без MUI. Страницы в `frontend/src/pages/` — прежний интерфейс
 > на MUI, в приложении не используются.
 
 ## Быстрый старт

@@ -1,4 +1,4 @@
-# Use Cases — STORM
+# Use Cases — FROST
 
 Документ описывает ключевые сценарии использования системы. Все use cases опираются на
 реализованный backend (`FastAPI` + `PostgreSQL` + `MinIO` + `RabbitMQ`)

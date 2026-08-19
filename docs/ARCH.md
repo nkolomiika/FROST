@@ -1,4 +1,4 @@
-# Архитектура STORM (Offensive Security Research & Management)
+# Архитектура FROST (Findings, Research, Offensive Security & Testing)
 
 > Документ описывает АКТУАЛЬНОЕ состояние кода в репозитории. Структура backend — плоская: один `app/services.py`, один `app/schemas.py`, один `app/models.py` (без Repository pattern и без подкаталога `repositories/`).
 >

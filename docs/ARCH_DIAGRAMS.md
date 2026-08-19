@@ -1,4 +1,4 @@
-# ARCH_DIAGRAMS — Подробные диаграммы STORM
+# ARCH_DIAGRAMS — Подробные диаграммы FROST
 
 > Дополняет [ARCH.md](ARCH.md). Все диаграммы — Mermaid (рендерятся в GitHub / VSCode / Markdown-просмотрщиках с поддержкой Mermaid).
 >
@@ -8,7 +8,7 @@
 
 ## 1. System Context (C4-L1)
 
-Кто и как взаимодействует со STORM.
+Кто и как взаимодействует со FROST.
 
 ```mermaid
 flowchart LR
@@ -17,7 +17,7 @@ flowchart LR
     Admin(["Администратор<br/>(браузер)"])
     AIAgent(["AI-агент<br/>(внешний процесс)"])
 
-    subgraph STORM["STORM — Offensive Security Research & Management"]
+    subgraph FROST["FROST — Findings, Research, Offensive Security & Testing"]
         Frontend["Frontend<br/>React + Vite<br/>:3000"]
         Backend["Backend<br/>FastAPI<br/>:8000"]
         Worker["mail-worker<br/>(sidecar)"]

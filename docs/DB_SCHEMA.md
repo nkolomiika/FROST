@@ -1,5 +1,5 @@
-# Схема базы данных STORM
-## Offensive Security Research & Management
+# Схема базы данных FROST
+## Findings, Research, Offensive Security & Testing
 
 > СУБД: **PostgreSQL** (единое хранилище — и доменные данные, и audit_logs)  
 > Удаление: **физическое** (hard delete)  

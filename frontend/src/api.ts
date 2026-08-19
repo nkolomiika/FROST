@@ -232,7 +232,7 @@ export async function getUsers(page = 1, size = 200): Promise<PaginatedResponse<
  * @deprecated Прямое создание пользователя с паролем убрано в пользу приглашений
  * ({@link createInvitation}). Функция оставлена только чтобы типизировалась
  * устаревшая, НЕ подключённая к роутингу страница `pages/UsersAdminPage.tsx`
- * (живой UI — Storm — её не использует). Реального эндпоинта на бэкенде больше нет.
+ * (живой UI — Frost — её не использует). Реального эндпоинта на бэкенде больше нет.
  */
 export async function createUser(_payload: {
   username: string;
@@ -610,7 +610,7 @@ export async function deleteProject(projectId: number): Promise<void> {
 
 export async function getHosts(projectId: number): Promise<PaginatedResponse<Host>> {
   // origin=all — один запрос кормит и таблицу хостов, и таблицу IP: строки
-  // origin='ip' отфильтровываются на клиенте (см. hostsList в StormApp).
+  // origin='ip' отфильтровываются на клиенте (см. hostsList в FrostApp).
   const { data } = await api.get<PaginatedResponse<Host>>(`/projects/${projectId}/hosts`, {
     params: { page: 1, size: 100, origin: "all" },
   });

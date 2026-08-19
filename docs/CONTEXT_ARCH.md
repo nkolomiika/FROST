@@ -1,4 +1,4 @@
-# CONTEXT_ARCH.md — Контекст проекта STORM
+# CONTEXT_ARCH.md — Контекст проекта FROST
 
 > **Назначение:** короткая ориентация для AI-агента / нового разработчика.
 > Подробности — в [ARCH.md](ARCH.md), [DB_SCHEMA.md](DB_SCHEMA.md), [DEV_RULES.md](DEV_RULES.md).
@@ -7,7 +7,7 @@
 
 ## 1. Что это
 
-**STORM** (Offensive Security Research & Management) — внутренняя платформа для управления пентест-проектами. Закрытая система: самостоятельной регистрации нет, аккаунты создаёт администратор.
+**FROST** (Findings, Research, Offensive Security & Testing) — внутренняя платформа для управления пентест-проектами. Закрытая система: самостоятельной регистрации нет, аккаунты создаёт администратор.
 
 Основные возможности:
 - проекты, папки проектов; аккаунтная роль `admin / pentester`, проектная (глобальная) `lead / pentester`;
@@ -72,7 +72,7 @@ WebSocket — cookie передаётся браузером автоматич�
 ## 4. Структура
 
 ```
-STORM/
+FROST/
 ├── README.md
 ├── ARCH.md, CONTEXT_ARCH.md, DB_SCHEMA.md, DESIGN.md,
 ├── DEV_RULES.md, TASK.md, TEST_CASES.md, USE_CASES.md

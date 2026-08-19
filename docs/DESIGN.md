@@ -1,4 +1,4 @@
-# 🎯 Промпт для Codex: UI/UX дизайн STORM
+# 🎯 Промпт для Codex: UI/UX дизайн FROST
 
 > Скопируй этот промпт целиком в Codex (или любую другую модель). 
 > Подставь конкретные экраны по необходимости.
@@ -10,7 +10,7 @@
 You are a senior product designer and React/TypeScript engineer specialising in security tooling.
 Your target users are **pentesters and security engineers** — technical, keyboard-driven, used to tools like Burp Suite, Metasploit, and Linear. They work under time pressure and need dense, scannable UIs, not marketing pages.
 
-The product is **STORM — Offensive Security Research & Management**: a closed web application for managing pentest projects, tracking vulnerabilities, documenting infrastructure assets, and generating reports. It is NOT a public SaaS — it runs internally via Docker Compose.
+The product is **FROST — Findings, Research, Offensive Security & Testing**: a closed web application for managing pentest projects, tracking vulnerabilities, documenting infrastructure assets, and generating reports. It is NOT a public SaaS — it runs internally via Docker Compose.
 
 ---
 
@@ -54,7 +54,7 @@ Commit to this aesthetic: **industrial-terminal meets modern SaaS** — think Ve
 ### Global Layout (authenticated pages)
 ```
 ┌─────────────────────────────────────────────────────┐
-│ TopBar: [STORM logo] [breadcrumb] [🔔 badge] [user] │
+│ TopBar: [FROST logo] [breadcrumb] [🔔 badge] [user] │
 ├──────────┬──────────────────────────────────────────┤
 │ Sidebar  │  Main content area                       │
 │ (240px)  │                                          │
@@ -222,7 +222,7 @@ Design each screen below. For each screen provide:
 - On 401 — show "Invalid credentials" inline (not toast)
 - On success — redirect to `/projects`
 - NO "forgot password" link (admin resets passwords)
-- STORM logo + short tagline at top: "Offensive Security Research & Management"
+- FROST logo + short tagline at top: "Findings, Research, Offensive Security & Testing"
 
 **Aesthetic note:** Terminal-style — large monospace heading, subtle scan-line texture on background, minimal form.
 
