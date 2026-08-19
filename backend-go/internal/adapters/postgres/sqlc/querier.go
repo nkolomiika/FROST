@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	ClaimPendingMailJobs(ctx context.Context, limit int32) ([]MailJob, error)
 	// ─────────────────────────── invitations ───────────────────────────
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error)
 	// ─────────────────────────── password_reset_tokens ───────────────────────────
@@ -20,20 +21,29 @@ type Querier interface {
 	DisableUserTotp(ctx context.Context, id int32) error
 	EmailExists(ctx context.Context, email string) (bool, error)
 	EnableUserTotp(ctx context.Context, id int32) error
+	ExpireUserUnusedPasswordResetTokens(ctx context.Context, userID int32) error
+	ExpireUserUnusedReactivationTokens(ctx context.Context, userID int32) error
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (Invitation, error)
 	GetPasswordResetByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
 	GetReactivationByHash(ctx context.Context, tokenHash string) (AccountReactivationToken, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
+	GetRefreshTokenForUser(ctx context.Context, arg GetRefreshTokenForUserParams) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Запросы контекста auth. Растут по мере порта роутеров auth/users.
 	// Колонки — из baseline (00001_baseline.sql). sqlc-синтаксис имён: `-- name: X :kind`.
 	// ─────────────────────────── users ───────────────────────────
 	GetUserByID(ctx context.Context, id int32) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	// Запросы контекста audit. Пишем журнал действий; чтение — в контексте audit позже.
+	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	// Запросы контекста mail (outbox). Отправка писем — Phase 2 (mail-worker).
+	InsertMailJob(ctx context.Context, arg InsertMailJobParams) (MailJob, error)
 	// ─────────────────────────── refresh_tokens ───────────────────────────
 	InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) (RefreshToken, error)
 	MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error
+	MarkMailJobFailed(ctx context.Context, arg MarkMailJobFailedParams) error
+	MarkMailJobSent(ctx context.Context, id int32) error
 	MarkPasswordResetUsed(ctx context.Context, id int32) error
 	MarkReactivationUsed(ctx context.Context, id int32) error
 	RevokeAllUserRefreshTokens(ctx context.Context, userID int32) error

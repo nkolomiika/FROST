@@ -52,9 +52,14 @@ type Config struct {
 	MailQueueName  string `env:"MAIL_QUEUE_NAME" envDefault:"pcf.mail"`
 	MailEnabled    bool   `env:"MAIL_ENABLED" envDefault:"true"`
 	ReconQueueName string `env:"RECON_QUEUE_NAME" envDefault:"recon"`
+	SMTPHost       string `env:"SMTP_HOST" envDefault:"mailpit"`
+	MailPreviewURL string `env:"MAIL_PREVIEW_URL" envDefault:"http://localhost:8025"`
 
-	// --- Ссылки в письмах ---
-	AppBaseURL string `env:"APP_BASE_URL" envDefault:"https://localhost:3000"`
+	// --- Ссылки в письмах и сроки жизни токенов (часы) ---
+	AppBaseURL               string `env:"APP_BASE_URL" envDefault:"https://localhost:3000"`
+	InviteTokenExpireHours   int    `env:"INVITE_TOKEN_EXPIRE_HOURS" envDefault:"168"`
+	PasswordResetExpireHours int    `env:"PASSWORD_RESET_EXPIRE_HOURS" envDefault:"2"`
+	ReactivationExpireHours  int    `env:"REACTIVATION_EXPIRE_HOURS" envDefault:"24"`
 }
 
 // Load читает .env (если есть) и переменные окружения в Config.

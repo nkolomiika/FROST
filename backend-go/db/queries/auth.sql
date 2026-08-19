@@ -110,3 +110,12 @@ SELECT * FROM account_reactivation_tokens WHERE token_hash = $1;
 
 -- name: MarkReactivationUsed :exec
 UPDATE account_reactivation_tokens SET used_at = now() WHERE id = $1;
+
+-- name: GetRefreshTokenForUser :one
+SELECT * FROM refresh_tokens WHERE token_hash = $1 AND user_id = $2;
+
+-- name: ExpireUserUnusedPasswordResetTokens :exec
+UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL;
+
+-- name: ExpireUserUnusedReactivationTokens :exec
+UPDATE account_reactivation_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL;

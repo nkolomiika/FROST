@@ -15,6 +15,7 @@ import (
 // Deps — зависимости HTTP-слоя (composition root передаёт сюда адаптеры).
 type Deps struct {
 	Logger *slog.Logger
+	Auth   *AuthHandler // nil до подключения контекста auth
 }
 
 // NewRouter собирает chi-роутер с базовыми middleware и служебными эндпоинтами.
@@ -27,6 +28,12 @@ func NewRouter(d Deps) http.Handler {
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+
+	// Перенесённые в Go контексты (strangler): auth. Остальные пути на время
+	// миграции обслуживает Python-бэкенд (маршрутизирует nginx).
+	if d.Auth != nil {
+		d.Auth.Register(r)
+	}
 
 	return r
 }

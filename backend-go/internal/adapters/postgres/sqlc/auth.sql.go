@@ -204,6 +204,24 @@ func (q *Queries) EnableUserTotp(ctx context.Context, id int32) error {
 	return err
 }
 
+const expireUserUnusedPasswordResetTokens = `-- name: ExpireUserUnusedPasswordResetTokens :exec
+UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL
+`
+
+func (q *Queries) ExpireUserUnusedPasswordResetTokens(ctx context.Context, userID int32) error {
+	_, err := q.db.Exec(ctx, expireUserUnusedPasswordResetTokens, userID)
+	return err
+}
+
+const expireUserUnusedReactivationTokens = `-- name: ExpireUserUnusedReactivationTokens :exec
+UPDATE account_reactivation_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL
+`
+
+func (q *Queries) ExpireUserUnusedReactivationTokens(ctx context.Context, userID int32) error {
+	_, err := q.db.Exec(ctx, expireUserUnusedReactivationTokens, userID)
+	return err
+}
+
 const getInvitationByTokenHash = `-- name: GetInvitationByTokenHash :one
 SELECT id, email, full_name, role, project_role, token_hash, status, expires_at, invited_by, accepted_at, accepted_user_id, created_at, updated_at FROM invitations WHERE token_hash = $1
 `
@@ -296,6 +314,29 @@ SELECT id, user_id, token_hash, expires_at, created_at, revoked_at FROM refresh_
 
 func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
 	row := q.db.QueryRow(ctx, getRefreshTokenByHash, tokenHash)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const getRefreshTokenForUser = `-- name: GetRefreshTokenForUser :one
+SELECT id, user_id, token_hash, expires_at, created_at, revoked_at FROM refresh_tokens WHERE token_hash = $1 AND user_id = $2
+`
+
+type GetRefreshTokenForUserParams struct {
+	TokenHash string `json:"token_hash"`
+	UserID    int32  `json:"user_id"`
+}
+
+func (q *Queries) GetRefreshTokenForUser(ctx context.Context, arg GetRefreshTokenForUserParams) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenForUser, arg.TokenHash, arg.UserID)
 	var i RefreshToken
 	err := row.Scan(
 		&i.ID,
