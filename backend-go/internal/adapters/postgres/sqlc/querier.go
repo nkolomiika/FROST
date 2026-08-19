@@ -10,6 +10,10 @@ import (
 
 type Querier interface {
 	ClaimPendingMailJobs(ctx context.Context, limit int32) ([]MailJob, error)
+	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
+	CountUsers(ctx context.Context) (int64, error)
+	// Запросы контекста agenttokens (v1 CRUD + v2 bearer-auth).
+	CreateAgentToken(ctx context.Context, arg CreateAgentTokenParams) (AgentApiToken, error)
 	// ─────────────────────────── invitations ───────────────────────────
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error)
 	// ─────────────────────────── password_reset_tokens ───────────────────────────
@@ -17,12 +21,17 @@ type Querier interface {
 	// ─────────────────────────── account_reactivation_tokens ───────────────────────────
 	CreateReactivationToken(ctx context.Context, arg CreateReactivationTokenParams) (AccountReactivationToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteAgentToken(ctx context.Context, id int32) error
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DisableUserTotp(ctx context.Context, id int32) error
 	EmailExists(ctx context.Context, email string) (bool, error)
 	EnableUserTotp(ctx context.Context, id int32) error
 	ExpireUserUnusedPasswordResetTokens(ctx context.Context, userID int32) error
 	ExpireUserUnusedReactivationTokens(ctx context.Context, userID int32) error
+	GetActivePendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
+	GetAgentTokenByHash(ctx context.Context, tokenHash string) (AgentApiToken, error)
+	GetAgentTokenByID(ctx context.Context, id int32) (AgentApiToken, error)
+	GetInvitationByID(ctx context.Context, id int32) (Invitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (Invitation, error)
 	GetPasswordResetByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
@@ -35,25 +44,45 @@ type Querier interface {
 	// ─────────────────────────── users ───────────────────────────
 	GetUserByID(ctx context.Context, id int32) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetUserRoleByID(ctx context.Context, id int32) (GetUserRoleByIDRow, error)
+	InsertAgentTokenGrant(ctx context.Context, arg InsertAgentTokenGrantParams) error
 	// Запросы контекста audit. Пишем журнал действий; чтение — в контексте audit позже.
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
 	// Запросы контекста mail (outbox). Отправка писем — Phase 2 (mail-worker).
 	InsertMailJob(ctx context.Context, arg InsertMailJobParams) (MailJob, error)
 	// ─────────────────────────── refresh_tokens ───────────────────────────
 	InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) (RefreshToken, error)
+	ListAgentTokenGrants(ctx context.Context, tokenID int32) ([]int32, error)
+	ListAgentTokensByCreator(ctx context.Context, createdBy int32) ([]AgentApiToken, error)
+	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
+	ListMemberProjectIDs(ctx context.Context, userID int32) ([]int32, error)
+	ListPendingInvitations(ctx context.Context) ([]Invitation, error)
+	// Запросы контекста users (роутер users.py). Часть операций переиспользует
+	// запросы из auth.sql (GetUserByID/ByUsername/ByEmail, Username/EmailExists,
+	// UpdateUserPassword, SetUserLocked/Active, EnableUserTotp/DisableUserTotp,
+	// RevokeAllUserRefreshTokens, CreateInvitation, CreateReactivationToken,
+	// ExpireUserUnusedReactivationTokens, InsertMailJob, InsertAuditLog).
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error
 	MarkMailJobFailed(ctx context.Context, arg MarkMailJobFailedParams) error
 	MarkMailJobSent(ctx context.Context, id int32) error
 	MarkPasswordResetUsed(ctx context.Context, id int32) error
 	MarkReactivationUsed(ctx context.Context, id int32) error
+	ResetUserPasswordTemp(ctx context.Context, arg ResetUserPasswordTempParams) error
 	RevokeAllUserRefreshTokens(ctx context.Context, userID int32) error
 	RevokeInvitation(ctx context.Context, id int32) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
+	SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) error
 	SetUserLocked(ctx context.Context, arg SetUserLockedParams) error
 	// ─────────────────────────── 2FA (TOTP) ───────────────────────────
 	SetUserTotpSecret(ctx context.Context, arg SetUserTotpSecretParams) error
+	SetUserTotpSecretForSetup(ctx context.Context, arg SetUserTotpSecretForSetupParams) error
+	TouchAgentTokenLastUsed(ctx context.Context, arg TouchAgentTokenLastUsedParams) error
+	UpdateInvitationForResend(ctx context.Context, arg UpdateInvitationForResendParams) error
+	UpdateUserAdmin(ctx context.Context, arg UpdateUserAdminParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	UsernameExists(ctx context.Context, username string) (bool, error)
 }
 

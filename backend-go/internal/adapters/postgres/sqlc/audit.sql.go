@@ -11,6 +11,56 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countAuditLogs = `-- name: CountAuditLogs :one
+SELECT count(*)
+FROM audit_logs a
+LEFT JOIN users u ON u.id = a.user_id
+WHERE NOT (a.action = 'LOGIN' AND a.details->>'source' = 'refresh')
+  AND ($1::int IS NULL OR a.user_id = $1)
+  AND ($2::text IS NULL OR u.username ILIKE '%' || $2 || '%')
+  AND ($3::text IS NULL OR a.action ILIKE '%' || $3 || '%')
+  AND ($4::text IS NULL OR a.entity_type ILIKE '%' || $4 || '%')
+  AND ($5::int IS NULL OR a.entity_id = $5)
+  AND ($6::text IS NULL OR a.ip_address ILIKE '%' || $6 || '%')
+  AND ($7::text IS NULL OR (
+        a.action ILIKE '%' || $7 || '%'
+     OR a.entity_type ILIKE '%' || $7 || '%'
+     OR a.ip_address ILIKE '%' || $7 || '%'
+     OR u.username ILIKE '%' || $7 || '%'
+     OR CAST(a.details AS text) ILIKE '%' || $7 || '%'))
+  AND ($8::timestamptz IS NULL OR a.created_at >= $8)
+  AND ($9::timestamptz IS NULL OR a.created_at <= $9)
+`
+
+type CountAuditLogsParams struct {
+	UserID      pgtype.Int4        `json:"user_id"`
+	Username    pgtype.Text        `json:"username"`
+	Action      pgtype.Text        `json:"action"`
+	EntityType  pgtype.Text        `json:"entity_type"`
+	EntityID    pgtype.Int4        `json:"entity_id"`
+	IpAddress   pgtype.Text        `json:"ip_address"`
+	Q           pgtype.Text        `json:"q"`
+	CreatedFrom pgtype.Timestamptz `json:"created_from"`
+	CreatedTo   pgtype.Timestamptz `json:"created_to"`
+}
+
+func (q *Queries) CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAuditLogs,
+		arg.UserID,
+		arg.Username,
+		arg.Action,
+		arg.EntityType,
+		arg.EntityID,
+		arg.IpAddress,
+		arg.Q,
+		arg.CreatedFrom,
+		arg.CreatedTo,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const insertAuditLog = `-- name: InsertAuditLog :exec
 
 INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, ip_address)
@@ -37,4 +87,95 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.IpAddress,
 	)
 	return err
+}
+
+const listAuditLogs = `-- name: ListAuditLogs :many
+SELECT a.id, a.user_id, a.action, a.entity_type, a.entity_id, a.details, a.ip_address, a.created_at, u.username AS username
+FROM audit_logs a
+LEFT JOIN users u ON u.id = a.user_id
+WHERE NOT (a.action = 'LOGIN' AND a.details->>'source' = 'refresh')
+  AND ($1::int IS NULL OR a.user_id = $1)
+  AND ($2::text IS NULL OR u.username ILIKE '%' || $2 || '%')
+  AND ($3::text IS NULL OR a.action ILIKE '%' || $3 || '%')
+  AND ($4::text IS NULL OR a.entity_type ILIKE '%' || $4 || '%')
+  AND ($5::int IS NULL OR a.entity_id = $5)
+  AND ($6::text IS NULL OR a.ip_address ILIKE '%' || $6 || '%')
+  AND ($7::text IS NULL OR (
+        a.action ILIKE '%' || $7 || '%'
+     OR a.entity_type ILIKE '%' || $7 || '%'
+     OR a.ip_address ILIKE '%' || $7 || '%'
+     OR u.username ILIKE '%' || $7 || '%'
+     OR CAST(a.details AS text) ILIKE '%' || $7 || '%'))
+  AND ($8::timestamptz IS NULL OR a.created_at >= $8)
+  AND ($9::timestamptz IS NULL OR a.created_at <= $9)
+ORDER BY a.created_at DESC
+OFFSET $10 LIMIT $11
+`
+
+type ListAuditLogsParams struct {
+	UserID      pgtype.Int4        `json:"user_id"`
+	Username    pgtype.Text        `json:"username"`
+	Action      pgtype.Text        `json:"action"`
+	EntityType  pgtype.Text        `json:"entity_type"`
+	EntityID    pgtype.Int4        `json:"entity_id"`
+	IpAddress   pgtype.Text        `json:"ip_address"`
+	Q           pgtype.Text        `json:"q"`
+	CreatedFrom pgtype.Timestamptz `json:"created_from"`
+	CreatedTo   pgtype.Timestamptz `json:"created_to"`
+	Offset      int32              `json:"offset"`
+	Lim         int32              `json:"lim"`
+}
+
+type ListAuditLogsRow struct {
+	ID         int32              `json:"id"`
+	UserID     pgtype.Int4        `json:"user_id"`
+	Action     string             `json:"action"`
+	EntityType pgtype.Text        `json:"entity_type"`
+	EntityID   pgtype.Int4        `json:"entity_id"`
+	Details    []byte             `json:"details"`
+	IpAddress  pgtype.Text        `json:"ip_address"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	Username   pgtype.Text        `json:"username"`
+}
+
+func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
+	rows, err := q.db.Query(ctx, listAuditLogs,
+		arg.UserID,
+		arg.Username,
+		arg.Action,
+		arg.EntityType,
+		arg.EntityID,
+		arg.IpAddress,
+		arg.Q,
+		arg.CreatedFrom,
+		arg.CreatedTo,
+		arg.Offset,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAuditLogsRow{}
+	for rows.Next() {
+		var i ListAuditLogsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Action,
+			&i.EntityType,
+			&i.EntityID,
+			&i.Details,
+			&i.IpAddress,
+			&i.CreatedAt,
+			&i.Username,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

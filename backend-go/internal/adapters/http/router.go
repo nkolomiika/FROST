@@ -14,8 +14,10 @@ import (
 
 // Deps — зависимости HTTP-слоя (composition root передаёт сюда адаптеры).
 type Deps struct {
-	Logger *slog.Logger
-	Auth   *AuthHandler // nil до подключения контекста auth
+	Logger      *slog.Logger
+	Auth        *AuthHandler       // nil до подключения контекста auth
+	Audit       *AuditHandler      // nil до подключения контекста audit
+	AgentTokens *AgentTokenHandler // nil до подключения контекста agenttokens
 }
 
 // NewRouter собирает chi-роутер с базовыми middleware и служебными эндпоинтами.
@@ -33,6 +35,12 @@ func NewRouter(d Deps) http.Handler {
 	// миграции обслуживает Python-бэкенд (маршрутизирует nginx).
 	if d.Auth != nil {
 		d.Auth.Register(r)
+	}
+	if d.Audit != nil {
+		d.Audit.Register(r)
+	}
+	if d.AgentTokens != nil {
+		d.AgentTokens.Register(r)
 	}
 
 	return r

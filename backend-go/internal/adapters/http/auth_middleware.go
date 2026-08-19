@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nkolomiika/frost/internal/app/auth"
+	"github.com/nkolomiika/frost/internal/apperr"
 )
 
 type ctxKey int
@@ -31,4 +32,17 @@ func requireAuth(svc *auth.Service) func(http.Handler) http.Handler {
 func userFromContext(ctx context.Context) *auth.User {
 	u, _ := ctx.Value(userCtxKey).(*auth.User)
 	return u
+}
+
+// requireAdmin — middleware поверх requireAuth: пускает только role=ADMIN
+// (порт dependencies.require_admin). В БД роль хранится в верхнем регистре.
+func requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := userFromContext(r.Context())
+		if u == nil || u.Role != "ADMIN" {
+			writeError(w, apperr.Forbidden("Недостаточно прав"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
