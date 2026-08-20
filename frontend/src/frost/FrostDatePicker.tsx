@@ -87,9 +87,9 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
         id={id}
         className="finp clk"
         onClick={() => setOpen((o) => !o)}
-        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", background: "var(--st-surface)" }}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", background: "var(--fr-surface)" }}
       >
-        <span style={{ color: value ? "var(--st-text)" : "var(--st-text-faint)", font: "600 13.5px Inter,sans-serif" }}>{value ? toDisplay(value) : placeholder}</span>
+        <span style={{ color: value ? "var(--fr-text)" : "var(--fr-text-faint)", font: "600 13.5px Inter,sans-serif" }}>{value ? toDisplay(value) : placeholder}</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           {value && (
             <span
@@ -100,12 +100,12 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
                 onChange("");
                 setOpen(false);
               }}
-              style={{ display: "inline-flex", color: "var(--st-text-faint)" }}
+              style={{ display: "inline-flex", color: "var(--fr-text-faint)" }}
             >
               <Icon name="close" size={14} sw={2.2} />
             </span>
           )}
-          <Icon name="calendar" size={16} color="var(--st-text-2)" sw={1.9} />
+          <Icon name="calendar" size={16} color="var(--fr-text-2)" sw={1.9} />
         </span>
       </button>
 
@@ -118,8 +118,8 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
             left: 0,
             zIndex: 80,
             width: 268,
-            background: "var(--st-surface)",
-            border: "1px solid var(--st-border-light)",
+            background: "var(--fr-surface)",
+            border: "1px solid var(--fr-border-light)",
             borderRadius: 14,
             boxShadow: "0 20px 50px rgba(15,27,45,.18)",
             padding: 14,
@@ -127,11 +127,11 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
         >
           {/* month nav */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <button type="button" className="clk" onClick={prevMonth} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, border: "1px solid var(--st-border-light)", borderRadius: 9, background: "var(--st-surface)", cursor: "pointer", color: "var(--st-text-2)" }}>
+            <button type="button" className="clk" onClick={prevMonth} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, border: "1px solid var(--fr-border-light)", borderRadius: 9, background: "var(--fr-surface)", cursor: "pointer", color: "var(--fr-text-2)" }}>
               <Icon name="chevron-left" size={16} sw={2.2} />
             </button>
-            <div style={{ font: "700 13.5px Inter,sans-serif", color: "var(--st-text)" }}>{MONTHS[view.m]} {view.y}</div>
-            <button type="button" className="clk" onClick={nextMonth} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, border: "1px solid var(--st-border-light)", borderRadius: 9, background: "var(--st-surface)", cursor: "pointer", color: "var(--st-text-2)" }}>
+            <div style={{ font: "700 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{MONTHS[view.m]} {view.y}</div>
+            <button type="button" className="clk" onClick={nextMonth} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, border: "1px solid var(--fr-border-light)", borderRadius: 9, background: "var(--fr-surface)", cursor: "pointer", color: "var(--fr-text-2)" }}>
               <Icon name="chevron-right" size={16} sw={2.2} />
             </button>
           </div>
@@ -139,7 +139,7 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
           {/* weekday header */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 4 }}>
             {WEEKDAYS.map((w) => (
-              <div key={w} style={{ textAlign: "center", font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", color: "var(--st-text-faint)", textTransform: "uppercase", padding: "4px 0" }}>{w}</div>
+              <div key={w} style={{ textAlign: "center", font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", color: "var(--fr-text-faint)", textTransform: "uppercase", padding: "4px 0" }}>{w}</div>
             ))}
           </div>
 
@@ -164,9 +164,9 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
                   style={{
                     height: 32,
                     borderRadius: 9,
-                    border: isToday && !isSel ? "1px solid var(--st-accent-muted)" : "1px solid transparent",
-                    background: isSel ? "var(--st-accent)" : "transparent",
-                    color: off ? "var(--st-border-strong)" : isSel ? "var(--st-on-accent)" : "var(--st-text)",
+                    border: isToday && !isSel ? "1px solid var(--fr-accent-muted)" : "1px solid transparent",
+                    background: isSel ? "var(--fr-accent)" : "transparent",
+                    color: off ? "var(--fr-border-strong)" : isSel ? "var(--fr-on-accent)" : "var(--fr-text)",
                     font: `${isSel ? 700 : 600} 12.5px Inter,sans-serif`,
                     cursor: off ? "not-allowed" : "pointer",
                   }}
@@ -178,7 +178,7 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
           </div>
 
           {/* quick actions */}
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--st-divider)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--fr-divider)" }}>
             <button
               type="button"
               className="clk"
@@ -188,7 +188,7 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
                 onChange(todayISO);
                 setOpen(false);
               }}
-              style={{ border: "none", background: "transparent", font: "700 12px Inter,sans-serif", color: disabled(todayISO) ? "var(--st-border-strong)" : "var(--st-accent)", cursor: disabled(todayISO) ? "not-allowed" : "pointer" }}
+              style={{ border: "none", background: "transparent", font: "700 12px Inter,sans-serif", color: disabled(todayISO) ? "var(--fr-border-strong)" : "var(--fr-accent)", cursor: disabled(todayISO) ? "not-allowed" : "pointer" }}
             >
               Today
             </button>
@@ -199,7 +199,7 @@ export function FrostDatePicker({ value, onChange, min, max, placeholder = "Sele
                 onChange("");
                 setOpen(false);
               }}
-              style={{ border: "none", background: "transparent", font: "700 12px Inter,sans-serif", color: "var(--st-text-3)", cursor: "pointer" }}
+              style={{ border: "none", background: "transparent", font: "700 12px Inter,sans-serif", color: "var(--fr-text-3)", cursor: "pointer" }}
             >
               Clear
             </button>

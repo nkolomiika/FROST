@@ -1,133 +1,133 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    FROST design tokens — the single source of truth for every colour in the UI.
 
-   Components reference these as `var(--st-*)` (never a raw hex), so the whole app
+   Components reference these as `var(--fr-*)` (never a raw hex), so the whole app
    re-themes by flipping `<html data-theme>` (see frost/theme.ts). Light values are
    the original FROST palette; dark is a hand-tuned slate/navy counterpart.
 
    Naming
-     --st-bg / surface / elevated / hover / sunken  → backgrounds, low → high
-     --st-border{,-light,-strong} / divider          → strokes & hairlines
-     --st-text{,-2,-3,-faint}                        → foreground, strong → faint
-     --st-accent{,-2,-soft,-muted} / on-accent       → brand blue + text on it
-     --st-{success,warn,danger,purple,cyan,orange}   → status hue  (+ *-soft bg)
-     --st-tag-*                                       → activity-log dark chips
-     --st-code-*                                      → code blocks
+     --fr-bg / surface / elevated / hover / sunken  → backgrounds, low → high
+     --fr-border{,-light,-strong} / divider          → strokes & hairlines
+     --fr-text{,-2,-3,-faint}                        → foreground, strong → faint
+     --fr-accent{,-2,-soft,-muted} / on-accent       → brand blue + text on it
+     --fr-{success,warn,danger,purple,cyan,orange}   → status hue  (+ *-soft bg)
+     --fr-tag-*                                       → activity-log dark chips
+     --fr-code-*                                      → code blocks
    ──────────────────────────────────────────────────────────────────────────── */
 
 :root {
   /* surfaces */
-  --st-bg: #eef1f6;
-  --st-surface: #ffffff;
-  --st-elevated: #f5f7fb;
-  --st-hover: #f1f4fa;
-  --st-sunken: #f7f9fc;
+  --fr-bg: #eef1f6;
+  --fr-surface: #ffffff;
+  --fr-elevated: #f5f7fb;
+  --fr-hover: #f1f4fa;
+  --fr-sunken: #f7f9fc;
 
   /* borders / dividers */
-  --st-border: #dbe1ec;
-  --st-border-light: #e6eaf1;
-  --st-border-strong: #d3dae6;
-  --st-divider: #eef1f7;
+  --fr-border: #dbe1ec;
+  --fr-border-light: #e6eaf1;
+  --fr-border-strong: #d3dae6;
+  --fr-divider: #eef1f7;
 
   /* text */
-  --st-text: #0f1b2d;
-  --st-text-2: #5a6b84;
-  --st-text-3: #8a97ab;
-  --st-text-faint: #a0abbd;
+  --fr-text: #0f1b2d;
+  --fr-text-2: #5a6b84;
+  --fr-text-3: #8a97ab;
+  --fr-text-faint: #a0abbd;
 
   /* brand / accent */
-  --st-accent: #2e5fbf;
-  --st-accent-2: #4c74c7;
-  --st-accent-soft: #eaf0fc;
-  --st-accent-muted: #a8c0ea;
-  --st-on-accent: #ffffff;
+  --fr-accent: #2e5fbf;
+  --fr-accent-2: #4c74c7;
+  --fr-accent-soft: #eaf0fc;
+  --fr-accent-muted: #a8c0ea;
+  --fr-on-accent: #ffffff;
 
   /* status */
-  --st-success: #2e8b57;
-  --st-success-soft: #e7f5ee;
-  --st-warn: #b7862b;
-  --st-warn-soft: #fbf3e2;
-  --st-danger: #c0455b;
-  --st-danger-soft: #fcebee;
-  --st-danger-muted: #e3aab4;
-  --st-purple: #7a4db8;
-  --st-purple-soft: #f1ecfb;
-  --st-cyan: #1e8ba8;
-  --st-cyan-soft: #e4f6fa;
-  --st-orange: #d9683c;
+  --fr-success: #2e8b57;
+  --fr-success-soft: #e7f5ee;
+  --fr-warn: #b7862b;
+  --fr-warn-soft: #fbf3e2;
+  --fr-danger: #c0455b;
+  --fr-danger-soft: #fcebee;
+  --fr-danger-muted: #e3aab4;
+  --fr-purple: #7a4db8;
+  --fr-purple-soft: #f1ecfb;
+  --fr-cyan: #1e8ba8;
+  --fr-cyan-soft: #e4f6fa;
+  --fr-orange: #d9683c;
 
   /* activity-log tag chips (dark by design in both themes) */
-  --st-tag-green-bg: #1c3a2a;
-  --st-tag-green: #5fd597;
-  --st-tag-red-bg: #3a1f24;
-  --st-tag-red: #f1889a;
-  --st-tag-amber-bg: #3a3320;
-  --st-tag-amber: #e8c05a;
-  --st-tag-blue-bg: #1f2c44;
-  --st-tag-blue: #7fa8f0;
+  --fr-tag-green-bg: #1c3a2a;
+  --fr-tag-green: #5fd597;
+  --fr-tag-red-bg: #3a1f24;
+  --fr-tag-red: #f1889a;
+  --fr-tag-amber-bg: #3a3320;
+  --fr-tag-amber: #e8c05a;
+  --fr-tag-blue-bg: #1f2c44;
+  --fr-tag-blue: #7fa8f0;
 
   /* code blocks */
-  --st-code-bg: #111c2e;
-  --st-code-text: #c8d3e4;
+  --fr-code-bg: #111c2e;
+  --fr-code-text: #c8d3e4;
 
   /* focus ring (rgba so it can sit over any surface) */
-  --st-focus-ring: rgba(120, 169, 255, 0.18);
-  --st-focus-border: #7fa8f0;
+  --fr-focus-ring: rgba(120, 169, 255, 0.18);
+  --fr-focus-border: #7fa8f0;
   /* card shadow colour */
-  --st-shadow: rgba(15, 27, 45, 0.10);
-  --st-shadow-strong: rgba(15, 27, 45, 0.16);
+  --fr-shadow: rgba(15, 27, 45, 0.10);
+  --fr-shadow-strong: rgba(15, 27, 45, 0.16);
 }
 
 :root[data-theme="dark"] {
   /* surfaces — soft slate, not pure black; low glare, gentle step between levels */
-  --st-bg: #171b22;
-  --st-surface: #1e232c;
-  --st-elevated: #262c37;
-  --st-hover: #2c333f;
-  --st-sunken: #191d24;
+  --fr-bg: #171b22;
+  --fr-surface: #1e232c;
+  --fr-elevated: #262c37;
+  --fr-hover: #2c333f;
+  --fr-sunken: #191d24;
 
   /* borders / dividers — quiet, low-contrast separators */
-  --st-border: #333b47;
-  --st-border-light: #2b323d;
-  --st-border-strong: #414a58;
-  --st-divider: #282f3a;
+  --fr-border: #333b47;
+  --fr-border-light: #2b323d;
+  --fr-border-strong: #414a58;
+  --fr-divider: #282f3a;
 
   /* text — softened so it doesn't glare against the dark surfaces */
-  --st-text: #dbe1ea;
-  --st-text-2: #a6b1c1;
-  --st-text-3: #7e8a9b;
-  --st-text-faint: #616c7b;
+  --fr-text: #dbe1ea;
+  --fr-text-2: #a6b1c1;
+  --fr-text-3: #7e8a9b;
+  --fr-text-faint: #616c7b;
 
   /* brand / accent — a touch desaturated so it reads calm on dark */
-  --st-accent: #5b86df;
-  --st-accent-2: #78a0ef;
-  --st-accent-soft: #21304c;
-  --st-accent-muted: #3d557f;
-  --st-on-accent: #ffffff;
+  --fr-accent: #5b86df;
+  --fr-accent-2: #78a0ef;
+  --fr-accent-soft: #21304c;
+  --fr-accent-muted: #3d557f;
+  --fr-on-accent: #ffffff;
 
   /* status — muted, readable hues (soft bg = deep tint of the same colour) */
-  --st-success: #57b585;
-  --st-success-soft: #17301f;
-  --st-warn: #d3a651;
-  --st-warn-soft: #2d2712;
-  --st-danger: #dd6f80;
-  --st-danger-soft: #341c20;
-  --st-danger-muted: #6b3a41;
-  --st-purple: #a98be0;
-  --st-purple-soft: #271c36;
-  --st-cyan: #49b6d4;
-  --st-cyan-soft: #122b33;
-  --st-orange: #e08155;
+  --fr-success: #57b585;
+  --fr-success-soft: #17301f;
+  --fr-warn: #d3a651;
+  --fr-warn-soft: #2d2712;
+  --fr-danger: #dd6f80;
+  --fr-danger-soft: #341c20;
+  --fr-danger-muted: #6b3a41;
+  --fr-purple: #a98be0;
+  --fr-purple-soft: #271c36;
+  --fr-cyan: #49b6d4;
+  --fr-cyan-soft: #122b33;
+  --fr-orange: #e08155;
 
   /* tag chips keep their dark look on dark too */
 
   /* code blocks */
-  --st-code-bg: #12161d;
-  --st-code-text: #c8d3e4;
+  --fr-code-bg: #12161d;
+  --fr-code-text: #c8d3e4;
 
   /* focus / shadow — soft, diffuse */
-  --st-focus-ring: rgba(120, 160, 239, 0.25);
-  --st-focus-border: #5b86df;
-  --st-shadow: rgba(0, 0, 0, 0.38);
-  --st-shadow-strong: rgba(0, 0, 0, 0.5);
+  --fr-focus-ring: rgba(120, 160, 239, 0.25);
+  --fr-focus-border: #5b86df;
+  --fr-shadow: rgba(0, 0, 0, 0.38);
+  --fr-shadow-strong: rgba(0, 0, 0, 0.5);
 }

@@ -1,6 +1,6 @@
 /* FROST — Findings, Research, Offensive Security & Testing Console.
-   React port of the design prototype (PCF.dc.html). Every collection it renders
-   is loaded from the backend; data.ts carries the view shapes only. */
+   Root screen of the FROST workspace. Every collection it renders is loaded
+   from the backend; data.ts carries the view shapes only. */
 
 import {
   lazy,
@@ -593,9 +593,9 @@ const initialState: FrostState = {
   vulnDetailForm: {},
 };
 
-const CARD: CSSProperties = { background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 16 };
-const PILL_ON: CSSProperties = { background: "var(--st-accent-2)", color: "var(--st-on-accent)", border: "1px solid var(--st-accent-2)" };
-const PILL_OFF: CSSProperties = { background: "var(--st-surface)", color: "var(--st-text-2)", border: "1px solid var(--st-border)" };
+const CARD: CSSProperties = { background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 16 };
+const PILL_ON: CSSProperties = { background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", border: "1px solid var(--fr-accent-2)" };
+const PILL_OFF: CSSProperties = { background: "var(--fr-surface)", color: "var(--fr-text-2)", border: "1px solid var(--fr-border)" };
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -623,8 +623,8 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
               transform: "translate(-50%, -100%)",
               padding: "5px 9px",
               borderRadius: 7,
-              background: "var(--st-text)",
-              color: "var(--st-surface)",
+              background: "var(--fr-text)",
+              color: "var(--fr-surface)",
               font: "600 11.5px Inter, sans-serif",
               whiteSpace: "nowrap",
               pointerEvents: "none",
@@ -809,13 +809,13 @@ function mdInline(text: string, kb: string): ReactNode[] {
     else if (m[3] != null) nodes.push(<em key={`${kb}-${key++}`}>{m[3]}</em>);
     else if (m[4] != null)
       nodes.push(
-        <code key={`${kb}-${key++}`} style={{ background: "var(--st-divider)", borderRadius: 5, padding: "1px 5px", fontFamily: "ui-monospace,Menlo,monospace", fontSize: ".9em" }}>
+        <code key={`${kb}-${key++}`} style={{ background: "var(--fr-divider)", borderRadius: 5, padding: "1px 5px", fontFamily: "ui-monospace,Menlo,monospace", fontSize: ".9em" }}>
           {m[4]}
         </code>
       );
     else if (m[5] != null)
       nodes.push(
-        <a key={`${kb}-${key++}`} href={m[6]} style={{ color: "var(--st-accent-2)" }}>
+        <a key={`${kb}-${key++}`} href={m[6]} style={{ color: "var(--fr-accent-2)" }}>
           {m[5]}
         </a>
       );
@@ -854,7 +854,7 @@ function renderMarkdown(src: string): ReactNode {
       const size = lvl === 1 ? 18 : lvl === 2 ? 15.5 : 13.5;
       const k = key++;
       blocks.push(
-        <div key={`b${k}`} style={{ fontWeight: 800, fontSize: size, color: "var(--st-text)", margin: "8px 0 4px" }}>
+        <div key={`b${k}`} style={{ fontWeight: 800, fontSize: size, color: "var(--fr-text)", margin: "8px 0 4px" }}>
           {mdInline(hm[2], `h${k}`)}
         </div>
       );
@@ -873,10 +873,10 @@ function renderMarkdown(src: string): ReactNode {
     }
   }
   flush();
-  return <div style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--st-text-2)" }}>{blocks}</div>;
+  return <div style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--fr-text-2)" }}>{blocks}</div>;
 }
 
-/** Deterministic sparkline point string (ported from prototype). */
+/** Deterministic sparkline point string from a seed. */
 function sparkline(seed: number, current: number): string {
   const n = 6;
   const w = 74;
@@ -1088,21 +1088,21 @@ function toFrostMember(m: ApiProjectMember, idx: number): Member {
 
 // ================= activity feed =================
 /* Marker + colour for the dark event panel: green + = added, red − = removed,
-   amber ~ = changed — the prototype's scheme, tuned to the Frost palette. */
+   amber ~ = changed — tuned to the FROST palette. */
 const ACT_TONE = {
-  add: { mark: "+", color: "var(--st-success)" },
-  change: { mark: "~", color: "var(--st-warn)" },
-  remove: { mark: "−", color: "var(--st-danger)" },
-  info: { mark: "•", color: "var(--st-accent-muted)" },
+  add: { mark: "+", color: "var(--fr-success)" },
+  change: { mark: "~", color: "var(--fr-warn)" },
+  remove: { mark: "−", color: "var(--fr-danger)" },
+  info: { mark: "•", color: "var(--fr-accent-muted)" },
 } as const;
 type ActTone = (typeof ACT_TONE)[keyof typeof ACT_TONE];
 /** Severity chip on the dark panel — filled with the severity's own colour. */
 const ACT_SEV: Record<Severity, string> = {
-  critical: "var(--st-danger)",
-  high: "var(--st-orange)",
-  medium: "var(--st-warn)",
-  low: "var(--st-accent)",
-  info: "var(--st-text-3)",
+  critical: "var(--fr-danger)",
+  high: "var(--fr-orange)",
+  medium: "var(--fr-warn)",
+  low: "var(--fr-accent)",
+  info: "var(--fr-text-3)",
 };
 
 /** Beyond this many lines a card collapses and offers "Show more". */
@@ -1369,8 +1369,8 @@ export function FrostApp() {
           height: size,
           flex: "none",
           borderRadius: "50%",
-          background: "var(--st-accent)",
-          color: "var(--st-on-accent)",
+          background: "var(--fr-accent)",
+          color: "var(--fr-on-accent)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -3408,8 +3408,8 @@ export function FrostApp() {
   const aggHostTimes = (rows: ApiProjectRow[]) => rows.flatMap((r) => state.aggTimes?.[r.id]?.hosts ?? []);
   const aggOpenVulnTimes = (rows: ApiProjectRow[]) => rows.flatMap((r) => state.aggTimes?.[r.id]?.openVulns ?? []);
 
-  const navBg = (id: NavId) => (state.nav === id ? "var(--st-accent-soft)" : "transparent");
-  const navColor = (id: NavId) => (state.nav === id ? "var(--st-accent)" : "var(--st-text-2)");
+  const navBg = (id: NavId) => (state.nav === id ? "var(--fr-accent-soft)" : "transparent");
+  const navColor = (id: NavId) => (state.nav === id ? "var(--fr-accent)" : "var(--fr-text-2)");
 
   const isList = state.view === "list" && state.nav === "projects";
   const isDocs = state.view === "list" && state.nav === "docs";
@@ -3423,7 +3423,7 @@ export function FrostApp() {
   /* Notification rows, built from the backend payload. There are exactly four
      reasons to be notified (NotificationKind), and each reads differently — the
      row is a sentence: "<who> <action> <subject>". */
-  const NOTIF_AVATAR_COLORS = ["var(--st-accent)", "var(--st-purple)", "var(--st-orange)", "var(--st-danger)", "var(--st-success)"];
+  const NOTIF_AVATAR_COLORS = ["var(--fr-accent)", "var(--fr-purple)", "var(--fr-orange)", "var(--fr-danger)", "var(--fr-success)"];
   const notifs = state.notifs.map((n) => {
     const ctx = n.context;
     const who = ctx?.commenter_username || "System";
@@ -3471,9 +3471,9 @@ export function FrostApp() {
     // The tab's own underline/colour is CSS-driven off `active` (see .sectab);
     // `color` stays for the badges, which are still styled inline.
     active: sec === k,
-    color: sec === k ? "var(--st-accent)" : "var(--st-text-2)",
-    badgeColor: sec === k ? "var(--st-accent)" : "var(--st-text-3)",
-    badgeBg: sec === k ? "var(--st-accent-soft)" : "var(--st-bg)",
+    color: sec === k ? "var(--fr-accent)" : "var(--fr-text-2)",
+    badgeColor: sec === k ? "var(--fr-accent)" : "var(--fr-text-3)",
+    badgeBg: sec === k ? "var(--fr-accent-soft)" : "var(--fr-bg)",
   });
 
   // ---- hosts / recon derived ----
@@ -3481,7 +3481,7 @@ export function FrostApp() {
   const portPillsOf = (ports: Host["ports"]) => ports.map((p) => ({ label: `${p.n}/${p.proto}`, http: p.http, ...(PORT[p.state] ?? PORT.closed) }));
   /** Colour for an HTTP status code next to a port: 2xx green, 3xx amber, else red. */
   const httpStatusColor = (code: number): string =>
-    code < 300 ? "var(--st-success)" : code < 400 ? "var(--st-warn)" : "var(--st-danger)";
+    code < 300 ? "var(--fr-success)" : code < 400 ? "var(--fr-warn)" : "var(--fr-danger)";
 
   // Hosts are searched by name here; addresses have their own search in the IPs view.
   /** A host that is a subdomain of another host in the project (shown nested, not top-level). */
@@ -3977,17 +3977,17 @@ export function FrostApp() {
   const vdScore = vdCvss ? vdCvss.score.toFixed(1) : "—";
 
   const pfNav = (tab: ProfileTab): CSSProperties =>
-    state.profileTab === tab ? { background: "var(--st-accent-soft)", color: "var(--st-accent)", boxShadow: "inset 3px 0 0 var(--st-accent)" } : { background: "transparent", color: "var(--st-text-2)", boxShadow: "inset 3px 0 0 transparent" };
+    state.profileTab === tab ? { background: "var(--fr-accent-soft)", color: "var(--fr-accent)", boxShadow: "inset 3px 0 0 var(--fr-accent)" } : { background: "transparent", color: "var(--fr-text-2)", boxShadow: "inset 3px 0 0 transparent" };
 
   // ================================================================= RENDER
 
   const eyebrow = (crumbs: { label: string; onClick?: () => void; muted?: boolean }[]): ReactNode => (
-    <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, letterSpacing: 1.2, textTransform: "uppercase", color: "var(--st-text-faint)", fontWeight: 700, marginBottom: 10 }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--st-accent)" }} />
+    <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, letterSpacing: 1.2, textTransform: "uppercase", color: "var(--fr-text-faint)", fontWeight: 700, marginBottom: 10 }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--fr-accent)" }} />
       {crumbs.map((c, i) => (
         <span key={i} style={{ display: "contents" }}>
           {i > 0 && <span>/</span>}
-          <span className={c.onClick ? "clk" : undefined} onClick={c.onClick} style={{ cursor: c.onClick ? "pointer" : undefined, color: c.muted ? "var(--st-text-3)" : undefined }}>
+          <span className={c.onClick ? "clk" : undefined} onClick={c.onClick} style={{ cursor: c.onClick ? "pointer" : undefined, color: c.muted ? "var(--fr-text-3)" : undefined }}>
             {t(c.label)}
           </span>
         </span>
@@ -4000,12 +4000,12 @@ export function FrostApp() {
     <div className="route" style={{ padding: "40px 48px 36px", width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 40, fontWeight: 800, letterSpacing: "-1px", color: "var(--st-text)" }}>{t("Projects")}</h1>
-          <div style={{ fontSize: 15, color: "var(--st-text-3)", marginTop: 8 }}>
+          <h1 style={{ margin: 0, fontSize: 40, fontWeight: 800, letterSpacing: "-1px", color: "var(--fr-text)" }}>{t("Projects")}</h1>
+          <div style={{ fontSize: 15, color: "var(--fr-text-3)", marginTop: 8 }}>
             {isActive ? `${t("Showing active projects")} · ${activeCount} ${t("active")}` : `${t("Showing archived projects")} · ${archivedCount} ${t("archived")}`}
           </div>
         </div>
-        <button className="clk" onClick={() => setState({ modalOpen: true })} style={{ display: "flex", alignItems: "center", gap: 9, height: 46, padding: "0 22px", border: "none", borderRadius: 13, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 14px Inter,sans-serif" }}>
+        <button className="clk" onClick={() => setState({ modalOpen: true })} style={{ display: "flex", alignItems: "center", gap: 9, height: 46, padding: "0 22px", border: "none", borderRadius: 13, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 14px Inter,sans-serif" }}>
           <Icon name="plus" size={17} sw={2.4} />
           {t("New project")}
         </button>
@@ -4014,19 +4014,19 @@ export function FrostApp() {
       {/* stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,minmax(0,1fr))", gap: 16, margin: "26px 0 22px" }}>
         {[
-          { icon: "trend-up" as const, iconColor: "var(--st-accent-2)", label: "Active", value: String(activeCount), spark: cumulativeSpark(projCreatedTimes(activeRows), ...projWindow(activeRows)), stroke: "var(--st-accent-2)", w: 111 },
-          { icon: "archive" as const, iconColor: "var(--st-text-3)", label: "Archived", value: String(archivedCount), spark: cumulativeSpark(projCreatedTimes(archivedRows), ...projWindow(archivedRows)), stroke: "var(--st-text-faint)", w: 111 },
-          { icon: "clock" as const, iconColor: "var(--st-danger)", label: "Open issues", value: String(tabProjects.reduce((s, p) => s + p.openFindings, 0)), spark: cumulativeSpark(aggOpenVulnTimes(tabProjects), ...projWindow(tabProjects)), stroke: "var(--st-danger)", w: 111 },
-          { icon: "star" as const, iconColor: "var(--st-accent-2)", label: "Projects", value: String(tabProjects.length), spark: cumulativeSpark(projCreatedTimes(tabProjects), ...projWindow(tabProjects)), stroke: "var(--st-accent-muted)", w: 111 },
-          { icon: "server" as const, iconColor: "var(--st-success)", label: "Hosts", value: String(tabProjects.reduce((s, p) => s + p.hostsCount, 0)), spark: cumulativeSpark(aggHostTimes(tabProjects), ...projWindow(tabProjects)), stroke: "var(--st-success)", w: 111 },
+          { icon: "trend-up" as const, iconColor: "var(--fr-accent-2)", label: "Active", value: String(activeCount), spark: cumulativeSpark(projCreatedTimes(activeRows), ...projWindow(activeRows)), stroke: "var(--fr-accent-2)", w: 111 },
+          { icon: "archive" as const, iconColor: "var(--fr-text-3)", label: "Archived", value: String(archivedCount), spark: cumulativeSpark(projCreatedTimes(archivedRows), ...projWindow(archivedRows)), stroke: "var(--fr-text-faint)", w: 111 },
+          { icon: "clock" as const, iconColor: "var(--fr-danger)", label: "Open issues", value: String(tabProjects.reduce((s, p) => s + p.openFindings, 0)), spark: cumulativeSpark(aggOpenVulnTimes(tabProjects), ...projWindow(tabProjects)), stroke: "var(--fr-danger)", w: 111 },
+          { icon: "star" as const, iconColor: "var(--fr-accent-2)", label: "Projects", value: String(tabProjects.length), spark: cumulativeSpark(projCreatedTimes(tabProjects), ...projWindow(tabProjects)), stroke: "var(--fr-accent-muted)", w: 111 },
+          { icon: "server" as const, iconColor: "var(--fr-success)", label: "Hosts", value: String(tabProjects.reduce((s, p) => s + p.hostsCount, 0)), spark: cumulativeSpark(aggHostTimes(tabProjects), ...projWindow(tabProjects)), stroke: "var(--fr-success)", w: 111 },
         ].map((c) => (
           <div key={c.label} className="statc" style={{ ...CARD, padding: "16px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--st-text-3)", font: "600 11.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--fr-text-3)", font: "600 11.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase" }}>
               <Icon name={c.icon} size={15} color={c.iconColor} sw={2.1} />
               {c.label}
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
-              <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--st-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
+              <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--fr-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
               <svg width={c.w} height="30" viewBox={`0 0 ${c.w} 30`} fill="none" style={{ flex: "none" }}>
                 <polygon points={sparkArea(c.spark, c.w)} fill={c.stroke} fillOpacity={0.15} />
                 <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -4039,26 +4039,26 @@ export function FrostApp() {
       {/* controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 8 }}>
-          <div className="tab" onClick={() => setState({ tab: "active" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: isActive ? "var(--st-surface)" : "transparent", border: `1px solid ${isActive ? "var(--st-border)" : "transparent"}`, color: isActive ? "var(--st-text)" : "var(--st-text-3)" }}>
+          <div className="tab" onClick={() => setState({ tab: "active" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: isActive ? "var(--fr-surface)" : "transparent", border: `1px solid ${isActive ? "var(--fr-border)" : "transparent"}`, color: isActive ? "var(--fr-text)" : "var(--fr-text-3)" }}>
             <Icon name="trend-up" size={15} sw={2.2} />
             {t("Active")}
-            <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: isActive ? "var(--st-accent-2)" : "var(--st-accent-soft)", color: isActive ? "var(--st-on-accent)" : "var(--st-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{activeCount}</span>
+            <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: isActive ? "var(--fr-accent-2)" : "var(--fr-accent-soft)", color: isActive ? "var(--fr-on-accent)" : "var(--fr-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{activeCount}</span>
           </div>
-          <div className="tab" onClick={() => setState({ tab: "archived" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: !isActive ? "var(--st-surface)" : "transparent", border: `1px solid ${!isActive ? "var(--st-border)" : "transparent"}`, color: !isActive ? "var(--st-text)" : "var(--st-text-3)" }}>
+          <div className="tab" onClick={() => setState({ tab: "archived" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: !isActive ? "var(--fr-surface)" : "transparent", border: `1px solid ${!isActive ? "var(--fr-border)" : "transparent"}`, color: !isActive ? "var(--fr-text)" : "var(--fr-text-3)" }}>
             <Icon name="archive" size={15} />
             {t("Archived")}
-            <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: !isActive ? "var(--st-accent-2)" : "var(--st-accent-soft)", color: !isActive ? "var(--st-on-accent)" : "var(--st-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{archivedCount}</span>
+            <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: !isActive ? "var(--fr-accent-2)" : "var(--fr-accent-soft)", color: !isActive ? "var(--fr-on-accent)" : "var(--fr-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{archivedCount}</span>
           </div>
         </div>
         <div style={{ flex: 1 }} />
         <label className="fq" style={{ position: "relative", display: "flex", alignItems: "center", width: 280 }}>
-          <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--st-text-faint)" strokeWidth="2" strokeLinecap="round">
+          <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fr-text-faint)" strokeWidth="2" strokeLinecap="round">
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4-4" />
           </svg>
           <input placeholder={t("Filter projects…")} value={state.query} onChange={(e) => setState({ query: e.target.value })} />
         </label>
-        <div className="clk iconbtn" onClick={() => setState((s) => ({ projSort: s.projSort === "first" ? "last" : "first" }))} style={{ display: "flex", alignItems: "center", gap: 9, height: 40, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 20, background: "var(--st-surface)", font: "500 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>
+        <div className="clk iconbtn" onClick={() => setState((s) => ({ projSort: s.projSort === "first" ? "last" : "first" }))} style={{ display: "flex", alignItems: "center", gap: 9, height: 40, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 20, background: "var(--fr-surface)", font: "500 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>
           <Icon name="sort" size={16} />
           {state.projSort === "first" ? t("First updated") : t("Last updated")}
         </div>
@@ -4067,7 +4067,7 @@ export function FrostApp() {
       {/* table */}
       <div style={{ ...CARD, overflow: "hidden" }}>
         {projRows.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 150px 70px", padding: "13px 22px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 150px 70px", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
             <div>#</div>
             <div>{t("Project")}</div>
             <div>{t("Description")}</div>
@@ -4080,19 +4080,19 @@ export function FrostApp() {
           const fsev = r.openFindings === 0 ? FINDING_SEV.none : r.openFindings >= 3 ? FINDING_SEV.high : FINDING_SEV.med;
           const findingsLabel = r.openFindings === 0 ? (r.totalFindings > 0 ? t("No open") : t("No findings")) : `${r.openFindings} ${t("open")}`;
           return (
-            <div key={r.id} className="prow clk" onClick={() => openProject(r.id)} style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 150px 70px", alignItems: "center", padding: "11px 22px", borderBottom: "1px solid var(--st-divider)" }}>
-              <div className="mono" style={{ color: "var(--st-text-faint)", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</div>
+            <div key={r.id} className="prow clk" onClick={() => openProject(r.id)} style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 150px 70px", alignItems: "center", padding: "11px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+              <div className="mono" style={{ color: "var(--fr-text-faint)", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</div>
               <div style={{ minWidth: 0, paddingRight: 12 }}>
-                <div style={{ font: "700 14.5px Inter,sans-serif", color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                <div style={{ font: "700 14.5px Inter,sans-serif", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
               </div>
-              <div style={{ fontSize: 13, color: "var(--st-text-3)", paddingRight: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description}</div>
+              <div style={{ fontSize: 13, color: "var(--fr-text-3)", paddingRight: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description}</div>
               <div>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: fsev.fBg, color: fsev.fColor, font: "600 12px Inter,sans-serif" }}>
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: fsev.fDot }} />
                   {findingsLabel}
                 </span>
               </div>
-              <div style={{ fontSize: 13, color: "var(--st-text-3)" }}>{r.updated}</div>
+              <div style={{ fontSize: 13, color: "var(--fr-text-3)" }}>{r.updated}</div>
               {/* Edit: admin / creator / lead. Delete: admin only — both mirror the backend. */}
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 4 }}>
                 {canEditProjectRow(r) && (
@@ -4105,9 +4105,9 @@ export function FrostApp() {
             </div>
           );
         })}
-        {state.projectsLoading && projRows.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("Loading projects…")}</div>}
-        {state.projectsError && <div style={{ padding: 52, textAlign: "center", color: "var(--st-danger)", fontSize: 14 }}>{state.projectsError}</div>}
-        {!state.projectsLoading && !state.projectsError && projRows.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No projects found.")}</div>}
+        {state.projectsLoading && projRows.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading projects…")}</div>}
+        {state.projectsError && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-danger)", fontSize: 14 }}>{state.projectsError}</div>}
+        {!state.projectsLoading && !state.projectsError && projRows.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No projects found.")}</div>}
       </div>
     </div>
   );
@@ -4116,15 +4116,15 @@ export function FrostApp() {
   const renderStub = () => (
     <div className="route" style={{ padding: "40px 48px 36px", width: "100%" }}>
       {eyebrow([{ label: "Workspace", onClick: selProjects }, { label: stubTitle, muted: true }])}
-      <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--st-text)" }}>{t(stubTitle)}</h1>
-      <div style={{ fontSize: 13.5, color: "var(--st-text-3)", marginTop: 6 }}>{t(stubDesc)}</div>
+      <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t(stubTitle)}</h1>
+      <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", marginTop: 6 }}>{t(stubDesc)}</div>
       <div style={{ marginTop: 32, ...CARD, padding: "60px 24px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: "var(--st-hover)", color: "var(--st-text-faint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 56, height: 56, borderRadius: 14, background: "var(--fr-hover)", color: "var(--fr-text-faint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Icon name="calendar" size={26} sw={1.8} />
         </div>
-        <div style={{ font: "700 15px Inter,sans-serif", color: "var(--st-text)" }}>{t("Coming soon")}</div>
-        <div style={{ fontSize: 13, color: "var(--st-text-3)", maxWidth: 340 }}>{t("This area is under construction. Head back to Projects to continue your work.")}</div>
-        <button className="clk" onClick={selProjects} style={{ marginTop: 6, height: 40, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}>{t("Back to Projects")}</button>
+        <div style={{ font: "700 15px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Coming soon")}</div>
+        <div style={{ fontSize: 13, color: "var(--fr-text-3)", maxWidth: 340 }}>{t("This area is under construction. Head back to Projects to continue your work.")}</div>
+        <button className="clk" onClick={selProjects} style={{ marginTop: 6, height: 40, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}>{t("Back to Projects")}</button>
       </div>
     </div>
   );
@@ -4135,10 +4135,10 @@ export function FrostApp() {
       {eyebrow([{ label: "Workspace", onClick: selProjects }, { label: "Members", muted: true }])}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--st-text)" }}>{t("Members")}</h1>
-          <div style={{ fontSize: 13.5, color: "var(--st-text-3)", marginTop: 6 }}>{t("Invite people by email — they set their own username and password from the link")}</div>
+          <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t("Members")}</h1>
+          <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", marginTop: 6 }}>{t("Invite people by email — they set their own username and password from the link")}</div>
         </div>
-        <button className="clk" onClick={() => openWSUserEditor("add", -1)} style={{ flex: "none", display: "inline-flex", alignItems: "center", gap: 8, height: 42, padding: "0 18px", border: "none", borderRadius: 11, background: "var(--st-accent)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: "pointer" }}>
+        <button className="clk" onClick={() => openWSUserEditor("add", -1)} style={{ flex: "none", display: "inline-flex", alignItems: "center", gap: 8, height: 42, padding: "0 18px", border: "none", borderRadius: 11, background: "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: "pointer" }}>
           <Icon name="plus" size={15} sw={2.2} />
           {t("Invite member")}
         </button>
@@ -4146,30 +4146,30 @@ export function FrostApp() {
       {/* Одна строка управления: вкладки активные/заблокированные — слева (там,
           где раньше был поиск по пользователям), поиск и фильтры — справа. */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 22, flexWrap: "wrap" }}>
-        <div className="tab" onClick={() => setState({ wsUserTab: "active" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: state.wsUserTab === "active" ? "var(--st-surface)" : "transparent", border: `1px solid ${state.wsUserTab === "active" ? "var(--st-border)" : "transparent"}`, color: state.wsUserTab === "active" ? "var(--st-text)" : "var(--st-text-3)" }}>
+        <div className="tab" onClick={() => setState({ wsUserTab: "active" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: state.wsUserTab === "active" ? "var(--fr-surface)" : "transparent", border: `1px solid ${state.wsUserTab === "active" ? "var(--fr-border)" : "transparent"}`, color: state.wsUserTab === "active" ? "var(--fr-text)" : "var(--fr-text-3)" }}>
           <Icon name="unlock" size={15} sw={2.2} />
           {lang === "ru" ? "Активные" : "Active"}
-          <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: state.wsUserTab === "active" ? "var(--st-accent-2)" : "var(--st-accent-soft)", color: state.wsUserTab === "active" ? "var(--st-on-accent)" : "var(--st-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{state.workspaceUsers.filter((u) => !u.locked).length}</span>
+          <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: state.wsUserTab === "active" ? "var(--fr-accent-2)" : "var(--fr-accent-soft)", color: state.wsUserTab === "active" ? "var(--fr-on-accent)" : "var(--fr-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{state.workspaceUsers.filter((u) => !u.locked).length}</span>
         </div>
-        <div className="tab" onClick={() => setState({ wsUserTab: "archived" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: state.wsUserTab === "archived" ? "var(--st-surface)" : "transparent", border: `1px solid ${state.wsUserTab === "archived" ? "var(--st-border)" : "transparent"}`, color: state.wsUserTab === "archived" ? "var(--st-text)" : "var(--st-text-3)" }}>
+        <div className="tab" onClick={() => setState({ wsUserTab: "archived" })} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 15px", borderRadius: 11, font: "700 13.5px Inter,sans-serif", background: state.wsUserTab === "archived" ? "var(--fr-surface)" : "transparent", border: `1px solid ${state.wsUserTab === "archived" ? "var(--fr-border)" : "transparent"}`, color: state.wsUserTab === "archived" ? "var(--fr-text)" : "var(--fr-text-3)" }}>
           <Icon name="lock" size={15} sw={2.2} />
           {lang === "ru" ? "Заблокированные" : "Blocked"}
-          <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: state.wsUserTab === "archived" ? "var(--st-accent-2)" : "var(--st-accent-soft)", color: state.wsUserTab === "archived" ? "var(--st-on-accent)" : "var(--st-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{state.workspaceUsers.filter((u) => u.locked).length}</span>
+          <span className="mono" style={{ minWidth: 20, height: 20, padding: "0 5px", borderRadius: 6, background: state.wsUserTab === "archived" ? "var(--fr-accent-2)" : "var(--fr-accent-soft)", color: state.wsUserTab === "archived" ? "var(--fr-on-accent)" : "var(--fr-accent-2)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{state.workspaceUsers.filter((u) => u.locked).length}</span>
         </div>
         <div style={{ flex: 1 }} />
         {/* Поиск переехал сюда — в правую часть строки, вплотную к фильтрам. */}
         <label className="fq" style={{ position: "relative", display: "flex", alignItems: "center", width: 240 }}>
-          <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--st-text-faint)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+          <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fr-text-faint)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
           <input placeholder={t("Search by username…")} value={state.wsMemberQuery} onChange={(e) => setState({ wsMemberQuery: e.target.value })} />
         </label>
         {/* Every pill toggles; filters combine (AND across groups, OR inside one).
             An empty group means "All", so unpicking the last pill re-selects it. */}
-        <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--st-text-faint)", fontWeight: 700 }}>{t("ROLE")}</span>
+        <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("ROLE")}</span>
         <div className="clk" onClick={() => setState({ wsMemberRoles: [] })} style={{ font: "600 12px Inter,sans-serif", padding: "6px 12px", borderRadius: 20, cursor: "pointer", ...vfPill(state.wsMemberRoles.length === 0) }}>{t("All")}</div>
         {([{ label: "Admin", v: "admin" as const }, { label: "User", v: "user" as const }]).map((o) => (
           <div key={o.v} className="clk" onClick={() => setState((s) => ({ wsMemberRoles: toggleIn(s.wsMemberRoles, o.v) }))} style={{ font: "600 12px Inter,sans-serif", padding: "6px 12px", borderRadius: 20, cursor: "pointer", ...vfPill(state.wsMemberRoles.includes(o.v)) }}>{t(o.label)}</div>
         ))}
-        <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--st-text-faint)", fontWeight: 700, marginLeft: 8 }}>{t("PROJECT")}</span>
+        <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700, marginLeft: 8 }}>{t("PROJECT")}</span>
         <div className="clk" onClick={() => setState({ wsMemberProjectRoles: [] })} style={{ font: "600 12px Inter,sans-serif", padding: "6px 12px", borderRadius: 20, cursor: "pointer", ...vfPill(state.wsMemberProjectRoles.length === 0) }}>{t("All")}</div>
         {([{ label: "Lead", v: "lead" as const }, { label: "Pentester", v: "pentester" as const }]).map((o) => (
           <div key={o.v} className="clk" onClick={() => setState((s) => ({ wsMemberProjectRoles: toggleIn(s.wsMemberProjectRoles, o.v) }))} style={{ font: "600 12px Inter,sans-serif", padding: "6px 12px", borderRadius: 20, cursor: "pointer", ...vfPill(state.wsMemberProjectRoles.includes(o.v)) }}>{t(o.label)}</div>
@@ -4179,17 +4179,17 @@ export function FrostApp() {
           только на вкладке «Активные». */}
       {state.wsUserTab === "active" && state.pendingInvites.length > 0 && (
         <div style={{ marginTop: 16, ...CARD, overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
-            <Icon name="mail" size={14} color="var(--st-text-faint)" />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+            <Icon name="mail" size={14} color="var(--fr-text-faint)" />
             {t("Pending invitations ·")} {state.pendingInvites.length}
           </div>
           {state.pendingInvites.map((inv) => (
-            <div key={inv.id} className="prow" style={{ display: "grid", gridTemplateColumns: "1.4fr 168px 150px", alignItems: "center", padding: "13px 20px", borderBottom: "1px solid var(--st-divider)", gap: 12 }}>
+            <div key={inv.id} className="prow" style={{ display: "grid", gridTemplateColumns: "1.4fr 168px 150px", alignItems: "center", padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-                <span style={{ width: 32, height: 32, flex: "none", borderRadius: "50%", background: "var(--st-divider)", color: "var(--st-text-3)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="mail" size={15} color="var(--st-text-3)" /></span>
+                <span style={{ width: 32, height: 32, flex: "none", borderRadius: "50%", background: "var(--fr-divider)", color: "var(--fr-text-3)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="mail" size={15} color="var(--fr-text-3)" /></span>
                 <div style={{ minWidth: 0 }}>
-                  <div className="mono" style={{ fontSize: 12.5, color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inv.email}</div>
-                  <div style={{ fontSize: 11, color: inv.is_expired ? "var(--st-danger)" : "var(--st-text-3)", fontWeight: 600, marginTop: 2 }}>{inv.is_expired ? "Link expired — resend it" : "Pending activation"}</div>
+                  <div className="mono" style={{ fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inv.email}</div>
+                  <div style={{ fontSize: 11, color: inv.is_expired ? "var(--fr-danger)" : "var(--fr-text-3)", fontWeight: 600, marginTop: 2 }}>{inv.is_expired ? "Link expired — resend it" : "Pending activation"}</div>
                 </div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -4197,7 +4197,7 @@ export function FrostApp() {
                 <span style={{ font: "700 10px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", borderRadius: 6, padding: "3px 9px", background: ROLE[inv.project_role].bg, color: ROLE[inv.project_role].color }}>{inv.project_role}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <button className="clk" onClick={() => resendInvite(inv.id)} style={{ height: 30, padding: "0 12px", border: "1px solid var(--st-border-strong)", borderRadius: 8, background: "var(--st-surface)", color: "var(--st-accent)", font: "600 12px Inter,sans-serif", cursor: "pointer" }}>{t("Resend")}</button>
+                <button className="clk" onClick={() => resendInvite(inv.id)} style={{ height: 30, padding: "0 12px", border: "1px solid var(--fr-border-strong)", borderRadius: 8, background: "var(--fr-surface)", color: "var(--fr-accent)", font: "600 12px Inter,sans-serif", cursor: "pointer" }}>{t("Resend")}</button>
                 <div className="actbtn del" onClick={() => revokeInvite(inv.id)} title={t("Revoke invitation")}><Icon name="trash" size={15} /></div>
               </div>
             </div>
@@ -4219,26 +4219,26 @@ export function FrostApp() {
             );
           if (filtered.length === 0)
             return (
-              <div style={{ padding: 44, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>
+              <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>
                 {state.wsUserTab === "archived" ? t("No deactivated members.") : t("No members match.")}
               </div>
             );
           return (
             <>
               {/* Column headers only make sense with rows — hide them when empty. */}
-              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.4fr 168px 72px", padding: "13px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.4fr 168px 72px", padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div>{t("Name")}</div>
                 <div>{t("Email")}</div>
                 <div>{t("Role")}</div>
                 <div />
               </div>
               {filtered.map(({ u, idx }) => (
-            <div key={u.key + idx} className="prow" style={{ display: "grid", gridTemplateColumns: "1.2fr 1.4fr 168px 72px", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid var(--st-divider)" }}>
+            <div key={u.key + idx} className="prow" style={{ display: "grid", gridTemplateColumns: "1.2fr 1.4fr 168px 72px", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-                <span className="mono" style={{ width: 32, height: 32, flex: "none", borderRadius: "50%", background: u.locked ? "var(--st-text-faint)" : "var(--st-accent)", color: "var(--st-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 13px 'JetBrains Mono',monospace" }}>{(u.name[0] || "U").toUpperCase()}</span>
-                <span style={{ font: "600 13.5px Inter,sans-serif", color: "var(--st-text)" }}>{u.name}</span>
+                <span className="mono" style={{ width: 32, height: 32, flex: "none", borderRadius: "50%", background: u.locked ? "var(--fr-text-faint)" : "var(--fr-accent)", color: "var(--fr-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 13px 'JetBrains Mono',monospace" }}>{(u.name[0] || "U").toUpperCase()}</span>
+                <span style={{ font: "600 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{u.name}</span>
               </div>
-              <div className="mono" style={{ fontSize: 12.5, color: "var(--st-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+              <div className="mono" style={{ fontSize: 12.5, color: "var(--fr-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 <span style={{ font: "700 10px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", borderRadius: 6, padding: "3px 9px", background: WS_ROLE[u.role].bg, color: WS_ROLE[u.role].color }}>{t(WS_ROLE_LABEL[u.role])}</span>
                 <span style={{ font: "700 10px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", borderRadius: 6, padding: "3px 9px", background: ROLE[u.projectRole].bg, color: ROLE[u.projectRole].color }}>{u.projectRole}</span>
@@ -4273,7 +4273,7 @@ export function FrostApp() {
   const renderDetail = () => (
     <div className="route" style={{ padding: "0 0 36px", width: "100%" }}>
       {/* tabs */}
-      <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "0 48px", borderBottom: "1px solid var(--st-border-light)", background: "var(--st-surface)", overflow: "visible" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "0 48px", borderBottom: "1px solid var(--fr-border-light)", background: "var(--fr-surface)", overflow: "visible" }}>
         {tabItem(t("Overview"), "layout", so, () => setSection("overview"))}
         <div style={{ position: "relative", display: "flex" }}>
           {/* Recon открывает меню, а не раздел напрямую, но выделяется как
@@ -4282,8 +4282,8 @@ export function FrostApp() {
           {/* Full-screen backdrop: a click anywhere outside the popup dismisses it
               (Esc is handled by the global keydown listener). */}
           {state.reconMenuOpen && <div onClick={() => setState({ reconMenuOpen: false })} style={{ position: "fixed", inset: 0, zIndex: 40 }} />}
-          <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 8, width: 214, background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
-            <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--st-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("RECON")}</div>
+          <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 8, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("RECON")}</div>
             {([
               { v: "hosts" as const, icon: "server" as const, label: "Hosts", count: hosts.length },
               { v: "ips" as const, icon: "card" as const, label: "IPs", count: ipsRows.length },
@@ -4297,7 +4297,7 @@ export function FrostApp() {
                 <div key={it.v} className={`reconrow clk${on ? " on" : ""}`} onClick={() => selRecon(it.v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 11px", borderRadius: 10, font: "600 13.5px Inter,sans-serif" }}>
                   <Icon name={it.icon} size={17} />
                   {t(it.label)}
-                  <span className="mono" style={{ marginLeft: "auto", minWidth: 22, textAlign: "center", fontSize: 11, fontWeight: 700, color: on ? "var(--st-accent)" : "var(--st-text-3)", background: on ? "var(--st-accent-soft)" : "var(--st-hover)", border: `1px solid ${on ? "var(--st-accent-muted)" : "var(--st-border-light)"}`, borderRadius: 6, padding: "1px 6px" }}>{it.count}</span>
+                  <span className="mono" style={{ marginLeft: "auto", minWidth: 22, textAlign: "center", fontSize: 11, fontWeight: 700, color: on ? "var(--fr-accent)" : "var(--fr-text-3)", background: on ? "var(--fr-accent-soft)" : "var(--fr-hover)", border: `1px solid ${on ? "var(--fr-accent-muted)" : "var(--fr-border-light)"}`, borderRadius: 6, padding: "1px 6px" }}>{it.count}</span>
                 </div>
               );
             })}
@@ -4307,23 +4307,23 @@ export function FrostApp() {
         {tabItem(t("Notes"), "doc", sn, () => setSection("notes"), { text: String(d.notes.length), color: sn.badgeColor, bg: sn.badgeBg })}
         {tabItem(t("Creds"), "lock", scr, () => setSection("creds"), { text: String(d.creds.length), color: scr.badgeColor, bg: scr.badgeBg })}
         {canViewMembers && tabItem(t("Members"), "users", sm, () => setSection("members"), { text: String(d.members.length), color: sm.badgeColor, bg: sm.badgeBg })}
-        {tabItem(t("Activity"), "activity", sa, () => setSection("activity"), { text: String(activityGroups.length), color: sa.color, bg: "var(--st-bg)" })}
+        {tabItem(t("Activity"), "activity", sa, () => setSection("activity"), { text: String(activityGroups.length), color: sa.color, bg: "var(--fr-bg)" })}
       </div>
 
       <div style={{ padding: "26px 48px 0" }}>
         {/* Project / Section / <open item>. The section stays clickable while an
             item is open, so it is the way back to that section's list. */}
-        <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--st-text-faint)", fontWeight: 600, marginBottom: 14 }}>
-          <span className="clk" onClick={() => setSection("overview")} style={{ color: "var(--st-accent-2)", cursor: "pointer" }}>{projName}</span>
+        <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--fr-text-faint)", fontWeight: 600, marginBottom: 14 }}>
+          <span className="clk" onClick={() => setSection("overview")} style={{ color: "var(--fr-accent-2)", cursor: "pointer" }}>{projName}</span>
           <span>/</span>
           {crumbLeaf ? (
             <>
-              <span className="clk" onClick={() => setSection(sec)} style={{ color: "var(--st-accent-2)", cursor: "pointer" }}>{sectionLabel}</span>
+              <span className="clk" onClick={() => setSection(sec)} style={{ color: "var(--fr-accent-2)", cursor: "pointer" }}>{sectionLabel}</span>
               <span>/</span>
-              <span style={{ color: "var(--st-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{crumbLeaf}</span>
+              <span style={{ color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{crumbLeaf}</span>
             </>
           ) : (
-            <span style={{ color: "var(--st-text-3)" }}>{sectionLabel}</span>
+            <span style={{ color: "var(--fr-text-3)" }}>{sectionLabel}</span>
           )}
         </div>
 
@@ -4332,21 +4332,21 @@ export function FrostApp() {
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 24 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-.8px", color: "var(--st-text)" }}>{d.title || projName}</h1>
+                <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-.8px", color: "var(--fr-text)" }}>{d.title || projName}</h1>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, background: stCh.bg, color: stCh.color, font: "700 12px Inter,sans-serif" }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%", background: stCh.dot }} />
                   {t(stCh.label)}
                 </span>
               </div>
-              <div style={{ fontSize: 14, color: "var(--st-text-3)", marginTop: 8 }}>{d.desc}</div>
+              <div style={{ fontSize: 14, color: "var(--fr-text-3)", marginTop: 8 }}>{d.desc}</div>
             </div>
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
-              <button className="clk" onClick={openExportModal} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                <Icon name="file-check" size={16} sw={2.2} color="var(--st-accent-2)" />{t("Generate report")}
+              <button className="clk" onClick={openExportModal} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                <Icon name="file-check" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Generate report")}
               </button>
               {canEditProject && (
-                <button className="clk" onClick={openProjEdit} style={{ height: 42, padding: "0 18px", border: "none", borderRadius: 11, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", display: "flex", alignItems: "center", gap: 8 }}>
-                  <Icon name="edit" size={16} color="var(--st-on-accent)" />{t("Edit")}
+                <button className="clk" onClick={openProjEdit} style={{ height: 42, padding: "0 18px", border: "none", borderRadius: 11, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", display: "flex", alignItems: "center", gap: 8 }}>
+                  <Icon name="edit" size={16} color="var(--fr-on-accent)" />{t("Edit")}
                 </button>
               )}
             </div>
@@ -4354,21 +4354,21 @@ export function FrostApp() {
         ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, marginBottom: 22 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--st-text)" }}>{sectionLabel}</h1>
+              <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{sectionLabel}</h1>
               {/* Recon total sits next to the section title; the toolbar below keeps
                   search on the left and filters on the right. */}
               {sec === "hosts" && !_hd && !_ipd && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-surface)", border: "1px solid var(--st-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{reconTotalLabel} <b className="mono" style={{ color: "var(--st-text)" }}>{reconTotal}</b></span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{reconTotalLabel} <b className="mono" style={{ color: "var(--fr-text)" }}>{reconTotal}</b></span>
               )}
             </div>
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
                 <>
-                  <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="download" size={16} sw={2.2} color="var(--st-accent-2)" />{t("Export")}
+                  <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="addbtn clk" onClick={openHostImport} style={{ height: 42 }}>
-                    <Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add hosts")}
+                    <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add hosts")}
                   </button>
                 </>
               )}
@@ -4376,34 +4376,34 @@ export function FrostApp() {
                   the slot the "Add hosts"/"Add IPs" button held on the list. */}
               {sec === "hosts" && rv === "hosts" && _hd && (
                 <button className="addbtn clk" onClick={() => openEditor("host", "edit", hosts.findIndex((x) => x.id === _hd.id))} style={{ height: 42 }}>
-                  <Icon name="edit" size={15} color="var(--st-on-accent)" sw={2.4} />{t("Edit host")}
+                  <Icon name="edit" size={15} color="var(--fr-on-accent)" sw={2.4} />{t("Edit host")}
                 </button>
               )}
               {/* Each recon view adds the kind of object it lists; the totals row
                   below carries that view's filters. */}
               {sec === "hosts" && rv === "ips" && !state.ipImportOpen && !_ipd && (
                 <>
-                  <button className="clk" onClick={() => openReconExport("ips")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="download" size={16} sw={2.2} color="var(--st-accent-2)" />{t("Export")}
+                  <button className="clk" onClick={() => openReconExport("ips")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="addbtn clk" onClick={openIpImport} style={{ height: 42 }}>
-                    <Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add IPs")}
+                    <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add IPs")}
                   </button>
                 </>
               )}
               {/* The IP card edits the host the address belongs to. */}
               {sec === "hosts" && rv === "ips" && _ipd && (
                 <button className="addbtn clk" onClick={() => openEditor("host", "edit", _ipd.hostIdx)} style={{ height: 42 }}>
-                  <Icon name="edit" size={15} color="var(--st-on-accent)" sw={2.4} />{t("Edit host")}
+                  <Icon name="edit" size={15} color="var(--fr-on-accent)" sw={2.4} />{t("Edit host")}
                 </button>
               )}
               {sec === "hosts" && rv === "endpoints" && !state.epImportOpen && (
                 <>
-                  <button className="clk" onClick={() => openReconExport("endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="download" size={16} sw={2.2} color="var(--st-accent-2)" />{t("Export")}
+                  <button className="clk" onClick={() => openReconExport("endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="addbtn clk" onClick={openEpImport} style={{ height: 42 }}>
-                    <Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add endpoints")}
+                    <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add endpoints")}
                   </button>
                 </>
               )}
@@ -4413,28 +4413,28 @@ export function FrostApp() {
                   разные потребители, один файл на двоих смысла не имеет. */}
               {sec === "hosts" && rv === "js" && !state.jsScanSetupOpen && !state.exportPageOpen && !_jsd && (
                 <>
-                  <button className="clk" onClick={() => openReconExport("js-endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="upload" size={15} sw={2.2} color="var(--st-accent-2)" />{t("Export paths")}
+                  <button className="clk" onClick={() => openReconExport("js-endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export paths")}
                   </button>
-                  <button className="clk" onClick={() => openReconExport("js-secrets")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="upload" size={15} sw={2.2} color="var(--st-accent-2)" />{t("Export secrets")}
+                  <button className="clk" onClick={() => openReconExport("js-secrets")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export secrets")}
                   </button>
                   <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
-                    <Icon name="search" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Select domains & scan")}
+                    <Icon name="search" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Select domains & scan")}
                   </button>
                 </>
               )}
               {sec === "vulns" && state.openVulnId == null && (
-                <button className="addbtn clk" onClick={() => openEditor("vuln", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add issue")}</button>
+                <button className="addbtn clk" onClick={() => openEditor("vuln", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add issue")}</button>
               )}
               {sec === "notes" && (
-                <button className="addbtn clk" onClick={() => openNoteEditor("add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add note")}</button>
+                <button className="addbtn clk" onClick={() => openNoteEditor("add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add note")}</button>
               )}
               {sec === "creds" && (
-                <button className="addbtn clk" onClick={() => openEditor("cred", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add credential")}</button>
+                <button className="addbtn clk" onClick={() => openEditor("cred", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add credential")}</button>
               )}
               {sec === "members" && canManageMembers && (
-                <button className="addbtn clk" onClick={() => openEditor("member", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add member")}</button>
+                <button className="addbtn clk" onClick={() => openEditor("member", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add member")}</button>
               )}
             </div>
           </div>
@@ -4458,11 +4458,11 @@ export function FrostApp() {
 
   const renderNoAccess = (message: string) => (
     <div className="route" style={{ ...CARD, padding: "48px 24px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 12 }}>
-      <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--st-hover)", color: "var(--st-text-faint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--fr-hover)", color: "var(--fr-text-faint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Icon name="lock" size={22} sw={1.9} />
       </div>
-      <div style={{ font: "700 15px Inter,sans-serif", color: "var(--st-text)" }}>{t("Restricted")}</div>
-      <div style={{ fontSize: 13, color: "var(--st-text-3)", maxWidth: 360 }}>{message}</div>
+      <div style={{ font: "700 15px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Restricted")}</div>
+      <div style={{ fontSize: 13, color: "var(--fr-text-3)", maxWidth: 360 }}>{message}</div>
     </div>
   );
 
@@ -4474,15 +4474,15 @@ export function FrostApp() {
   const renderNoAccessPage = (message: string = NO_ACCESS_PROJECT) => (
     <div className="route" style={{ padding: "40px 48px 36px", width: "100%", display: "flex", justifyContent: "center" }}>
       <div style={{ ...CARD, padding: "56px 40px", maxWidth: 520, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14, marginTop: 40 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 16, background: "var(--st-danger-soft)", color: "var(--st-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 64, height: 64, borderRadius: 16, background: "var(--fr-danger-soft)", color: "var(--fr-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Icon name="lock" size={28} sw={1.9} />
         </div>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: "-.5px", color: "var(--st-text)" }}>{t("No access")}</h1>
-        <div style={{ fontSize: 14, color: "var(--st-text-3)", maxWidth: 380, lineHeight: 1.6 }}>{message}</div>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: "-.5px", color: "var(--fr-text)" }}>{t("No access")}</h1>
+        <div style={{ fontSize: 14, color: "var(--fr-text-3)", maxWidth: 380, lineHeight: 1.6 }}>{message}</div>
         <button
           className="clk"
           onClick={selProjects}
-          style={{ marginTop: 10, height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: "pointer" }}
+          style={{ marginTop: 10, height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: "pointer" }}
         >
           {t("Back to projects")}
         </button>
@@ -4494,16 +4494,16 @@ export function FrostApp() {
     <div className="route">
       <div style={{ ...CARD, padding: "20px 22px", marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <div style={{ font: "700 14px Inter,sans-serif", color: "var(--st-text)" }}>{t("Engagement timeline")}</div>
-          <div className="mono" style={{ fontSize: 12, color: "var(--st-text-3)" }}>{d.start} → {d.end}</div>
+          <div style={{ font: "700 14px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Engagement timeline")}</div>
+          <div className="mono" style={{ fontSize: 12, color: "var(--fr-text-3)" }}>{d.start} → {d.end}</div>
         </div>
-        <div style={{ height: 10, borderRadius: 6, background: "var(--st-bg)", overflow: "hidden" }}>
-          <div style={{ width: `${d.progress}%`, height: "100%", background: "linear-gradient(90deg,var(--st-accent-2),var(--st-accent-2))", borderRadius: 6 }} />
+        <div style={{ height: 10, borderRadius: 6, background: "var(--fr-bg)", overflow: "hidden" }}>
+          <div style={{ width: `${d.progress}%`, height: "100%", background: "linear-gradient(90deg,var(--fr-accent-2),var(--fr-accent-2))", borderRadius: 6 }} />
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-          <span className="mono" style={{ fontSize: 11, color: "var(--st-text-faint)" }}>{t("Start")}</span>
-          <span style={{ font: "600 12px Inter,sans-serif", color: "var(--st-text-2)" }}>{d.progress}{t("% elapsed")}</span>
-          <span className="mono" style={{ fontSize: 11, color: "var(--st-text-faint)" }}>{t("End")}</span>
+          <span className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)" }}>{t("Start")}</span>
+          <span style={{ font: "600 12px Inter,sans-serif", color: "var(--fr-text-2)" }}>{d.progress}{t("% elapsed")}</span>
+          <span className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)" }}>{t("End")}</span>
         </div>
       </div>
 
@@ -4517,17 +4517,17 @@ export function FrostApp() {
           const openVulns = d.vulns.filter((v) => (VSTATUS_OPEN as readonly string[]).includes(v.status));
           const myVulns = d.vulns.filter((v) => v.author === me);
           return [
-          { icon: "globe" as const, color: "var(--st-accent-2)", label: "Hosts", value: hosts.length, spark: cumulativeSpark(hosts.map((h) => h.created), wStart, wEnd), stroke: "var(--st-accent-2)", onClick: () => setSection("hosts") },
-          { icon: "alert-triangle" as const, color: "var(--st-danger)", label: "Open vulns", value: openVulnCount, spark: cumulativeSpark(openVulns.map((v) => v.created), wStart, wEnd), stroke: "var(--st-danger)", onClick: goToOpenVulns },
-          { icon: "star" as const, color: "var(--st-purple)", label: "My findings", value: myFindingsCount, spark: cumulativeSpark(myVulns.map((v) => v.created), wStart, wEnd), stroke: "var(--st-purple)", onClick: goToMyFindings },
+          { icon: "globe" as const, color: "var(--fr-accent-2)", label: "Hosts", value: hosts.length, spark: cumulativeSpark(hosts.map((h) => h.created), wStart, wEnd), stroke: "var(--fr-accent-2)", onClick: () => setSection("hosts") },
+          { icon: "alert-triangle" as const, color: "var(--fr-danger)", label: "Open vulns", value: openVulnCount, spark: cumulativeSpark(openVulns.map((v) => v.created), wStart, wEnd), stroke: "var(--fr-danger)", onClick: goToOpenVulns },
+          { icon: "star" as const, color: "var(--fr-purple)", label: "My findings", value: myFindingsCount, spark: cumulativeSpark(myVulns.map((v) => v.created), wStart, wEnd), stroke: "var(--fr-purple)", onClick: goToMyFindings },
           ];
         })().map((c) => (
           <div key={c.label} className="statc clk" onClick={c.onClick} style={{ ...CARD, padding: "16px 18px", cursor: "pointer" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--st-text-3)", font: "600 11.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--fr-text-3)", font: "600 11.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase" }}>
               <Icon name={c.icon} size={15} color={c.color} sw={2.1} />{c.label}
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
-              <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--st-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
+              <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--fr-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
               <svg width="111" height="30" viewBox="0 0 111 30" fill="none" style={{ flex: "none" }}>
                 <polygon points={sparkArea(c.spark, 111)} fill={c.stroke} fillOpacity={0.15} />
                 <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -4539,17 +4539,17 @@ export function FrostApp() {
 
       <div style={{ ...CARD, padding: "20px 22px", marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={{ font: "700 14px Inter,sans-serif", color: "var(--st-text)" }}>{t("Vulnerabilities across the project")}</div>
-          <span className="clk" onClick={() => setSection("vulns")} style={{ font: "600 12px Inter,sans-serif", color: "var(--st-accent-2)" }}>{t("View all →")}</span>
+          <div style={{ font: "700 14px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Vulnerabilities across the project")}</div>
+          <span className="clk" onClick={() => setSection("vulns")} style={{ font: "600 12px Inter,sans-serif", color: "var(--fr-accent-2)" }}>{t("View all →")}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5,minmax(0,1fr))", gap: 12 }}>
           {sevBars.map((b) => (
-            <div key={b.label} className="clk" onClick={b.onClick} style={{ border: "1px solid var(--st-bg)", borderRadius: 13, padding: "15px 16px", background: b.tileBg, cursor: "pointer" }}>
+            <div key={b.label} className="clk" onClick={b.onClick} style={{ border: "1px solid var(--fr-bg)", borderRadius: 13, padding: "15px 16px", background: b.tileBg, cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <span style={{ width: 9, height: 9, borderRadius: 3, background: b.color }} />
                 <span style={{ font: "700 10.5px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", color: b.color }}>{b.label}</span>
               </div>
-              <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: "var(--st-text)", marginTop: 10, lineHeight: 1 }}>{b.count}</div>
+              <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: "var(--fr-text)", marginTop: 10, lineHeight: 1 }}>{b.count}</div>
             </div>
           ))}
         </div>
@@ -4558,15 +4558,15 @@ export function FrostApp() {
       {canViewMembers && (
         <div style={{ ...CARD, padding: "20px 22px", marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ font: "700 14px Inter,sans-serif", color: "var(--st-text)" }}>{t("Team")}</div>
-            <span className="clk" onClick={() => setSection("members")} style={{ font: "600 12px Inter,sans-serif", color: "var(--st-accent-2)" }}>{canManageMembers ? "Manage →" : "View all →"}</span>
+            <div style={{ font: "700 14px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Team")}</div>
+            <span className="clk" onClick={() => setSection("members")} style={{ font: "600 12px Inter,sans-serif", color: "var(--fr-accent-2)" }}>{canManageMembers ? "Manage →" : "View all →"}</span>
           </div>
           {d.members.map((m, i) => (
-            <div key={m.name + i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "7px 0", borderTop: "1px solid var(--st-divider)" }}>
-              <span className="mono" style={{ width: 30, height: 30, flex: "none", borderRadius: "50%", background: m.color, color: "var(--st-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 11px 'JetBrains Mono',monospace" }}>{m.initials}</span>
+            <div key={m.name + i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "7px 0", borderTop: "1px solid var(--fr-divider)" }}>
+              <span className="mono" style={{ width: 30, height: 30, flex: "none", borderRadius: "50%", background: m.color, color: "var(--fr-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 11px 'JetBrains Mono',monospace" }}>{m.initials}</span>
               <div style={{ minWidth: 0 }}>
-                <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text)" }}>{m.name}</div>
-                <div className="mono" style={{ fontSize: 11, color: "var(--st-text-faint)" }}>{m.role}</div>
+                <div style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-text)" }}>{m.name}</div>
+                <div className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)" }}>{m.role}</div>
               </div>
             </div>
           ))}
@@ -4581,7 +4581,7 @@ export function FrostApp() {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
       {portPillsOf(ports).map((p, i) => {
         const statusText = hostDown ? "down" : p.http != null ? String(p.http) : null;
-        const statusColor = hostDown ? "var(--st-danger)" : p.http != null ? httpStatusColor(p.http) : undefined;
+        const statusColor = hostDown ? "var(--fr-danger)" : p.http != null ? httpStatusColor(p.http) : undefined;
         return (
           <span key={i} className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: p.bg, color: p.color }}>
             <span>{p.label}</span>
@@ -4596,7 +4596,7 @@ export function FrostApp() {
       })}
       {/* A down host with no probed ports still shows a "down" chip in the ports column. */}
       {hostDown && ports.length === 0 && (
-        <span className="mono" style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--st-danger-soft)", color: "var(--st-danger)" }}>down</span>
+        <span className="mono" style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-danger-soft)", color: "var(--fr-danger)" }}>down</span>
       )}
     </div>
   );
@@ -4612,9 +4612,9 @@ export function FrostApp() {
         fontWeight: 700,
         borderRadius: 6,
         padding: "2px 8px",
-        background: state === true ? "var(--st-warn-soft)" : "var(--st-elevated)",
+        background: state === true ? "var(--fr-warn-soft)" : "var(--fr-elevated)",
         color:
-          state === true ? "var(--st-warn)" : state === null ? "var(--st-text-faint)" : "var(--st-text-3)",
+          state === true ? "var(--fr-warn)" : state === null ? "var(--fr-text-faint)" : "var(--fr-text-3)",
       }}
     >
       {state === null ? "unknown" : String(state)}
@@ -4626,7 +4626,7 @@ export function FrostApp() {
      ячейке читается хуже, чем набор плашек. Неподтверждённые (PTR без обратного
      подтверждения) — приглушены и подписаны в title. */
   const hostnamePills = (names: { hostname: string; source: string; confirmed: boolean }[]) => {
-    if (names.length === 0) return <span style={{ color: "var(--st-text-faint)", fontSize: 12.5 }}>—</span>;
+    if (names.length === 0) return <span style={{ color: "var(--fr-text-faint)", fontSize: 12.5 }}>—</span>;
     return (
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
         {names.map((n) => (
@@ -4639,8 +4639,8 @@ export function FrostApp() {
               fontWeight: 700,
               borderRadius: 6,
               padding: "2px 8px",
-              background: "var(--st-elevated)",
-              color: n.confirmed ? "var(--st-text-2)" : "var(--st-text-faint)",
+              background: "var(--fr-elevated)",
+              color: n.confirmed ? "var(--fr-text-2)" : "var(--fr-text-faint)",
               opacity: n.confirmed ? 1 : 0.75,
             }}
           >
@@ -4679,9 +4679,9 @@ export function FrostApp() {
     return (
       // Fills the whole section area: the two textareas grow to take all remaining height.
       <div className="route" style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 260px)" }}>
-        <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--st-divider)" }}>
-          <span className="clk" onClick={cfg.onCancel} style={{ display: "flex", color: "var(--st-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{cfg.title}</h2>
+        <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+          <span className="clk" onClick={cfg.onCancel} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{cfg.title}</h2>
         </div>
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "18px 22px 20px" }}>
           <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -4695,8 +4695,8 @@ export function FrostApp() {
             </div>
           </div>
           <div style={{ flex: "none", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-            <button className="clk" onClick={cfg.onCancel} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-            <button className="clk" onClick={cfg.onSubmit} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif" }}>{cfg.busy ? (cfg.busyLabel ?? t("Starting…")) : (cfg.submitLabel ?? t("Probe & add"))}</button>
+            <button className="clk" onClick={cfg.onCancel} style={{ height: 42, padding: "0 20px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Cancel")}</button>
+            <button className="clk" onClick={cfg.onSubmit} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif" }}>{cfg.busy ? (cfg.busyLabel ?? t("Starting…")) : (cfg.submitLabel ?? t("Probe & add"))}</button>
           </div>
         </div>
       </div>
@@ -4752,7 +4752,7 @@ export function FrostApp() {
 
   const searchBox = (placeholder: string, value: string, onChange: (v: string) => void, width: number | string = 280) => (
     <label className="fq" style={{ position: "relative", display: "flex", alignItems: "center", width }}>
-      <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--st-text-faint)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+      <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fr-text-faint)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
       <input placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
@@ -4766,7 +4766,7 @@ export function FrostApp() {
    *  по активной пилюле возвращает в All. Метки — те же true/false, что в колонке. */
   const cfFilterGroup = (value: "" | "yes" | "no", onChange: (v: "" | "yes" | "no") => void) => (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)" }}>{t("Cloudflare")}</span>
+      <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Cloudflare")}</span>
       {filterPill(t("All"), value === "", () => onChange(""))}
       {filterPill("true", value === "yes", () => onChange(value === "yes" ? "" : "yes"))}
       {filterPill("false", value === "no", () => onChange(value === "no" ? "" : "no"))}
@@ -4785,7 +4785,7 @@ export function FrostApp() {
           <div style={{ flex: 1 }} />
           {cfFilterGroup(state.ipCfFilter, (v) => setState({ ipCfFilter: v }))}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)" }}>{t("Status")}</span>
+            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Status")}</span>
             {filterPill(t("All"), state.ipFilters.length === 0, () => setState({ ipFilters: [] }))}
             {STATUS_FILTER_KEYS.map((k) => filterPill(k, state.ipFilters.includes(k), () => setState((s) => ({ ipFilters: toggleIn(s.ipFilters, k) }))))}
           </div>
@@ -4803,7 +4803,7 @@ export function FrostApp() {
           {/* Подписан так же, как Status и Cloudflare, — иначе единственный ряд
              пилюль без заголовка читается как «непонятно что фильтрует». */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)" }}>{t("Method")}</span>
+            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Method")}</span>
             {filterPill(t("All"), state.epMethods.length === 0, () => setState({ epMethods: [] }))}
             {FROST_METHODS.map((m) => filterPill(m, state.epMethods.includes(m), () => setState((s) => ({ epMethods: toggleIn(s.epMethods, m) }))))}
           </div>
@@ -4816,7 +4816,7 @@ export function FrostApp() {
           {searchBox(t("Filter by JS URL or host…"), state.jsQuery, (v) => setState({ jsQuery: v }))}
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)" }}>{t("Secrets")}</span>
+            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Secrets")}</span>
             {filterPill(t("All"), !state.jsSecretsOnly, () => setState({ jsSecretsOnly: false }))}
             {filterPill(t("With secrets"), state.jsSecretsOnly, () => setState({ jsSecretsOnly: true }))}
           </div>
@@ -4830,7 +4830,7 @@ export function FrostApp() {
         {cfFilterGroup(state.hostCfFilter, (v) => setState({ hostCfFilter: v }))}
         {/* Label + pills share one flex gap so the spacing between filters is equal. */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)" }}>{t("Status")}</span>
+          <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Status")}</span>
           {filterPill(t("All"), state.hostFilters.length === 0, () => setState({ hostFilters: [] }))}
           {STATUS_FILTER_KEYS.map((k) => filterPill(k, state.hostFilters.includes(k), () => setState((s) => ({ hostFilters: toggleIn(s.hostFilters, k) }))))}
         </div>
@@ -4870,15 +4870,15 @@ export function FrostApp() {
           )}
         {/* Height leaves room for the filter row the card now sits under. */}
         <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 318px)" }}>
-          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--st-divider)" }}>
-            <span className="clk" onClick={closeReconExport} style={{ display: "flex", color: "var(--st-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{title}</h2>
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <span className="clk" onClick={closeReconExport} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{title}</h2>
           </div>
           <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "18px 22px 20px" }}>
             <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div style={paneCol}>
                 <label className="flabel">{t("Found")}{left.length ? ` (${left.length})` : ""}</label>
-                <textarea className="finp" readOnly value={left.join("\n")} style={{ ...fillArea, background: "var(--st-sunken)", color: "var(--st-text-2)" }} />
+                <textarea className="finp" readOnly value={left.join("\n")} style={{ ...fillArea, background: "var(--fr-sunken)", color: "var(--fr-text-2)" }} />
               </div>
               <div style={paneCol}>
                 <label className="flabel">{t("Will be exported")}{keptCount ? ` (${keptCount})` : ""}</label>
@@ -4899,8 +4899,8 @@ export function FrostApp() {
                 </div>
               )}
               <div style={{ flex: 1 }} />
-              <button className="clk" onClick={closeReconExport} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-              <button className="clk" onClick={doReconExport} disabled={keptCount === 0} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: keptCount === 0 ? "var(--st-accent-muted)" : "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: keptCount === 0 ? "default" : "pointer" }}>{t("Download")}</button>
+              <button className="clk" onClick={closeReconExport} style={{ height: 42, padding: "0 20px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Cancel")}</button>
+              <button className="clk" onClick={doReconExport} disabled={keptCount === 0} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: keptCount === 0 ? "var(--fr-accent-muted)" : "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: keptCount === 0 ? "default" : "pointer" }}>{t("Download")}</button>
             </div>
           </div>
         </div>
@@ -4921,15 +4921,15 @@ export function FrostApp() {
       <div className="route">
         {reconFilterRow("hosts")}
         <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 318px)" }}>
-          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--st-divider)" }}>
-            <span className="clk" onClick={closeJsScanSetup} style={{ display: "flex", color: "var(--st-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{t("Choose domains to scan")}</h2>
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <span className="clk" onClick={closeJsScanSetup} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{t("Choose domains to scan")}</h2>
           </div>
           <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "18px 22px 20px" }}>
             <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div style={paneCol}>
                 <label className="flabel">{t("Found")}{found.length ? ` (${found.length})` : ""}</label>
-                <textarea className="finp" readOnly value={found.join("\n")} style={{ ...fillArea, background: "var(--st-sunken)", color: "var(--st-text-2)" }} />
+                <textarea className="finp" readOnly value={found.join("\n")} style={{ ...fillArea, background: "var(--fr-sunken)", color: "var(--fr-text-2)" }} />
               </div>
               <div style={paneCol}>
                 <label className="flabel">{t("Will be scanned")}{keptCount ? ` (${keptCount})` : ""}</label>
@@ -4944,9 +4944,9 @@ export function FrostApp() {
             </div>
             <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
               <div style={{ flex: 1 }} />
-              <button className="clk" onClick={closeJsScanSetup} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-              <button className="clk" onClick={submitJsScan} disabled={keptCount === 0} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: keptCount === 0 ? "var(--st-accent-muted)" : "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: keptCount === 0 ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <Icon name="search" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Start scan")}
+              <button className="clk" onClick={closeJsScanSetup} style={{ height: 42, padding: "0 20px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Cancel")}</button>
+              <button className="clk" onClick={submitJsScan} disabled={keptCount === 0} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: keptCount === 0 ? "var(--fr-accent-muted)" : "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: keptCount === 0 ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <Icon name="search" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Start scan")}
               </button>
             </div>
           </div>
@@ -4969,22 +4969,22 @@ export function FrostApp() {
           {reconFilterRow("ips")}
           {/* Та же плашка, что у фермы хостов: синяя, со спиннером. */}
           {ipFarmRunning && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--st-accent-soft)", color: "var(--st-accent)", font: "600 12.5px Inter,sans-serif" }}>
-              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--st-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
+              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
               {t("Probing")} {state.ipFarmJob?.targets_total ?? ""} {t("IPs — hostnames and ports update automatically.")}
             </div>
           )}
           <div style={{ ...CARD, overflow: "hidden" }}>
             {/* No column headers over an empty table (same as the hosts table). */}
             {ipsRows.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div>{t("IP address")}</div><div>{t("Hostname")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div />
               </div>
             )}
             {ipsRows.map((i, idx) => (
-              <div key={idx} className="prow clk" onClick={() => openIpDetail(i.ip)} style={{ display: "grid", gridTemplateColumns: ipGrid, gap: 14, alignItems: "center", padding: "14px 20px", borderBottom: "1px solid var(--st-divider)" }}>
+              <div key={idx} className="prow clk" onClick={() => openIpDetail(i.ip)} style={{ display: "grid", gridTemplateColumns: ipGrid, gap: 14, alignItems: "center", padding: "14px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
                 <div style={{ minWidth: 0 }}>
-                  <span className="mono hostname" style={{ font: "700 13.5px 'JetBrains Mono',monospace", color: "var(--st-text)", cursor: "pointer" }}>{i.ip}</span>
+                  <span className="mono hostname" style={{ font: "700 13.5px 'JetBrains Mono',monospace", color: "var(--fr-text)", cursor: "pointer" }}>{i.ip}</span>
                 </div>
                 {/* Every name the address resolves to, on the one row. Unconfirmed
                     names (PTR with no matching forward record) are dimmed, not hidden. */}
@@ -4997,7 +4997,7 @@ export function FrostApp() {
                 </div>
               </div>
             ))}
-            {ipsRows.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No IPs found.")}</div>}
+            {ipsRows.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No IPs found.")}</div>}
           </div>
         </div>
       );
@@ -5009,24 +5009,24 @@ export function FrostApp() {
           {reconFilterRow("endpoints")}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {endpointGroups.map((g) => (
-              <div key={g.host} style={{ background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 14, overflow: "hidden" }}>
+              <div key={g.host} style={{ background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, overflow: "hidden" }}>
                 <div className="prow clk" onClick={() => toggleEpGroup(g.host)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px" }}>
-                  <Icon name="chevron-right" size={15} color="var(--st-text-faint)" sw={2.4} style={{ transform: g.expanded ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
-                  <Icon name="globe2" size={16} color="var(--st-text-3)" />
-                  <span className="mono" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--st-text)", flex: 1 }}>{g.host}</span>
-                  <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--st-text-2)", background: "var(--st-hover)", borderRadius: 7, padding: "3px 9px" }}>{g.count}</span>
+                  <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ transform: g.expanded ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                  <Icon name="globe2" size={16} color="var(--fr-text-3)" />
+                  <span className="mono" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", flex: 1 }}>{g.host}</span>
+                  <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fr-text-2)", background: "var(--fr-hover)", borderRadius: 7, padding: "3px 9px" }}>{g.count}</span>
                 </div>
                 {g.expanded && (
-                  <div style={{ borderTop: "1px solid var(--st-divider)", animation: "frost-fade .2s ease both" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--st-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+                  <div style={{ borderTop: "1px solid var(--fr-divider)", animation: "frost-fade .2s ease both" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                       <div>{t("Method")}</div><div>{t("Path")}</div><div />
                     </div>
                     {g.endpoints.map((e: Endpoint, i: number) => {
                       const m = METHOD[e.m] ?? PORT.closed;
                       return (
-                        <div key={i} className="prow clk" onClick={() => openEndpoint({ method: e.m, path: e.p, host: g.host, hostId: g.hostId, endpointId: e.id })} style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", alignItems: "center", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--st-elevated)" }}>
+                        <div key={i} className="prow clk" onClick={() => openEndpoint({ method: e.m, path: e.p, host: g.host, hostId: g.hostId, endpointId: e.id })} style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", alignItems: "center", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--fr-elevated)" }}>
                           <span className="mono" style={{ justifySelf: "start", fontWeight: 700, borderRadius: 5, padding: "2px 8px", fontSize: 10.5, background: m.bg, color: m.color }}>{e.m}</span>
-                          <div className="mono" style={{ fontSize: 12.5, color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.p}</div>
+                          <div className="mono" style={{ fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.p}</div>
                           <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                             <Tip label={t("Copy as cURL")}><div className="actbtn" onClick={(ev) => { ev.stopPropagation(); copyCurl({ method: e.m, path: e.p, host: g.host }); }}><Icon name="copy" size={15} /></div></Tip>
                             <Tip label={t("Delete endpoint")}><div className="actbtn del" onClick={(ev) => { ev.stopPropagation(); void deleteEndpoint(g.hostId, e.id); }}><Icon name="trash" size={15} /></div></Tip>
@@ -5038,7 +5038,7 @@ export function FrostApp() {
                 )}
               </div>
             ))}
-            {endpointTotal === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14, background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 14 }}>{t("No endpoints discovered.")}</div>}
+            {endpointTotal === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14 }}>{t("No endpoints discovered.")}</div>}
           </div>
         </div>
       );
@@ -5055,14 +5055,14 @@ export function FrostApp() {
           {reconFilterRow("js")}
           {/* Same blue in-flight banner as the host/IP farms. */}
           {jsRunning && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--st-accent-soft)", color: "var(--st-accent)", font: "600 12.5px Inter,sans-serif" }}>
-              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--st-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
+              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
               {t("Scanning")} {state.jsFarmJob?.targets_total ?? ""} {t("domains — secrets and paths appear as files are scanned.")}
             </div>
           )}
           <div style={{ ...CARD, overflow: "hidden" }}>
             {jsGroups.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div /><div>{t("Host")}</div><div>{t("Files")}</div><div>{t("Secrets")}</div><div />
               </div>
             )}
@@ -5070,39 +5070,39 @@ export function FrostApp() {
               const exp = state.epExpanded.includes(`js:host:${g.host}`);
               const groupSecrets = g.files.reduce((n, f) => n + f.secrets.length, 0);
               return (
-                <div key={g.host} style={{ borderBottom: "1px solid var(--st-divider)" }}>
+                <div key={g.host} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
                   <div className="prow clk" onClick={() => toggleJsGroup(g.host)} style={{ display: "grid", gridTemplateColumns: jsGrid, alignItems: "center", gap: 14, padding: "15px 20px" }}>
-                    <Icon name="chevron-right" size={15} color="var(--st-text-faint)" sw={2.4} style={{ transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
-                    <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.host}</span>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--st-text-2)" }}>{g.count} {t("files")}</span>
-                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: groupSecrets ? "var(--st-danger)" : "var(--st-text-faint)" }}>{groupSecrets}</span>
+                    <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                    <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.host}</span>
+                    <span className="mono" style={{ fontSize: 12, color: "var(--fr-text-2)" }}>{g.count} {t("files")}</span>
+                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: groupSecrets ? "var(--fr-danger)" : "var(--fr-text-faint)" }}>{groupSecrets}</span>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                       {/* Re-downloads this host's .js into a zip (files aren't stored). */}
                       <Tip label={t("Download JS archive")}><div className="actbtn" onClick={(ev) => { ev.stopPropagation(); downloadJsArchive(g.hostId, g.host); }}><Icon name="download" size={15} /></div></Tip>
                     </div>
                   </div>
                   {exp && (
-                    <div style={{ background: "var(--st-elevated)", animation: "frost-fade .2s ease both" }}>
+                    <div style={{ background: "var(--fr-elevated)", animation: "frost-fade .2s ease both" }}>
                       {g.files.map((file) => (
-                        <div key={file.id} className="prow clk" onClick={() => openJsFile(file.id)} style={{ display: "grid", gridTemplateColumns: jsGrid, alignItems: "center", gap: 14, padding: "13px 20px 13px 44px", borderTop: "1px solid var(--st-divider)" }}>
+                        <div key={file.id} className="prow clk" onClick={() => openJsFile(file.id)} style={{ display: "grid", gridTemplateColumns: jsGrid, alignItems: "center", gap: 14, padding: "13px 20px 13px 44px", borderTop: "1px solid var(--fr-divider)" }}>
                           <span />
-                          <span className="mono hostname" title={file.url} style={{ font: "600 13px 'JetBrains Mono',monospace", color: file.status === "ok" ? "var(--st-text)" : "var(--st-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{fileBase(file.url)}</span>
-                          <span className="mono" style={{ fontSize: 11.5, color: "var(--st-text-3)" }}>{file.endpoints.length} {t("paths")}</span>
-                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: file.secrets.length ? "var(--st-danger)" : "var(--st-text-faint)" }}>{file.secrets.length}</span>
-                          <span className="mono" style={{ fontSize: 11, color: "var(--st-text-faint)", textAlign: "right" }}>{file.status === "ok" ? kb(file.size) : file.status}</span>
+                          <span className="mono hostname" title={file.url} style={{ font: "600 13px 'JetBrains Mono',monospace", color: file.status === "ok" ? "var(--fr-text)" : "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{fileBase(file.url)}</span>
+                          <span className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-3)" }}>{file.endpoints.length} {t("paths")}</span>
+                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: file.secrets.length ? "var(--fr-danger)" : "var(--fr-text-faint)" }}>{file.secrets.length}</span>
+                          <span className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)", textAlign: "right" }}>{file.status === "ok" ? kb(file.size) : file.status}</span>
                         </div>
                       ))}
                       {g.files.length === 0 && (
-                        <div style={{ padding: "13px 20px 13px 44px", borderTop: "1px solid var(--st-divider)", font: "500 12.5px Inter,sans-serif", color: "var(--st-text-faint)" }}>{t("No JS files on this host.")}</div>
+                        <div style={{ padding: "13px 20px 13px 44px", borderTop: "1px solid var(--fr-divider)", font: "500 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>{t("No JS files on this host.")}</div>
                       )}
                     </div>
                   )}
                 </div>
               );
             })}
-            {state.apiJsFiles === null && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("Loading JS files…")}</div>}
+            {state.apiJsFiles === null && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading JS files…")}</div>}
             {state.apiJsFiles !== null && jsGroups.length === 0 && (
-              <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No JS files yet — pick domains and scan.")}</div>
+              <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No JS files yet — pick domains and scan.")}</div>
             )}
           </div>
         </div>
@@ -5118,8 +5118,8 @@ export function FrostApp() {
       <div className="route">
         {/* While a probe job runs, statuses fill in live in the table below. */}
         {farmRunning && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--st-accent-soft)", color: "var(--st-accent)", font: "600 12.5px Inter,sans-serif" }}>
-            <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--st-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
+            <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
             {t("Probing")} {state.hostFarmJob?.targets_total ?? ""} {t("hosts — statuses update automatically.")}
           </div>
         )}
@@ -5127,21 +5127,21 @@ export function FrostApp() {
         <div style={{ ...CARD, overflow: "hidden" }}>
           {/* No column headers over an empty table — only show them with rows. */}
           {hostsList.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: hostGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: hostGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div /><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div />
             </div>
           )}
           {hostsList.map(({ h, idx }) => {
             const exp = state.expanded.includes(h.id);
             return (
-              <div key={h.id} style={{ borderBottom: "1px solid var(--st-divider)" }}>
+              <div key={h.id} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
                 <div className="prow clk" onClick={() => toggleHost(h.id)} style={{ display: "grid", gridTemplateColumns: hostGrid, alignItems: "start", gap: 14, padding: "15px 20px" }}>
-                  <Icon name="chevron-right" size={15} color="var(--st-text-faint)" sw={2.4} style={{ marginTop: 3, transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                  <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ marginTop: 3, transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                       <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: STDOT[h.status] ?? STDOT.unknown }} />
                       <span className="clk" onClick={(ev) => { ev.stopPropagation(); openHostDetail(h.id); }} style={{ display: "inline-block", minWidth: 0 }}>
-                        <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{h.host}</span>
+                        <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{h.host}</span>
                       </span>
                     </div>
                   </div>
@@ -5155,12 +5155,12 @@ export function FrostApp() {
                 </div>
                 {/* Expanding a host lists its subdomains — the addresses live in the IPs view. */}
                 {exp && (
-                  <div style={{ background: "var(--st-elevated)", animation: "frost-fade .2s ease both" }}>
+                  <div style={{ background: "var(--fr-elevated)", animation: "frost-fade .2s ease both" }}>
                     {visibleSubdomainsOf(h).map((sub) => (
-                      <div key={sub.id} className="prow clk" onClick={(ev) => { ev.stopPropagation(); openHostDetail(sub.id); }} style={{ display: "grid", gridTemplateColumns: hostGrid, alignItems: "start", gap: 14, padding: "13px 20px 13px 44px", borderTop: "1px solid var(--st-divider)" }}>
+                      <div key={sub.id} className="prow clk" onClick={(ev) => { ev.stopPropagation(); openHostDetail(sub.id); }} style={{ display: "grid", gridTemplateColumns: hostGrid, alignItems: "start", gap: 14, padding: "13px 20px 13px 44px", borderTop: "1px solid var(--fr-divider)" }}>
                         <span style={{ width: 6, height: 6, borderRadius: "50%", background: STDOT[sub.status] ?? STDOT.unknown, marginTop: 8, justifySelf: "end" }} />
                         <div style={{ minWidth: 0 }}>
-                          <span className="mono hostname" style={{ font: "600 13px 'JetBrains Mono',monospace", color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", cursor: "pointer" }}>{sub.host}</span>
+                          <span className="mono hostname" style={{ font: "600 13px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", cursor: "pointer" }}>{sub.host}</span>
                         </div>
                         <div style={{ minWidth: 0 }}>{portPills(sub.ports, sub.status === "down")}</div>
                         <div style={{ marginTop: 1 }}>{cloudflarePill(sub.cloudflare)}</div>
@@ -5171,15 +5171,15 @@ export function FrostApp() {
                       </div>
                     ))}
                     {visibleSubdomainsOf(h).length === 0 && (
-                      <div style={{ padding: "13px 20px 13px 44px", borderTop: "1px solid var(--st-divider)", font: "500 12.5px Inter,sans-serif", color: "var(--st-text-faint)" }}>{t("No subdomains discovered.")}</div>
+                      <div style={{ padding: "13px 20px 13px 44px", borderTop: "1px solid var(--fr-divider)", font: "500 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>{t("No subdomains discovered.")}</div>
                     )}
                   </div>
                 )}
               </div>
             );
           })}
-          {state.apiHosts === null && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("Loading hosts…")}</div>}
-          {state.apiHosts !== null && hostsList.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No hosts found.")}</div>}
+          {state.apiHosts === null && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading hosts…")}</div>}
+          {state.apiHosts !== null && hostsList.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No hosts found.")}</div>}
         </div>
       </div>
     );
@@ -5192,61 +5192,61 @@ export function FrostApp() {
   const renderJsFileDetail = (f: JsFileEntry) => (
     <div style={{ animation: "frost-fade .2s ease both" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-        <span className="clk" onClick={closeJsFile} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
+        <span className="clk" onClick={closeJsFile} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
           <Icon name="chevron-left" size={15} />{t("All JS files")}
         </span>
         <div style={{ flex: 1 }} />
-        <button className="clk" onClick={() => openReconExport("js-endpoints")} disabled={f.endpoints.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 12.5px Inter,sans-serif", color: f.endpoints.length ? "var(--st-accent-2)" : "var(--st-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.endpoints.length ? "pointer" : "default" }}>
-          <Icon name="upload" size={14} sw={2.2} color={f.endpoints.length ? "var(--st-accent-2)" : "var(--st-text-faint)"} />{t("Export paths")}
+        <button className="clk" onClick={() => openReconExport("js-endpoints")} disabled={f.endpoints.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: f.endpoints.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.endpoints.length ? "pointer" : "default" }}>
+          <Icon name="upload" size={14} sw={2.2} color={f.endpoints.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export paths")}
         </button>
-        <button className="clk" onClick={() => openReconExport("js-secrets")} disabled={f.secrets.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 12.5px Inter,sans-serif", color: f.secrets.length ? "var(--st-accent-2)" : "var(--st-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.secrets.length ? "pointer" : "default" }}>
-          <Icon name="upload" size={14} sw={2.2} color={f.secrets.length ? "var(--st-accent-2)" : "var(--st-text-faint)"} />{t("Export secrets")}
+        <button className="clk" onClick={() => openReconExport("js-secrets")} disabled={f.secrets.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: f.secrets.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.secrets.length ? "pointer" : "default" }}>
+          <Icon name="upload" size={14} sw={2.2} color={f.secrets.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export secrets")}
         </button>
       </div>
       <div style={{ ...CARD, padding: "22px 24px", marginBottom: 16 }}>
-        <div className="mono" style={{ font: "800 17px 'JetBrains Mono',monospace", color: "var(--st-text)", wordBreak: "break-all" }}>{fileBase(f.url)}</div>
-        <a className="mono" href={f.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 12, color: "var(--st-accent)", wordBreak: "break-all" }}>{f.url}</a>
+        <div className="mono" style={{ font: "800 17px 'JetBrains Mono',monospace", color: "var(--fr-text)", wordBreak: "break-all" }}>{fileBase(f.url)}</div>
+        <a className="mono" href={f.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 12, color: "var(--fr-accent)", wordBreak: "break-all" }}>{f.url}</a>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
-          <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--st-text-2)", background: "var(--st-hover)", border: "1px solid var(--st-border-light)", borderRadius: 6, padding: "3px 9px" }}>{f.host}</span>
-          <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--st-text-2)", background: "var(--st-hover)", border: "1px solid var(--st-border-light)", borderRadius: 6, padding: "3px 9px" }}>{f.status === "ok" ? kb(f.size) : f.status}</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 6, padding: "3px 9px" }}>{f.host}</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 6, padding: "3px 9px" }}>{f.status === "ok" ? kb(f.size) : f.status}</span>
         </div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ font: "700 13px Inter,sans-serif", color: "var(--st-text)" }}>{t("Secrets")} <span className="mono" style={{ color: "var(--st-text-3)", fontWeight: 600 }}>{f.secrets.length}</span></span>
+        <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Secrets")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{f.secrets.length}</span></span>
       </div>
       <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
         {f.secrets.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
             <div>{t("Kind")}</div><div>{t("Match")}</div><div>{t("Snippet")}</div>
           </div>
         )}
         {f.secrets.map((sec, i) => {
           const c = SECRET_SEV[sec.severity] ?? SECRET_SEV.low;
           return (
-            <div key={i} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", alignItems: "center", gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--st-divider)" }}>
+            <div key={i} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", alignItems: "center", gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
               <span className="mono" style={{ justifySelf: "start", fontSize: 10.5, fontWeight: 700, borderRadius: 5, padding: "2px 8px", background: c.bg, color: c.color }}>{sec.kind}</span>
-              <span className="mono" style={{ fontSize: 12, color: "var(--st-text-2)", wordBreak: "break-all" }}>{sec.match}</span>
-              <span className="mono" title={sec.snippet ?? ""} style={{ fontSize: 11.5, color: "var(--st-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.snippet}</span>
+              <span className="mono" style={{ fontSize: 12, color: "var(--fr-text-2)", wordBreak: "break-all" }}>{sec.match}</span>
+              <span className="mono" title={sec.snippet ?? ""} style={{ fontSize: 11.5, color: "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.snippet}</span>
             </div>
           );
         })}
         {f.secrets.length === 0 && (
-          <div style={{ padding: 40, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{f.status === "ok" ? t("No secrets in this file.") : t("File could not be scanned.")}</div>
+          <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{f.status === "ok" ? t("No secrets in this file.") : t("File could not be scanned.")}</div>
         )}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ font: "700 13px Inter,sans-serif", color: "var(--st-text)" }}>{t("Paths")} <span className="mono" style={{ color: "var(--st-text-3)", fontWeight: 600 }}>{f.endpoints.length}</span></span>
+        <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Paths")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{f.endpoints.length}</span></span>
       </div>
       <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
         {f.endpoints.map((path, i) => (
-          <div key={i} className="prow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)" }}>
-            <span className="mono" style={{ fontSize: 12.5, color: "var(--st-text)", wordBreak: "break-all" }}>{path}</span>
+          <div key={i} className="prow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <span className="mono" style={{ fontSize: 12.5, color: "var(--fr-text)", wordBreak: "break-all" }}>{path}</span>
           </div>
         ))}
         {f.endpoints.length === 0 && (
-          <div style={{ padding: 40, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{t("No paths in this file.")}</div>
+          <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No paths in this file.")}</div>
         )}
       </div>
     </div>
@@ -5256,7 +5256,7 @@ export function FrostApp() {
     return (
       <div style={{ animation: "frost-fade .2s ease both" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-          <span className="clk" onClick={closeHostDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
+          <span className="clk" onClick={closeHostDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
             <Icon name="chevron-left" size={15} />{t("All hosts")}
           </span>
         </div>
@@ -5264,55 +5264,55 @@ export function FrostApp() {
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: STDOT[h.status] ?? STDOT.unknown }} />
-              <span className="mono" style={{ font: "800 20px 'JetBrains Mono',monospace", color: "var(--st-text)", wordBreak: "break-all" }}>{h.host}</span>
+              <span className="mono" style={{ font: "800 20px 'JetBrains Mono',monospace", color: "var(--fr-text)", wordBreak: "break-all" }}>{h.host}</span>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
               {h.ips.map((ip, i) => (
-                <span key={i} className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--st-text-2)", background: "var(--st-hover)", border: "1px solid var(--st-border-light)", borderRadius: 6, padding: "3px 9px" }}>{ip}</span>
+                <span key={i} className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 6, padding: "3px 9px" }}>{ip}</span>
               ))}
             </div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--st-text)" }}>{t("Ports")} <span className="mono" style={{ color: "var(--st-text-3)", fontWeight: 600 }}>{h.ports.length}</span></span>
+          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Ports")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{h.ports.length}</span></span>
         </div>
         <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
           {h.ports.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div>{t("Port")}</div><div>{t("Service")}</div><div>{t("HTTP")}</div><div>{t("State")}</div>
             </div>
           )}
           {h.ports.map((p, pi) => (
-            <div key={pi} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: "1px solid var(--st-divider)" }}>
-              <span className="mono" style={{ font: "700 13px 'JetBrains Mono',monospace", color: "var(--st-text)" }}>{p.n}/{p.proto}</span>
+            <div key={pi} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+              <span className="mono" style={{ font: "700 13px 'JetBrains Mono',monospace", color: "var(--fr-text)" }}>{p.n}/{p.proto}</span>
               {/* Весь стек технологий чипами (whatweb); пусто → unknown. */}
               {p.techs.length > 0 ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, minWidth: 0 }}>
                   {p.techs.map((tech, ti) => (
-                    <span key={ti} className="mono" title={tech.version ? `${tech.name} ${tech.version}` : tech.name} style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--st-elevated)", color: "var(--st-text-2)" }}>
+                    <span key={ti} className="mono" title={tech.version ? `${tech.name} ${tech.version}` : tech.name} style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-2)" }}>
                       {tech.name}{tech.version ? ` ${tech.version}` : ""}
                     </span>
                   ))}
                 </div>
               ) : (
-                <span className="mono" style={{ fontSize: 12.5, color: "var(--st-text-faint)" }}>{t("unknown")}</span>
+                <span className="mono" style={{ fontSize: 12.5, color: "var(--fr-text-faint)" }}>{t("unknown")}</span>
               )}
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: h.status === "down" ? "var(--st-danger)" : p.http != null ? httpStatusColor(p.http) : "var(--st-text-faint)" }}>{h.status === "down" ? "down" : p.http != null ? p.http : "—"}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: h.status === "down" ? "var(--fr-danger)" : p.http != null ? httpStatusColor(p.http) : "var(--fr-text-faint)" }}>{h.status === "down" ? "down" : p.http != null ? p.http : "—"}</span>
               <span className="mono" style={{ justifySelf: "start", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 9px", ...(PORT[p.state] ?? PORT.closed) }}>{p.state}</span>
             </div>
           ))}
-          {h.ports.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{t("No ports yet.")}</div>}
+          {h.ports.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No ports yet.")}</div>}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--st-text)" }}>{t("Endpoints")} <span className="mono" style={{ color: "var(--st-text-3)", fontWeight: 600 }}>{h.endpoints.length}</span></span>
+          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Endpoints")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{h.endpoints.length}</span></span>
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
           {h.endpoints.map((e, ei) => {
             const m = METHOD[e.m] ?? PORT.closed;
             return (
-              <div key={ei} className="prow clk" onClick={() => openEndpoint({ method: e.m, path: e.p, host: h.host, hostId: h.id, endpointId: e.id })} style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", alignItems: "center", gap: 12, padding: "13px 20px", borderBottom: "1px solid var(--st-divider)" }}>
+              <div key={ei} className="prow clk" onClick={() => openEndpoint({ method: e.m, path: e.p, host: h.host, hostId: h.id, endpointId: e.id })} style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", alignItems: "center", gap: 12, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
                 <span className="mono" style={{ justifySelf: "start", fontWeight: 700, borderRadius: 5, padding: "2px 8px", fontSize: 10.5, background: m.bg, color: m.color }}>{e.m}</span>
-                <div className="mono" style={{ fontSize: 12.5, color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.p}</div>
+                <div className="mono" style={{ fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.p}</div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                   <Tip label={t("Copy as cURL")}><div className="actbtn" onClick={(ev) => { ev.stopPropagation(); copyCurl({ method: e.m, path: e.p, host: h.host }); }}><Icon name="copy" size={15} /></div></Tip>
                   <Tip label={t("Delete endpoint")}><div className="actbtn del" onClick={(ev) => { ev.stopPropagation(); void deleteEndpoint(h.id, e.id); }}><Icon name="trash" size={15} /></div></Tip>
@@ -5320,7 +5320,7 @@ export function FrostApp() {
               </div>
             );
           })}
-          {h.endpoints.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{t("No endpoints yet.")}</div>}
+          {h.endpoints.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No endpoints yet.")}</div>}
         </div>
       </div>
     );
@@ -5334,7 +5334,7 @@ export function FrostApp() {
     return (
       <div style={{ animation: "frost-fade .2s ease both" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-          <span className="clk" onClick={closeIpDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
+          <span className="clk" onClick={closeIpDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
             <Icon name="chevron-left" size={15} />{t("All IPs")}
           </span>
         </div>
@@ -5342,46 +5342,46 @@ export function FrostApp() {
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: STDOT[row.status] ?? STDOT.unknown }} />
-              <span className="mono" style={{ font: "800 20px 'JetBrains Mono',monospace", color: "var(--st-text)", wordBreak: "break-all" }}>{row.ip}</span>
+              <span className="mono" style={{ font: "800 20px 'JetBrains Mono',monospace", color: "var(--fr-text)", wordBreak: "break-all" }}>{row.ip}</span>
               {row.cloudflare && (
-                <span className="mono" style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 9px", background: "var(--st-warn-soft)", color: "var(--st-warn)" }}>{t("Cloudflare")}</span>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 9px", background: "var(--fr-warn-soft)", color: "var(--fr-warn)" }}>{t("Cloudflare")}</span>
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-              <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>{t("Hostnames")}</span>
+              <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>{t("Hostnames")}</span>
               <span title={row.names.map((n) => n.hostname).join(", ")}>{hostnamePills(row.names)}</span>
             </div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--st-text)" }}>{t("Ports")} <span className="mono" style={{ color: "var(--st-text-3)", fontWeight: 600 }}>{row.ports.length}</span></span>
+          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Ports")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{row.ports.length}</span></span>
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
           {row.ports.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div>{t("Port")}</div><div>{t("Service")}</div><div>{t("HTTP")}</div><div>{t("State")}</div>
             </div>
           )}
           {row.ports.map((p, pi) => (
-            <div key={pi} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: "1px solid var(--st-divider)" }}>
-              <span className="mono" style={{ font: "700 13px 'JetBrains Mono',monospace", color: "var(--st-text)" }}>{p.n}/{p.proto}</span>
+            <div key={pi} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+              <span className="mono" style={{ font: "700 13px 'JetBrains Mono',monospace", color: "var(--fr-text)" }}>{p.n}/{p.proto}</span>
               {/* Весь стек технологий чипами (whatweb); пусто → unknown. */}
               {p.techs.length > 0 ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, minWidth: 0 }}>
                   {p.techs.map((tech, ti) => (
-                    <span key={ti} className="mono" title={tech.version ? `${tech.name} ${tech.version}` : tech.name} style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--st-elevated)", color: "var(--st-text-2)" }}>
+                    <span key={ti} className="mono" title={tech.version ? `${tech.name} ${tech.version}` : tech.name} style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-2)" }}>
                       {tech.name}{tech.version ? ` ${tech.version}` : ""}
                     </span>
                   ))}
                 </div>
               ) : (
-                <span className="mono" style={{ fontSize: 12.5, color: "var(--st-text-faint)" }}>{t("unknown")}</span>
+                <span className="mono" style={{ fontSize: 12.5, color: "var(--fr-text-faint)" }}>{t("unknown")}</span>
               )}
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: row.status === "down" ? "var(--st-danger)" : p.http != null ? httpStatusColor(p.http) : "var(--st-text-faint)" }}>{row.status === "down" ? "down" : p.http != null ? p.http : "—"}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: row.status === "down" ? "var(--fr-danger)" : p.http != null ? httpStatusColor(p.http) : "var(--fr-text-faint)" }}>{row.status === "down" ? "down" : p.http != null ? p.http : "—"}</span>
               <span className="mono" style={{ justifySelf: "start", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 9px", ...(PORT[p.state] ?? PORT.closed) }}>{p.state}</span>
             </div>
           ))}
-          {row.ports.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{t("No ports yet.")}</div>}
+          {row.ports.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No ports yet.")}</div>}
         </div>
       </div>
     );
@@ -5402,38 +5402,38 @@ export function FrostApp() {
               once, and clearing the last one falls back to "All". Driven by the token
               lists so they cannot drift from the backend's vocabularies. */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--st-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
+            <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
             {filterPill(t("All"), vfS.length === 0, () => setState({ vulnFilterStatuses: [] }))}
             {VSTATUS_ORDER.map((s) => filterPill(t(VSTATUS_LABEL[s]), vfS.includes(s), () => setState((st) => ({ vulnFilterStatuses: toggleIn(st.vulnFilterStatuses, s) }))))}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--st-text-faint)", fontWeight: 700 }}>{t("SEVERITY")}</span>
+            <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("SEVERITY")}</span>
             {filterPill(t("All"), vfSev.length === 0, () => setState({ vulnFilterSeverities: [] }))}
             {(["critical", "high", "medium", "low", "info"] as Severity[]).map((s) => filterPill(cap(s), vfSev.includes(s), () => setState((st) => ({ vulnFilterSeverities: toggleIn(st.vulnFilterSeverities, s) }))))}
           </div>
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
           {vulns.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.8fr) minmax(0,1fr) 140px 110px 130px 120px 64px", gap: 10, padding: "13px 20px", borderBottom: "1px solid var(--st-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--st-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.8fr) minmax(0,1fr) 140px 110px 130px 120px 64px", gap: 10, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div>#</div><div>{t("Title")}</div><div>{t("Asset")}</div><div>{t("Status")}</div><div>{t("Severity")}</div><div>{t("Author")}</div><div>{t("Updated")}</div><div />
             </div>
           )}
           {vulns.map((v) => (
-            <div key={v.num} className="prow clk" onClick={v.onOpen} style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.8fr) minmax(0,1fr) 140px 110px 130px 120px 64px", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid var(--st-divider)" }}>
-              <div className="mono" style={{ fontSize: 13, color: "var(--st-text-faint)", fontWeight: 600 }}>{String(v.num).padStart(2, "0")}</div>
-              <div style={{ font: "600 14px Inter,sans-serif", color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title}</div>
-              <div className="mono" style={{ fontSize: 12, color: "var(--st-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.host}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, font: "600 12px Inter,sans-serif", color: VSTATUS[v.status] ?? "var(--st-text-3)" }}><span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: VSTATUS[v.status] ?? "var(--st-text-3)" }} />{t(VSTATUS_LABEL[v.status] ?? v.status)}</div>
+            <div key={v.num} className="prow clk" onClick={v.onOpen} style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.8fr) minmax(0,1fr) 140px 110px 130px 120px 64px", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+              <div className="mono" style={{ fontSize: 13, color: "var(--fr-text-faint)", fontWeight: 600 }}>{String(v.num).padStart(2, "0")}</div>
+              <div style={{ font: "600 14px Inter,sans-serif", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title}</div>
+              <div className="mono" style={{ fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.host}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, font: "600 12px Inter,sans-serif", color: VSTATUS[v.status] ?? "var(--fr-text-3)" }}><span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: VSTATUS[v.status] ?? "var(--fr-text-3)" }} />{t(VSTATUS_LABEL[v.status] ?? v.status)}</div>
               <span style={{ justifySelf: "start", font: "700 10.5px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", borderRadius: 7, padding: "4px 9px", background: SEV[v.sev].bg, color: SEV[v.sev].color }}>{v.sev}</span>
-              <div className="mono" style={{ fontSize: 12, color: "var(--st-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.author}</div>
-              <div className="mono" style={{ fontSize: 11.5, color: "var(--st-text-faint)" }}>{v.updated}</div>
+              <div className="mono" style={{ fontSize: 12, color: "var(--fr-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.author}</div>
+              <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)" }}>{v.updated}</div>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                 <div className="actbtn" onClick={v.onEdit}><Icon name="edit" size={15} /></div>
                 <div className="actbtn del" onClick={v.onDelete}><Icon name="trash" size={15} /></div>
               </div>
             </div>
           ))}
-          {vulns.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No findings match these filters.")}</div>}
+          {vulns.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No findings match these filters.")}</div>}
         </div>
       </div>
     );
@@ -5462,7 +5462,7 @@ export function FrostApp() {
     return (
       <div style={{ width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 18 }}>
-          <span className="clk" onClick={closeVulnDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
+          <span className="clk" onClick={closeVulnDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
             <Icon name="chevron-left" size={15} />{t("All findings")}
           </span>
         </div>
@@ -5499,16 +5499,16 @@ export function FrostApp() {
                   }}
                 />
                 {state.vdHostComboOpen && vdHostSuggestions.length > 0 && (
-                  <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 12, boxShadow: "0 18px 44px rgba(15,27,45,.16)", zIndex: 60, padding: 6, overflow: "hidden" }}>
+                  <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 12, boxShadow: "0 18px 44px rgba(15,27,45,.16)", zIndex: 60, padding: 6, overflow: "hidden" }}>
                     {vdHostSuggestions.map((hn, i) => (
                       <div
                         key={hn}
                         className="clk"
                         /* mousedown, а не click: click после blur-а инпута уже не долетит (список размонтируется). */
                         onMouseDown={(e) => { e.preventDefault(); vdHostPick(hn); }}
-                        style={{ display: "flex", flexDirection: "column", gap: 1, padding: "8px 10px", borderRadius: 9, background: i === vdHostHi ? "var(--st-accent-soft)" : "transparent" }}
+                        style={{ display: "flex", flexDirection: "column", gap: 1, padding: "8px 10px", borderRadius: 9, background: i === vdHostHi ? "var(--fr-accent-soft)" : "transparent" }}
                       >
-                        <span style={{ font: "600 13.5px Inter,sans-serif", color: i === vdHostHi ? "var(--st-accent)" : "var(--st-text)" }}>{hn}</span>
+                        <span style={{ font: "600 13.5px Inter,sans-serif", color: i === vdHostHi ? "var(--fr-accent)" : "var(--fr-text)" }}>{hn}</span>
                       </div>
                     ))}
                   </div>
@@ -5527,7 +5527,7 @@ export function FrostApp() {
                 <label className="flabel">{t("Severity")}</label>
                 <div className="finp" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "default" }}>
                   <span style={{ font: "700 11px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", borderRadius: 6, padding: "3px 8px", background: SEV[vdSev].bg, color: SEV[vdSev].color }}>{vdSev}</span>
-                  <span className="mono" style={{ fontSize: 12.5, color: "var(--st-text-2)" }}>{vdScore}</span>
+                  <span className="mono" style={{ fontSize: 12.5, color: "var(--fr-text-2)" }}>{vdScore}</span>
                 </div>
               </div>
               <div style={{ flex: "none", width: 170 }}>
@@ -5546,7 +5546,7 @@ export function FrostApp() {
                 return (
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span className="mono" style={{ flex: "none", width: 26, height: 26, borderRadius: 8, background: "var(--st-accent-soft)", color: "var(--st-accent)", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                      <span className="mono" style={{ flex: "none", width: 26, height: 26, borderRadius: 8, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
                       <input className="finp" placeholder={t("Describe this step… (paste a screenshot to attach)")} value={s} onChange={(e) => updateVdStep(i, e.target.value)} onPaste={(e) => pasteVdStepImage(i, e)} style={{ flex: 1, fontFamily: "ui-monospace,Menlo,monospace", fontSize: 12.5 }} />
                       <div className="actbtn del" onClick={() => removeVdStep(i)}><Icon name="trash" size={15} /></div>
                     </div>
@@ -5554,8 +5554,8 @@ export function FrostApp() {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginLeft: 36 }}>
                         {imgs.map((src, ii) => (
                           <div key={ii} style={{ position: "relative" }}>
-                            <img src={src} alt={`Step ${i + 1} screenshot ${ii + 1}`} title={t("Click to view")} onClick={() => setState({ lightboxSrc: src })} style={{ height: 78, borderRadius: 9, border: "1px solid var(--st-border-strong)", display: "block", cursor: "zoom-in" }} />
-                            <div className="clk" onClick={() => removeVdStepImage(i, ii)} style={{ position: "absolute", top: -7, right: -7, width: 20, height: 20, borderRadius: "50%", background: "var(--st-danger)", color: "var(--st-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 13px Inter,sans-serif", lineHeight: 1, cursor: "pointer", border: "2px solid var(--st-surface)" }}>×</div>
+                            <img src={src} alt={`Step ${i + 1} screenshot ${ii + 1}`} title={t("Click to view")} onClick={() => setState({ lightboxSrc: src })} style={{ height: 78, borderRadius: 9, border: "1px solid var(--fr-border-strong)", display: "block", cursor: "zoom-in" }} />
+                            <div className="clk" onClick={() => removeVdStepImage(i, ii)} style={{ position: "absolute", top: -7, right: -7, width: 20, height: 20, borderRadius: "50%", background: "var(--fr-danger)", color: "var(--fr-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 13px Inter,sans-serif", lineHeight: 1, cursor: "pointer", border: "2px solid var(--fr-surface)" }}>×</div>
                           </div>
                         ))}
                       </div>
@@ -5564,17 +5564,17 @@ export function FrostApp() {
                 );
               })}
             </div>
-            <button className="clk" onClick={addVdStep} style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 14px", border: "1px dashed var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--st-text-2)", cursor: "pointer" }}>
+            <button className="clk" onClick={addVdStep} style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 14px", border: "1px dashed var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>
               <Icon name="plus" size={13} sw={2.4} />{t("Add step")}
             </button>
           </div>
           <div style={{ marginBottom: 18 }}><label className="flabel">{t("Impact")}</label><textarea className="finp" rows={2} placeholder={t("Business/security impact if exploited…")} value={vd.impact || ""} onChange={(e) => updateVulnDetailForm("impact", e.target.value)} /></div>
           <div><label className="flabel">{t("Remediation")}</label><textarea className="finp" rows={3} placeholder={t("How to fix or mitigate this vulnerability…")} value={vd.remediation || ""} onChange={(e) => updateVulnDetailForm("remediation", e.target.value)} /></div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 22, fontSize: 12, color: "var(--st-text-faint)" }}>
-            <span>{t("Reported by")} <b style={{ color: "var(--st-text-3)" }}>{original?.author}</b> · {original?.updated}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 22, fontSize: 12, color: "var(--fr-text-faint)" }}>
+            <span>{t("Reported by")} <b style={{ color: "var(--fr-text-3)" }}>{original?.author}</b> · {original?.updated}</span>
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="clk" onClick={closeVulnDetail} style={{ height: 40, padding: "0 18px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-              <button className="clk" onClick={saveVulnDetail} style={{ height: 40, padding: "0 20px", border: "none", borderRadius: 10, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif" }}>{t("Save changes")}</button>
+              <button className="clk" onClick={closeVulnDetail} style={{ height: 40, padding: "0 18px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Cancel")}</button>
+              <button className="clk" onClick={saveVulnDetail} style={{ height: 40, padding: "0 20px", border: "none", borderRadius: 10, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif" }}>{t("Save changes")}</button>
             </div>
           </div>
         </div>
@@ -5607,15 +5607,15 @@ export function FrostApp() {
   const CRED_MASK = "••••••••••••••••";
   const renderCreds = () => {
     if (state.apiCreds === null) {
-      return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("Loading credentials…")}</div>;
+      return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading credentials…")}</div>;
     }
-    const monoCell: CSSProperties = { fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13.5, color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+    const monoCell: CSSProperties = { fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
     const empty = d.creds.length === 0;
     return (
       <div className="route" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
         {/* Column headers only make sense with rows — hide them for an empty vault. */}
         {!empty && (
-          <div className="mono" style={{ display: "grid", gridTemplateColumns: credCols, gap: 16, alignItems: "center", padding: "11px 20px", borderBottom: "1px solid var(--st-divider)", background: "var(--st-elevated)", fontSize: 11, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--st-text-faint)", fontWeight: 700 }}>
+          <div className="mono" style={{ display: "grid", gridTemplateColumns: credCols, gap: 16, alignItems: "center", padding: "11px 20px", borderBottom: "1px solid var(--fr-divider)", background: "var(--fr-elevated)", fontSize: 11, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--fr-text-faint)", fontWeight: 700 }}>
             <div>#</div>
             <div>{t("Username")}</div>
             <div>{t("Password")}</div>
@@ -5626,12 +5626,12 @@ export function FrostApp() {
         {d.creds.map((c, idx) => {
           const revealed = state.revealedCredIds.includes(c.id);
           return (
-            <div key={c.id} className="statc" style={{ display: "grid", gridTemplateColumns: credCols, gap: 16, alignItems: "center", padding: "11px 20px", borderBottom: "1px solid var(--st-divider)" }}>
+            <div key={c.id} className="statc" style={{ display: "grid", gridTemplateColumns: credCols, gap: 16, alignItems: "center", padding: "11px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
               {/* row index */}
-              <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--st-text-faint)" }}>{String(idx + 1).padStart(2, "0")}</div>
+              <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--fr-text-faint)" }}>{String(idx + 1).padStart(2, "0")}</div>
               {/* username + copy — one line */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                <span style={{ ...monoCell, flex: "0 1 auto" }}>{c.username || <span style={{ color: "var(--st-text-faint)" }}>—</span>}</span>
+                <span style={{ ...monoCell, flex: "0 1 auto" }}>{c.username || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</span>
                 {c.username && <div className="actbtn" title={t("Copy username")} onClick={() => copyText(c.username, "Username")}><Icon name="copy" size={14} /></div>}
               </div>
               {/* password (masked) + reveal + copy — the value box is a fixed width so
@@ -5643,7 +5643,7 @@ export function FrostApp() {
               </div>
               {/* host — which host these creds belong to */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                <span style={{ ...monoCell, flex: "0 1 auto" }}>{c.host || <span style={{ color: "var(--st-text-faint)" }}>—</span>}</span>
+                <span style={{ ...monoCell, flex: "0 1 auto" }}>{c.host || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</span>
                 {c.host && <div className="actbtn" title={t("Copy host")} onClick={() => copyText(c.host, "Host")}><Icon name="copy" size={14} /></div>}
               </div>
               {/* row actions */}
@@ -5655,7 +5655,7 @@ export function FrostApp() {
           );
         })}
         {empty && (
-          <div style={{ padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>
+          <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>
             {t("No credentials yet. Add a username and password for this project.")}
           </div>
         )}
@@ -5671,7 +5671,7 @@ export function FrostApp() {
           // Clicking a note always opens it rendered — your own notes included.
           <div key={n.id} className="statc clk" onClick={() => openNoteViewer(n.id)} style={{ ...CARD, padding: "18px 20px" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ font: "700 15px Inter,sans-serif", color: "var(--st-text)" }}>{n.title}</div>
+              <div style={{ font: "700 15px Inter,sans-serif", color: "var(--fr-text)" }}>{n.title}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
                 {mine && (
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -5679,15 +5679,15 @@ export function FrostApp() {
                     <div className="actbtn del" onClick={(e) => { e.stopPropagation(); askDelete("note", idx, n.title); }}><Icon name="trash" size={15} /></div>
                   </div>
                 )}
-                <span className="mono" style={{ fontSize: 11.5, color: "var(--st-text-faint)" }}>{n.when}</span>
+                <span className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)" }}>{n.when}</span>
               </div>
             </div>
-            <div style={{ fontSize: 13, color: "var(--st-text-3)", marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{notePreview(n.excerpt)}</div>
-            <div className="mono" style={{ fontSize: 11.5, color: "var(--st-text-3)", marginTop: 12 }}>{n.author}</div>
+            <div style={{ fontSize: 13, color: "var(--fr-text-3)", marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{notePreview(n.excerpt)}</div>
+            <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-3)", marginTop: 12 }}>{n.author}</div>
           </div>
         );
       })}
-      {d.notes.length === 0 && <div style={{ ...CARD, padding: 52, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No notes yet.")}</div>}
+      {d.notes.length === 0 && <div style={{ ...CARD, padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No notes yet.")}</div>}
     </div>
   );
 
@@ -5697,22 +5697,22 @@ export function FrostApp() {
     const idx = d.notes.findIndex((x) => x.id === state.openNoteId);
     const n = idx === -1 ? undefined : d.notes[idx];
     if (!n) {
-      if (state.apiNotes === null) return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("Loading note…")}</div>;
+      if (state.apiNotes === null) return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading note…")}</div>;
       return renderNoAccess("Note not found.");
     }
     const mine = n.author === me;
     return (
       <div className="route" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--st-divider)" }}>
-          <span className="clk" onClick={closeNoteViewer} style={{ display: "flex", color: "var(--st-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{n.title}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+          <span className="clk" onClick={closeNoteViewer} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{n.title}</h2>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
             {mine ? (
               <button className="addbtn clk" onClick={() => openNoteEditor("edit", idx)} style={{ height: 36 }}>
-                <Icon name="edit" size={15} color="var(--st-on-accent)" sw={2.4} />{t("Edit note")}
+                <Icon name="edit" size={15} color="var(--fr-on-accent)" sw={2.4} />{t("Edit note")}
               </button>
             ) : (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 11px Inter,sans-serif", color: "var(--st-text-3)", background: "var(--st-divider)", borderRadius: 20, padding: "5px 11px" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 11px Inter,sans-serif", color: "var(--fr-text-3)", background: "var(--fr-divider)", borderRadius: 20, padding: "5px 11px" }}>
                 <Icon name="eye" size={12} />{t("Read only")}
               </span>
             )}
@@ -5720,7 +5720,7 @@ export function FrostApp() {
         </div>
         <div style={{ padding: "24px 22px" }}>
           <div style={{ maxWidth: 720 }}>{renderMarkdown(n.excerpt)}</div>
-          <div className="mono" style={{ fontSize: 11.5, color: "var(--st-text-faint)", marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--st-elevated)" }}>{n.author} · {n.when}</div>
+          <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)", marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--fr-elevated)" }}>{n.author} · {n.when}</div>
         </div>
       </div>
     );
@@ -5728,26 +5728,26 @@ export function FrostApp() {
 
   const renderNoteEditor = () => (
     <div className="route" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--st-divider)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="clk" onClick={closeNoteEditor} style={{ display: "flex", color: "var(--st-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{state.noteEditorMode === "add" ? "New note" : "Edit note"}</h2>
+          <span className="clk" onClick={closeNoteEditor} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{state.noteEditorMode === "add" ? "New note" : "Edit note"}</h2>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="clk" onClick={closeNoteEditor} style={{ height: 38, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-text-2)", cursor: "pointer" }}>{t("Cancel")}</button>
-          <button className="clk" onClick={saveNote} style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}>{t("Save note")}</button>
+          <button className="clk" onClick={closeNoteEditor} style={{ height: 38, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>{t("Cancel")}</button>
+          <button className="clk" onClick={saveNote} style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}>{t("Save note")}</button>
         </div>
       </div>
       <div style={{ padding: "22px 22px 8px" }}>
         <label className="flabel">{t("Title")}</label>
-        <input className="finp" placeholder={t("Give this note a title…")} value={state.noteForm.title} onChange={(e) => updateNoteForm("title", e.target.value)} style={{ font: "700 16px Inter,sans-serif", height: 48, background: "var(--st-elevated)" }} />
+        <input className="finp" placeholder={t("Give this note a title…")} value={state.noteForm.title} onChange={(e) => updateNoteForm("title", e.target.value)} style={{ font: "700 16px Inter,sans-serif", height: 48, background: "var(--fr-elevated)" }} />
       </div>
       {/* Markdown renders as you type (### + space → heading, right in the line) —
           the note is still stored as Markdown, so the viewer and the reports read
           exactly what was typed. */}
       <div style={{ padding: "14px 22px 24px" }}>
         <label className="flabel">{t("Content")}</label>
-        <Suspense fallback={<div className="frostmd" style={{ minHeight: 260, color: "var(--st-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading editor…")}</div>}>
+        <Suspense fallback={<div className="frostmd" style={{ minHeight: 260, color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading editor…")}</div>}>
           <FrostMarkdownEditor
             value={state.noteForm.excerpt}
             onChange={(md) => updateNoteForm("excerpt", md)}
@@ -5768,12 +5768,12 @@ export function FrostApp() {
         {/* search + role filter */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
           <label className="fq" style={{ position: "relative", display: "flex", alignItems: "center", width: 280 }}>
-            <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--st-text-faint)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+            <svg style={{ position: "absolute", left: 13 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fr-text-faint)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
             <input placeholder={t("Search by username…")} value={state.memberQuery} onChange={(e) => setState({ memberQuery: e.target.value })} />
           </label>
           <div style={{ flex: 1 }} />
           {/* Every pill toggles; an empty selection means "All". */}
-          <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--st-text-faint)", fontWeight: 700 }}>{t("ROLE")}</span>
+          <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("ROLE")}</span>
           <div className="clk" onClick={() => setState({ memberRoles: [] })} style={{ font: "600 12px Inter,sans-serif", padding: "6px 12px", borderRadius: 20, cursor: "pointer", ...vfPill(state.memberRoles.length === 0) }}>{t("All")}</div>
           {([{ label: "Lead", v: "lead" as const }, { label: "Pentester", v: "pentester" as const }]).map((o) => (
             <div key={o.v} className="clk" onClick={() => setState((s) => ({ memberRoles: toggleIn(s.memberRoles, o.v) }))} style={{ font: "600 12px Inter,sans-serif", padding: "6px 12px", borderRadius: 20, cursor: "pointer", ...vfPill(state.memberRoles.includes(o.v)) }}>{t(o.label)}</div>
@@ -5781,14 +5781,14 @@ export function FrostApp() {
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
           {filtered.map(({ m, idx }) => (
-            <div key={m.name + idx} className="prow" style={{ display: "flex", alignItems: "center", gap: 13, padding: "15px 20px", borderBottom: "1px solid var(--st-divider)" }}>
-              <span className="mono" style={{ width: 38, height: 38, flex: "none", borderRadius: "50%", background: m.color, color: "var(--st-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 13px 'JetBrains Mono',monospace" }}>{m.initials}</span>
+            <div key={m.name + idx} className="prow" style={{ display: "flex", alignItems: "center", gap: 13, padding: "15px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+              <span className="mono" style={{ width: 38, height: 38, flex: "none", borderRadius: "50%", background: m.color, color: "var(--fr-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 13px 'JetBrains Mono',monospace" }}>{m.initials}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ font: "600 14px Inter,sans-serif", color: "var(--st-text)" }}>{m.name}</span>
+                  <span style={{ font: "600 14px Inter,sans-serif", color: "var(--fr-text)" }}>{m.name}</span>
                   <span style={{ font: "700 10px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".5px", borderRadius: 6, padding: "2px 8px", background: ROLE[m.role].bg, color: ROLE[m.role].color }}>{m.role}</span>
                 </div>
-                <div className="mono" style={{ fontSize: 12, color: "var(--st-text-faint)", marginTop: 2 }}>{m.email}</div>
+                <div className="mono" style={{ fontSize: 12, color: "var(--fr-text-faint)", marginTop: 2 }}>{m.email}</div>
               </div>
               {canManageMembers && (
                 <div style={{ display: "flex", gap: 2 }}>
@@ -5797,7 +5797,7 @@ export function FrostApp() {
               )}
             </div>
           ))}
-          {filtered.length === 0 && <div style={{ padding: 44, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No members match.")}</div>}
+          {filtered.length === 0 && <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No members match.")}</div>}
         </div>
       </div>
     );
@@ -5831,12 +5831,12 @@ export function FrostApp() {
       <span className="mono" style={{ flex: "none", width: 10, textAlign: "center", font: "700 12.5px 'JetBrains Mono',monospace", color: tone.color }}>
         {tone.mark}
       </span>
-      <span style={{ font: "600 12.5px 'JetBrains Mono',monospace", color: "var(--st-code-text)", textOverflow: "ellipsis", overflow: "hidden" }}>{l.text}</span>
+      <span style={{ font: "600 12.5px 'JetBrains Mono',monospace", color: "var(--fr-code-text)", textOverflow: "ellipsis", overflow: "hidden" }}>{l.text}</span>
       {/* Severity sits in a chip filled with that severity's own colour. */}
       {l.severity && (
         <span
           className="mono"
-          style={{ flex: "none", font: "700 9.5px 'JetBrains Mono',monospace", letterSpacing: ".4px", textTransform: "uppercase", borderRadius: 4, padding: "3px 6px", background: ACT_SEV[l.severity], color: "var(--st-on-accent)" }}
+          style={{ flex: "none", font: "700 9.5px 'JetBrains Mono',monospace", letterSpacing: ".4px", textTransform: "uppercase", borderRadius: 4, padding: "3px 6px", background: ACT_SEV[l.severity], color: "var(--fr-on-accent)" }}
         >
           {l.severity}
         </span>
@@ -5851,11 +5851,11 @@ export function FrostApp() {
   const renderActivity = () => {
     const logs = state.activity ?? [];
     if (state.activityLoading && logs.length === 0)
-      return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("Loading activity…")}</div>;
+      return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading activity…")}</div>;
     if (state.activityError) return renderNoAccess(state.activityError);
     const groups = activityGroups;
     if (groups.length === 0)
-      return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--st-text-faint)", fontSize: 14 }}>{t("No activity yet.")}</div>;
+      return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No activity yet.")}</div>;
     return (
       <div className="route" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {groups.map((g) => {
@@ -5865,7 +5865,7 @@ export function FrostApp() {
             <div key={g.key} style={{ ...CARD, padding: "16px 18px", display: "flex", gap: 13 }}>
               <span
                 className="mono"
-                style={{ width: 32, height: 32, flex: "none", borderRadius: "50%", background: g.actor === "System" ? "var(--st-accent-soft)" : "var(--st-accent)", color: g.actor === "System" ? "var(--st-accent-2)" : "var(--st-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 11px 'JetBrains Mono',monospace" }}
+                style={{ width: 32, height: 32, flex: "none", borderRadius: "50%", background: g.actor === "System" ? "var(--fr-accent-soft)" : "var(--fr-accent)", color: g.actor === "System" ? "var(--fr-accent-2)" : "var(--fr-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 11px 'JetBrains Mono',monospace" }}
               >
                 {g.actor === "System" ? <Icon name="clock2" size={15} /> : initialsOf(g.actor)}
               </span>
@@ -5873,18 +5873,18 @@ export function FrostApp() {
                 {/* The count reads inline — "admin added 3 IP addresses" — rather
                     than as a separate badge repeating what the list already shows. */}
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <div style={{ fontSize: 13.5, color: "var(--st-text-2)", lineHeight: 1.5, flex: 1, minWidth: 0 }}>
-                    <b className="mono" style={{ color: "var(--st-text)" }}>{g.actor}</b> {g.verb} <b style={{ color: "var(--st-text)" }}>{g.subject}</b>
+                  <div style={{ fontSize: 13.5, color: "var(--fr-text-2)", lineHeight: 1.5, flex: 1, minWidth: 0 }}>
+                    <b className="mono" style={{ color: "var(--fr-text)" }}>{g.actor}</b> {g.verb} <b style={{ color: "var(--fr-text)" }}>{g.subject}</b>
                   </div>
-                  <span className="mono" style={{ flex: "none", fontSize: 11.5, color: "var(--st-text-faint)" }}>{g.time}</span>
+                  <span className="mono" style={{ flex: "none", fontSize: 11.5, color: "var(--fr-text-faint)" }}>{g.time}</span>
                 </div>
-                <div style={{ marginTop: 11, background: "var(--st-code-bg)", borderRadius: 10, padding: "11px 13px", display: "flex", flexDirection: "column", gap: 6, overflowX: "auto" }}>
+                <div style={{ marginTop: 11, background: "var(--fr-code-bg)", borderRadius: 10, padding: "11px 13px", display: "flex", flexDirection: "column", gap: 6, overflowX: "auto" }}>
                   {shown.map((l) => activityLineRow(l, g.tone))}
                   {hidden > 0 && (
                     <div
                       className="clk"
                       onClick={() => setState({ activityModalKey: g.key })}
-                      style={{ marginTop: 3, font: "700 11.5px Inter,sans-serif", color: "var(--st-accent-muted)", cursor: "pointer" }}
+                      style={{ marginTop: 3, font: "700 11.5px Inter,sans-serif", color: "var(--fr-accent-muted)", cursor: "pointer" }}
                     >
                       {t("Show more ·")} {hidden} {t("more")}
                     </div>
@@ -5895,7 +5895,7 @@ export function FrostApp() {
                   <div
                     className="clk"
                     onClick={() => openVulnDetail(g.vulnId as number)}
-                    style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 5, font: "700 12px Inter,sans-serif", color: "var(--st-accent-2)", cursor: "pointer" }}
+                    style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 5, font: "700 12px Inter,sans-serif", color: "var(--fr-accent-2)", cursor: "pointer" }}
                   >
                     {t("Show details")}<Icon name="chevron-right" size={13} sw={2.4} />
                   </div>
@@ -5912,23 +5912,23 @@ export function FrostApp() {
   const renderProfile = () => (
     <div className="route" style={{ padding: "40px 48px 36px", width: "100%" }}>
       {eyebrow([{ label: "Account", muted: true }, { label: "Profile settings", muted: true }])}
-      <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--st-text)" }}>{t("Profile Settings")}</h1>
-      <div style={{ fontSize: 13.5, color: "var(--st-text-3)", marginTop: 6 }}>{t("Signed in as")} <b style={{ color: "var(--st-text-2)" }}>{me}</b> · manage your account, security, integrations &amp; automation</div>
+      <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t("Profile Settings")}</h1>
+      <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", marginTop: 6 }}>{t("Signed in as")} <b style={{ color: "var(--fr-text-2)" }}>{me}</b> · manage your account, security, integrations &amp; automation</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 22, alignItems: "start", marginTop: 26 }}>
         <div style={{ ...CARD, padding: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 12px 16px" }}>
             {meAvatar(44, 17, meInitials)}
             <div style={{ minWidth: 0 }}>
-              <div style={{ font: "700 14px Inter,sans-serif", color: "var(--st-text)" }}>{meDisplay}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3, font: "600 11.5px Inter,sans-serif", color: "var(--st-success)" }}><Icon name="shield-check" size={12} sw={2.2} />{t("Active")}</div>
+              <div style={{ font: "700 14px Inter,sans-serif", color: "var(--fr-text)" }}>{meDisplay}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3, font: "600 11.5px Inter,sans-serif", color: "var(--fr-success)" }}><Icon name="shield-check" size={12} sw={2.2} />{t("Active")}</div>
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div className="clk" onClick={() => setState({ profileTab: "account" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("account") }}><Icon name="user1" size={17} />{t("Account")}</div>
             <div className="clk" onClick={() => setState({ profileTab: "security" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("security") }}>
               <Icon name="lock" size={17} /><span style={{ flex: 1 }}>{t("Security")}</span>
-              {twoFAEnabled && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: ".5px", color: "var(--st-success)", background: "var(--st-success-soft)", borderRadius: 6, padding: "2px 6px" }}>{t("2FA")}</span>}
+              {twoFAEnabled && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: ".5px", color: "var(--fr-success)", background: "var(--fr-success-soft)", borderRadius: 6, padding: "2px 6px" }}>{t("2FA")}</span>}
             </div>
             <div className="clk" onClick={() => setState({ profileTab: "api" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("api") }}><Icon name="plug" size={17} />API &amp; Automation</div>
             <div className="clk" onClick={() => setState({ profileTab: "customizing" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("customizing") }}><Icon name={theme === "dark" ? "moon" : "sun"} size={17} />{t("Customizing")}</div>
@@ -5948,8 +5948,8 @@ export function FrostApp() {
   const cardHeader = (icon: Parameters<typeof Icon>[0]["name"], title: string, sub: string, right?: ReactNode) => (
     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 38, height: 38, flex: "none", borderRadius: 10, background: "var(--st-accent-soft)", color: "var(--st-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name={icon} size={19} /></div>
-        <div><div style={{ font: "700 15px Inter,sans-serif", color: "var(--st-text)" }}>{title}</div><div style={{ fontSize: 12.5, color: "var(--st-text-3)", marginTop: 2 }}>{sub}</div></div>
+        <div style={{ width: 38, height: 38, flex: "none", borderRadius: 10, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name={icon} size={19} /></div>
+        <div><div style={{ font: "700 15px Inter,sans-serif", color: "var(--fr-text)" }}>{title}</div><div style={{ fontSize: 12.5, color: "var(--fr-text-3)", marginTop: 2 }}>{sub}</div></div>
       </div>
       {right}
     </div>
@@ -5964,17 +5964,17 @@ export function FrostApp() {
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <input id="pfFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style={{ display: "none" }} onChange={onAvatarPick} />
-              <label htmlFor="pfFileInput" className="clk" style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 42, padding: "0 18px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-text-2)", cursor: "pointer" }}><Icon name="image" size={15} />{t("Choose file")}</label>
-              <button className="clk" disabled={!avatarFile || avatarUploading} onClick={submitAvatar} style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 42, padding: "0 18px", border: "none", borderRadius: 11, background: !avatarFile || avatarUploading ? "var(--st-accent-muted)" : "var(--st-accent)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: !avatarFile || avatarUploading ? "not-allowed" : "pointer" }}><Icon name="upload" size={15} color="var(--st-on-accent)" />{avatarUploading ? "Uploading…" : "Upload"}</button>
+              <label htmlFor="pfFileInput" className="clk" style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 42, padding: "0 18px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}><Icon name="image" size={15} />{t("Choose file")}</label>
+              <button className="clk" disabled={!avatarFile || avatarUploading} onClick={submitAvatar} style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 42, padding: "0 18px", border: "none", borderRadius: 11, background: !avatarFile || avatarUploading ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !avatarFile || avatarUploading ? "not-allowed" : "pointer" }}><Icon name="upload" size={15} color="var(--fr-on-accent)" />{avatarUploading ? "Uploading…" : "Upload"}</button>
               {avatarFile && !avatarUploading && (
-                <button className="clk" onClick={clearAvatarPick} style={{ display: "inline-flex", alignItems: "center", height: 42, padding: "0 14px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-text-3)", cursor: "pointer" }}>{t("Cancel")}</button>
+                <button className="clk" onClick={clearAvatarPick} style={{ display: "inline-flex", alignItems: "center", height: 42, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-3)", cursor: "pointer" }}>{t("Cancel")}</button>
               )}
             </div>
-            <div style={{ fontSize: 12.5, color: "var(--st-text-faint)", marginTop: 12 }}>
+            <div style={{ fontSize: 12.5, color: "var(--fr-text-faint)", marginTop: 12 }}>
               {avatarFile ? (
-                <span style={{ color: "var(--st-text-2)" }}>{t("Selected:")} <b>{avatarFile.name}</b> {t("— press Upload to save.")}</span>
+                <span style={{ color: "var(--fr-text-2)" }}>{t("Selected:")} <b>{avatarFile.name}</b> {t("— press Upload to save.")}</span>
               ) : (
-                <>{t("PNG / JPEG / WEBP / GIF, up to")} <b style={{ color: "var(--st-text-3)" }}>{t("5 MB")}</b>{t(". Square images look best.")}</>
+                <>{t("PNG / JPEG / WEBP / GIF, up to")} <b style={{ color: "var(--fr-text-3)" }}>{t("5 MB")}</b>{t(". Square images look best.")}</>
               )}
             </div>
           </div>
@@ -5982,16 +5982,16 @@ export function FrostApp() {
       </div>
 
       <div style={{ ...CARD, padding: "22px 24px" }}>
-        {cardHeader("idcard", "Account identity", "Read-only — managed by your administrator", <span style={{ font: "700 11px Inter,sans-serif", color: "var(--st-text-2)", background: "var(--st-hover)", border: "1px solid var(--st-border-light)", borderRadius: 8, padding: "5px 11px" }}>{t("Active")}</span>)}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", border: "1px solid var(--st-divider)", borderRadius: 12, overflow: "hidden" }}>
+        {cardHeader("idcard", "Account identity", "Read-only — managed by your administrator", <span style={{ font: "700 11px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 8, padding: "5px 11px" }}>{t("Active")}</span>)}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", border: "1px solid var(--fr-divider)", borderRadius: 12, overflow: "hidden" }}>
           {[
-            { label: "Username", value: me, mono: true, color: "var(--st-text)" },
-            { label: "Email", value: meEmail, mono: true, color: "var(--st-text)", small: true },
-            { label: "Role", value: meRoleLabel, mono: false, color: "var(--st-accent)" },
-            { label: "User ID", value: String(meId), mono: true, color: "var(--st-accent-2)", last: true },
+            { label: "Username", value: me, mono: true, color: "var(--fr-text)" },
+            { label: "Email", value: meEmail, mono: true, color: "var(--fr-text)", small: true },
+            { label: "Role", value: meRoleLabel, mono: false, color: "var(--fr-accent)" },
+            { label: "User ID", value: String(meId), mono: true, color: "var(--fr-accent-2)", last: true },
           ].map((c, i) => (
-            <div key={i} style={{ padding: "15px 18px", borderRight: c.last ? "none" : "1px solid var(--st-divider)" }}>
-              <div className="mono" style={{ fontSize: 10, letterSpacing: ".8px", color: "var(--st-text-faint)", fontWeight: 700, textTransform: "uppercase" }}>{c.label}</div>
+            <div key={i} style={{ padding: "15px 18px", borderRight: c.last ? "none" : "1px solid var(--fr-divider)" }}>
+              <div className="mono" style={{ fontSize: 10, letterSpacing: ".8px", color: "var(--fr-text-faint)", fontWeight: 700, textTransform: "uppercase" }}>{c.label}</div>
               <div className={c.mono ? "mono" : undefined} style={{ fontSize: c.small ? 13 : 14, color: c.color, fontWeight: c.mono ? 600 : 700, marginTop: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...(c.mono ? {} : { font: "700 13px Inter,sans-serif" }) }}>{c.value}</div>
             </div>
           ))}
@@ -6012,22 +6012,22 @@ export function FrostApp() {
           alignItems: "flex-start",
           gap: 13,
           padding: "16px 18px",
-          border: `1.5px solid ${active ? "var(--st-accent)" : "var(--st-border-light)"}`,
+          border: `1.5px solid ${active ? "var(--fr-accent)" : "var(--fr-border-light)"}`,
           borderRadius: 14,
-          background: active ? "var(--st-accent-soft)" : "var(--st-surface)",
+          background: active ? "var(--fr-accent-soft)" : "var(--fr-surface)",
           cursor: "pointer",
           transition: "border-color .12s, background .12s",
         }}
       >
-        <div style={{ width: 38, height: 38, flex: "none", borderRadius: 10, background: active ? "var(--st-surface)" : "var(--st-hover)", color: active ? "var(--st-accent)" : "var(--st-text-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 38, height: 38, flex: "none", borderRadius: 10, background: active ? "var(--fr-surface)" : "var(--fr-hover)", color: active ? "var(--fr-accent)" : "var(--fr-text-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Icon name={icon} size={19} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ font: "700 14px Inter,sans-serif", color: active ? "var(--st-accent)" : "var(--st-text)" }}>{title}</span>
-            {active && <Icon name="check-circle" size={15} color="var(--st-accent)" sw={2.2} />}
+            <span style={{ font: "700 14px Inter,sans-serif", color: active ? "var(--fr-accent)" : "var(--fr-text)" }}>{title}</span>
+            {active && <Icon name="check-circle" size={15} color="var(--fr-accent)" sw={2.2} />}
           </div>
-          <div style={{ fontSize: 12.5, color: "var(--st-text-3)", marginTop: 4, lineHeight: 1.45 }}>{desc}</div>
+          <div style={{ fontSize: 12.5, color: "var(--fr-text-3)", marginTop: 4, lineHeight: 1.45 }}>{desc}</div>
         </div>
       </div>
     );
@@ -6075,58 +6075,58 @@ export function FrostApp() {
         </div>
       </div>
       {state.pwError && (
-        <div style={{ marginTop: 12, font: "600 12.5px Inter,sans-serif", color: "var(--st-danger)" }}>{state.pwError}</div>
+        <div style={{ marginTop: 12, font: "600 12.5px Inter,sans-serif", color: "var(--fr-danger)" }}>{state.pwError}</div>
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
-        <button className="clk" onClick={changeOwnPassword} disabled={!pwReady || state.pwBusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: !pwReady || state.pwBusy ? "var(--st-accent-muted)" : "var(--st-accent)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: !pwReady || state.pwBusy ? "not-allowed" : "pointer" }}>
+        <button className="clk" onClick={changeOwnPassword} disabled={!pwReady || state.pwBusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: !pwReady || state.pwBusy ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !pwReady || state.pwBusy ? "not-allowed" : "pointer" }}>
           {state.pwBusy ? t("Changing…") : t("Change password")}
         </button>
-        <span style={{ font: "500 12.5px Inter,sans-serif", color: "var(--st-text-faint)" }}>{t("You will be asked to sign in again.")}</span>
+        <span style={{ font: "500 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>{t("You will be asked to sign in again.")}</span>
       </div>
     </div>
     <div style={{ ...CARD, padding: "22px 24px" }}>
       {cardHeader("lock", "Two-factor authentication", "Protect sign-in with a Google Authenticator code")}
       {twoFAEnabled ? (
         state.twoFADisableOpen ? (
-          <div style={{ border: "1px solid var(--st-divider)", borderRadius: 12, padding: 18 }}>
-            <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text)", marginBottom: 12 }}>{t("Confirm your account password to disable 2FA")}</div>
+          <div style={{ border: "1px solid var(--fr-divider)", borderRadius: 12, padding: 18 }}>
+            <div style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 12 }}>{t("Confirm your account password to disable 2FA")}</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <input className="finp" type="password" autoComplete="current-password" placeholder={t("Account password")} value={state.twoFADisablePassword} onChange={(e) => setState({ twoFADisablePassword: e.target.value })} style={{ maxWidth: 240 }} />
-              <button className="clk" onClick={disableTwoFA} disabled={!state.twoFADisablePassword || state.twoFABusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: !state.twoFADisablePassword || state.twoFABusy ? "var(--st-danger-muted)" : "var(--st-danger)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: !state.twoFADisablePassword || state.twoFABusy ? "not-allowed" : "pointer" }}>{state.twoFABusy ? "Disabling…" : "Disable 2FA"}</button>
-              <button className="clk" onClick={cancelDisableTwoFA} style={{ height: 44, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-text-2)", cursor: "pointer" }}>{t("Cancel")}</button>
+              <button className="clk" onClick={disableTwoFA} disabled={!state.twoFADisablePassword || state.twoFABusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: !state.twoFADisablePassword || state.twoFABusy ? "var(--fr-danger-muted)" : "var(--fr-danger)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !state.twoFADisablePassword || state.twoFABusy ? "not-allowed" : "pointer" }}>{state.twoFABusy ? "Disabling…" : "Disable 2FA"}</button>
+              <button className="clk" onClick={cancelDisableTwoFA} style={{ height: 44, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>{t("Cancel")}</button>
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, border: "1px solid var(--st-success-soft)", background: "var(--st-success-soft)", borderRadius: 12, padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}><Icon name="check-circle" size={18} color="var(--st-success)" sw={2.2} /><span style={{ font: "600 13.5px Inter,sans-serif", color: "var(--st-text)" }}>{t("Enabled via authenticator app")}</span></div>
-            <button className="clk" onClick={openDisableTwoFA} style={{ height: 38, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--st-danger)", cursor: "pointer" }}>{t("Disable")}</button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, border: "1px solid var(--fr-success-soft)", background: "var(--fr-success-soft)", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}><Icon name="check-circle" size={18} color="var(--fr-success)" sw={2.2} /><span style={{ font: "600 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Enabled via authenticator app")}</span></div>
+            <button className="clk" onClick={openDisableTwoFA} style={{ height: 38, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-danger)", cursor: "pointer" }}>{t("Disable")}</button>
           </div>
         )
       ) : state.twoFASetupOpen ? (
-        <div style={{ border: "1px solid var(--st-divider)", borderRadius: 12, padding: 18 }}>
-          <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text)", marginBottom: 14 }}>{t("1. Scan this QR in your authenticator app")}</div>
+        <div style={{ border: "1px solid var(--fr-divider)", borderRadius: 12, padding: 18 }}>
+          <div style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 14 }}>{t("1. Scan this QR in your authenticator app")}</div>
           <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
             {state.twoFAQr ? (
-              <img src={state.twoFAQr} alt="TOTP QR code" width={120} height={120} style={{ flex: "none", borderRadius: 10, border: "1px solid var(--st-divider)", imageRendering: "pixelated" }} />
+              <img src={state.twoFAQr} alt="TOTP QR code" width={120} height={120} style={{ flex: "none", borderRadius: 10, border: "1px solid var(--fr-divider)", imageRendering: "pixelated" }} />
             ) : (
-              <div style={{ width: 120, height: 120, flex: "none", borderRadius: 10, background: "var(--st-hover)", border: "1px solid var(--st-divider)" }} />
+              <div style={{ width: 120, height: 120, flex: "none", borderRadius: 10, background: "var(--fr-hover)", border: "1px solid var(--fr-divider)" }} />
             )}
             <div>
-              <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text)", marginBottom: 6 }}>{t("Or enter this key manually")}</div>
-              <div className="mono" style={{ fontSize: 13, letterSpacing: 1, background: "var(--st-hover)", border: "1px solid var(--st-divider)", borderRadius: 8, padding: "8px 12px", display: "inline-block", whiteSpace: "nowrap", maxWidth: "100%", overflowX: "auto" }}>{state.twoFASecret || "…"}</div>
+              <div style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{t("Or enter this key manually")}</div>
+              <div className="mono" style={{ fontSize: 13, letterSpacing: 1, background: "var(--fr-hover)", border: "1px solid var(--fr-divider)", borderRadius: 8, padding: "8px 12px", display: "inline-block", whiteSpace: "nowrap", maxWidth: "100%", overflowX: "auto" }}>{state.twoFASecret || "…"}</div>
             </div>
           </div>
-          <div style={{ font: "600 13px Inter,sans-serif", color: "var(--st-text)", margin: "18px 0 10px" }}>{t("2. Enter the 6-digit code")}</div>
+          <div style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-text)", margin: "18px 0 10px" }}>{t("2. Enter the 6-digit code")}</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <input className="finp" inputMode="numeric" maxLength={6} placeholder="000000" value={state.twoFACode} onChange={(e) => setState({ twoFACode: e.target.value.replace(/\D/g, "") })} style={{ maxWidth: 160, font: "700 16px 'JetBrains Mono',monospace", letterSpacing: 4, textAlign: "center" }} />
-            <button className="clk" onClick={confirmTwoFA} disabled={state.twoFACode.trim().length < 6 || state.twoFABusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: state.twoFACode.trim().length < 6 || state.twoFABusy ? "var(--st-accent-muted)" : "var(--st-accent)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.twoFACode.trim().length < 6 || state.twoFABusy ? "not-allowed" : "pointer" }}>{state.twoFABusy ? "Verifying…" : "Verify & enable"}</button>
-            <button className="clk" onClick={cancelTwoFA} style={{ height: 44, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-text-2)", cursor: "pointer" }}>{t("Cancel")}</button>
+            <button className="clk" onClick={confirmTwoFA} disabled={state.twoFACode.trim().length < 6 || state.twoFABusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: state.twoFACode.trim().length < 6 || state.twoFABusy ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.twoFACode.trim().length < 6 || state.twoFABusy ? "not-allowed" : "pointer" }}>{state.twoFABusy ? "Verifying…" : "Verify & enable"}</button>
+            <button className="clk" onClick={cancelTwoFA} style={{ height: 44, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>{t("Cancel")}</button>
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, border: "1px solid var(--st-divider)", borderRadius: 12, padding: "14px 16px" }}>
-          <span style={{ font: "600 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Two-factor authentication is currently disabled.")}</span>
-          <button className="clk" onClick={startTwoFA} disabled={state.twoFABusy} style={{ height: 38, padding: "0 16px", border: "none", borderRadius: 10, background: state.twoFABusy ? "var(--st-accent-muted)" : "var(--st-accent)", color: "var(--st-on-accent)", font: "700 12.5px Inter,sans-serif", cursor: state.twoFABusy ? "not-allowed" : "pointer" }}>{state.twoFABusy ? "Preparing…" : "Enable 2FA"}</button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, border: "1px solid var(--fr-divider)", borderRadius: 12, padding: "14px 16px" }}>
+          <span style={{ font: "600 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Two-factor authentication is currently disabled.")}</span>
+          <button className="clk" onClick={startTwoFA} disabled={state.twoFABusy} style={{ height: 38, padding: "0 16px", border: "none", borderRadius: 10, background: state.twoFABusy ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 12.5px Inter,sans-serif", cursor: state.twoFABusy ? "not-allowed" : "pointer" }}>{state.twoFABusy ? "Preparing…" : "Enable 2FA"}</button>
         </div>
       )}
     </div>
@@ -6137,29 +6137,29 @@ export function FrostApp() {
   const renderProfileApi = () => (
     <div style={{ ...CARD, padding: "22px 24px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <div><div style={{ font: "700 15px Inter,sans-serif", color: "var(--st-text)" }}>{t("API keys")}</div><div style={{ fontSize: 12.5, color: "var(--st-text-3)", marginTop: 2 }}>{t("Scoped tokens for CI, bots and automation — no interactive login")}</div></div>
-        <button className="clk" onClick={openApiKeyModal} style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 40, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--st-accent)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}><Icon name="plus" size={14} color="var(--st-on-accent)" sw={2.2} />{t("Generate new key")}</button>
+        <div><div style={{ font: "700 15px Inter,sans-serif", color: "var(--fr-text)" }}>{t("API keys")}</div><div style={{ fontSize: 12.5, color: "var(--fr-text-3)", marginTop: 2 }}>{t("Scoped tokens for CI, bots and automation — no interactive login")}</div></div>
+        <button className="clk" onClick={openApiKeyModal} style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 40, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}><Icon name="plus" size={14} color="var(--fr-on-accent)" sw={2.2} />{t("Generate new key")}</button>
       </div>
-      <div style={{ marginTop: 14, border: "1px solid var(--st-divider)", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ marginTop: 14, border: "1px solid var(--fr-divider)", borderRadius: 12, overflow: "hidden" }}>
         {state.apiKeys.map((k) => (
-          <div key={k.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderTop: "1px solid var(--st-divider)" }}>
+          <div key={k.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderTop: "1px solid var(--fr-divider)" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ font: "600 13.5px Inter,sans-serif", color: "var(--st-text)" }}>{k.name}</div>
-              <div className="mono" style={{ fontSize: 12, color: "var(--st-text-3)", marginTop: 4 }}>{k.key}</div>
-              <div style={{ fontSize: 11, color: "var(--st-text-faint)", marginTop: 4 }}>
+              <div style={{ font: "600 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{k.name}</div>
+              <div className="mono" style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 4 }}>{k.key}</div>
+              <div style={{ fontSize: 11, color: "var(--fr-text-faint)", marginTop: 4 }}>
                 {k.allProjects ? t("All projects") : `${t("Projects:")} ${k.projectCount ?? 0}`}
                 {" · "}
                 {k.expires ? `until ${k.expires}` : "no expiry"}
               </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5, maxWidth: 280, justifyContent: "flex-end" }}>
-              {k.scopes.map((sc) => <span key={sc} className="mono" style={{ fontSize: 10, fontWeight: 700, color: "var(--st-accent)", background: "var(--st-accent-soft)", borderRadius: 6, padding: "3px 8px" }}>{sc}</span>)}
+              {k.scopes.map((sc) => <span key={sc} className="mono" style={{ fontSize: 10, fontWeight: 700, color: "var(--fr-accent)", background: "var(--fr-accent-soft)", borderRadius: 6, padding: "3px 8px" }}>{sc}</span>)}
             </div>
-            <div className="mono" style={{ fontSize: 11.5, color: "var(--st-text-faint)", width: 80, textAlign: "right" }}>{k.created}</div>
+            <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)", width: 80, textAlign: "right" }}>{k.created}</div>
             <div className="actbtn del" onClick={() => revokeApiKey(k.id)} style={{ flex: "none" }}><Icon name="trash" size={15} /></div>
           </div>
         ))}
-        {state.apiKeys.length === 0 && <div style={{ padding: "22px 16px", textAlign: "center", color: "var(--st-text-faint)", fontSize: 13 }}>{t("No API keys yet.")}</div>}
+        {state.apiKeys.length === 0 && <div style={{ padding: "22px 16px", textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13 }}>{t("No API keys yet.")}</div>}
       </div>
     </div>
   );
@@ -6167,66 +6167,66 @@ export function FrostApp() {
   // ---------- Modals ----------
   const modalShell = (open: boolean, onClose: () => void, zIndex: number, width: number, children: ReactNode, align: "center" | "flex-start" = "center", pad = "24px") => (
     <div className={`modalback ${open ? "open" : ""}`} onClick={onClose} style={{ position: "absolute", inset: 0, zIndex, background: "rgba(20,28,40,.42)", display: "flex", alignItems: align, justifyContent: "center", padding: pad, overflow: align === "flex-start" ? "auto" : undefined }}>
-      <div className="modalcard" onClick={stop} style={{ width, maxWidth: "100%", background: "var(--st-surface)", borderRadius: 20, boxShadow: "0 30px 80px rgba(15,27,45,.3)", padding: "28px 28px 24px" }}>
+      <div className="modalcard" onClick={stop} style={{ width, maxWidth: "100%", background: "var(--fr-surface)", borderRadius: 20, boxShadow: "0 30px 80px rgba(15,27,45,.3)", padding: "28px 28px 24px" }}>
         {children}
       </div>
     </div>
   );
 
-  const modalFooter = (onCancel: () => void, onSave: () => void, saveLabel: string, saveBg = "var(--st-accent-2)") => (
+  const modalFooter = (onCancel: () => void, onSave: () => void, saveLabel: string, saveBg = "var(--fr-accent-2)") => (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}>
-      <button className="clk" onClick={onCancel} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-      <button className="clk" onClick={onSave} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: saveBg, color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif" }}>{saveLabel}</button>
+      <button className="clk" onClick={onCancel} style={{ height: 42, padding: "0 20px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Cancel")}</button>
+      <button className="clk" onClick={onSave} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: saveBg, color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif" }}>{saveLabel}</button>
     </div>
   );
 
   return (
-    <div className="frost" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--st-bg)", position: "relative" }}>
+    <div className="frost" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--fr-bg)", position: "relative" }}>
       {/* top app bar */}
-      <header style={{ height: 58, flex: "none", display: "flex", alignItems: "center", gap: 14, padding: "0 22px", background: "var(--st-surface)", borderBottom: "1px solid var(--st-border-light)", zIndex: 30 }}>
+      <header style={{ height: 58, flex: "none", display: "flex", alignItems: "center", gap: 14, padding: "0 22px", background: "var(--fr-surface)", borderBottom: "1px solid var(--fr-border-light)", zIndex: 30 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: "-.3px", color: "var(--st-text)" }}>{t("FROST")}</div>
-          <div style={{ width: 1, height: 22, background: "var(--st-border-strong)", margin: "0 4px" }} />
-          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 2, color: "var(--st-text-faint)", fontWeight: 600 }}>OFFENSIVE RESEARCH &amp; MANAGEMENT</div>
+          <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: "-.3px", color: "var(--fr-text)" }}>{t("FROST")}</div>
+          <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", margin: "0 4px" }} />
+          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 2, color: "var(--fr-text-faint)", fontWeight: 600 }}>OFFENSIVE RESEARCH &amp; MANAGEMENT</div>
         </div>
         <div style={{ flex: 1 }} />
         <div className="clk nav iconbtn" onClick={() => toggle("notifOpen")} style={{ width: 40, height: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-          <Icon name="bell" size={19} color="var(--st-text-3)" />
-          {hasUnread && <span style={{ position: "absolute", top: 6, right: 7, width: 8, height: 8, borderRadius: "50%", background: "var(--st-danger)", border: "2px solid var(--st-surface)" }} />}
+          <Icon name="bell" size={19} color="var(--fr-text-3)" />
+          {hasUnread && <span style={{ position: "absolute", top: 6, right: 7, width: 8, height: 8, borderRadius: "50%", background: "var(--fr-danger)", border: "2px solid var(--fr-surface)" }} />}
         </div>
         <div className="clk" onClick={() => toggle("userMenuOpen")} style={{ display: "flex", alignItems: "center", gap: 9, padding: 4, borderRadius: 24 }}>
           {meAvatar(34, 12.5, meInitials)}
-          <Icon name="chevron-down" size={15} color="var(--st-text-faint)" sw={2.2} style={{ transform: state.userMenuOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+          <Icon name="chevron-down" size={15} color="var(--fr-text-faint)" sw={2.2} style={{ transform: state.userMenuOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
         </div>
       </header>
 
       {/* user menu */}
       {state.userMenuOpen && <div onClick={() => setState({ userMenuOpen: false })} style={{ position: "absolute", inset: 0, zIndex: 40 }} />}
-      <div className={`menu ${state.userMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 56, right: 16, width: 270, background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 16, boxShadow: "0 20px 54px rgba(15,27,45,.18)", zIndex: 50, overflow: "hidden" }}>
-        <div style={{ padding: "22px 20px 16px", textAlign: "center", borderBottom: "1px solid var(--st-elevated)" }}>
+      <div className={`menu ${state.userMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 56, right: 16, width: 270, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 16, boxShadow: "0 20px 54px rgba(15,27,45,.18)", zIndex: 50, overflow: "hidden" }}>
+        <div style={{ padding: "22px 20px 16px", textAlign: "center", borderBottom: "1px solid var(--fr-elevated)" }}>
           <div style={{ width: 60, height: 60, margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>{meAvatar(60, 22, meInitials)}</div>
-          <div style={{ fontWeight: 700, fontSize: 16, color: "var(--st-text)" }}>{meDisplay}</div>
-          <div className="mono" style={{ fontSize: 12, color: "var(--st-text-faint)", marginTop: 3 }}>{meEmail}</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: "var(--fr-text)" }}>{meDisplay}</div>
+          <div className="mono" style={{ fontSize: 12, color: "var(--fr-text-faint)", marginTop: 3 }}>{meEmail}</div>
         </div>
         <div style={{ padding: 8 }}>
-          <div className="nav clk" onClick={openProfile} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, font: "600 13.5px Inter,sans-serif", color: "var(--st-text)" }}><Icon name="user" size={18} color="var(--st-text-3)" />{t("Profile")}</div>
-          <div style={{ height: 1, background: "var(--st-elevated)", margin: "6px 4px" }} />
-          <div className="nav clk" onClick={() => { setState({ userMenuOpen: false }); void signOut(); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, font: "600 13.5px Inter,sans-serif", color: "var(--st-danger)" }}><Icon name="logout" size={18} color="currentColor" />{t("Logout")}</div>
+          <div className="nav clk" onClick={openProfile} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, font: "600 13.5px Inter,sans-serif", color: "var(--fr-text)" }}><Icon name="user" size={18} color="var(--fr-text-3)" />{t("Profile")}</div>
+          <div style={{ height: 1, background: "var(--fr-elevated)", margin: "6px 4px" }} />
+          <div className="nav clk" onClick={() => { setState({ userMenuOpen: false }); void signOut(); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, font: "600 13.5px Inter,sans-serif", color: "var(--fr-danger)" }}><Icon name="logout" size={18} color="currentColor" />{t("Logout")}</div>
         </div>
       </div>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* sidebar */}
-        <aside className={`sb ${state.sidebarCollapsed ? "collapsed" : ""}`} style={{ width: sideW, flex: "none", background: "var(--st-surface)", borderRight: "1px solid var(--st-border-light)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <aside className={`sb ${state.sidebarCollapsed ? "collapsed" : ""}`} style={{ width: sideW, flex: "none", background: "var(--fr-surface)", borderRight: "1px solid var(--fr-border-light)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div className="sbhead" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 14px 18px 18px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
-              <div className="lbl" style={{ fontWeight: 800, fontSize: 16, letterSpacing: 3, color: "var(--st-text)" }}>{t("FROST")}</div>
+              <div className="lbl" style={{ fontWeight: 800, fontSize: 16, letterSpacing: 3, color: "var(--fr-text)" }}>{t("FROST")}</div>
             </div>
-            <div className="clk nav iconbtn" onClick={() => toggle("sidebarCollapsed")} style={{ width: 26, height: 26, flex: "none", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--st-text-faint)" }}>
+            <div className="clk nav iconbtn" onClick={() => toggle("sidebarCollapsed")} style={{ width: 26, height: 26, flex: "none", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fr-text-faint)" }}>
               <Icon name="chevrons-left" size={18} color="currentColor" sw={2.4} style={{ transform: state.sidebarCollapsed ? "rotate(180deg)" : "none", transition: "transform .26s ease" }} />
             </div>
           </div>
-          <div className="lbl mono" style={{ padding: "0 20px 8px", fontSize: 10, letterSpacing: 1.5, color: "var(--st-text-faint)", fontWeight: 700 }}>{t("WORKSPACE")}</div>
+          <div className="lbl mono" style={{ padding: "0 20px 8px", fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("WORKSPACE")}</div>
           <nav style={{ padding: "0 12px", display: "flex", flexDirection: "column", gap: 3 }}>
             {([
               { id: "projects" as const, icon: "folder" as const, label: "Projects", onClick: selProjects },
@@ -6248,7 +6248,7 @@ export function FrostApp() {
           <main style={{ flex: 1, overflow: "auto" }}>
             {isList && renderProjects()}
             {isDocs && (
-              <Suspense fallback={<div className="route" style={{ padding: "40px 48px", color: "var(--st-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading docs…")}</div>}>
+              <Suspense fallback={<div className="route" style={{ padding: "40px 48px", color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading docs…")}</div>}>
                 <FrostDocs isAdmin={isAdmin} onNavigateWorkspace={selProjects} />
               </Suspense>
             )}
@@ -6262,8 +6262,8 @@ export function FrostApp() {
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
           </main>
-          <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--st-text-faint)", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, color: "var(--st-text-3)" }}>{t("FROST")}</span><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+          <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 700, color: "var(--fr-text-3)" }}>{t("FROST")}</span><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
           </footer>
         </div>
       </div>
@@ -6276,7 +6276,7 @@ export function FrostApp() {
         60,
         440,
         <>
-          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{state.wsUserMode === "add" ? "Invite member" : "Edit member"}</h2>
+          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px" }}>{state.wsUserMode === "add" ? "Invite member" : "Edit member"}</h2>
           {state.wsUserMode === "add" ? (
             <>
               <div style={{ marginTop: 16 }}><label className="flabel">{t("Email")}</label><input className="finp" placeholder={t("user@company.com")} value={state.wsUserEmail} onChange={(e) => setState({ wsUserEmail: e.target.value })} /></div>
@@ -6284,8 +6284,8 @@ export function FrostApp() {
           ) : (
             <>
               {/* Юзернейм неизменяем (даже админом) — как и email: только для чтения. */}
-              <div style={{ marginTop: 20 }}><label className="flabel">{t("Username")}</label><input className="finp" value={state.wsUserName} disabled style={{ background: "var(--st-elevated)", color: "var(--st-text-3)" }} /></div>
-              <div style={{ marginTop: 16 }}><label className="flabel">{t("Email")}</label><input className="finp" placeholder={t("user@company.com")} value={state.wsUserEmail} disabled style={{ background: "var(--st-elevated)", color: "var(--st-text-3)" }} /></div>
+              <div style={{ marginTop: 20 }}><label className="flabel">{t("Username")}</label><input className="finp" value={state.wsUserName} disabled style={{ background: "var(--fr-elevated)", color: "var(--fr-text-3)" }} /></div>
+              <div style={{ marginTop: 16 }}><label className="flabel">{t("Email")}</label><input className="finp" placeholder={t("user@company.com")} value={state.wsUserEmail} disabled style={{ background: "var(--fr-elevated)", color: "var(--fr-text-3)" }} /></div>
             </>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
@@ -6312,7 +6312,7 @@ export function FrostApp() {
               />
             </div>
           </div>
-          {modalFooter(closeWSUserEditor, saveWSUser, state.wsUserMode === "add" ? t("Send invite") : t("Save"), "var(--st-accent)")}
+          {modalFooter(closeWSUserEditor, saveWSUser, state.wsUserMode === "add" ? t("Send invite") : t("Save"), "var(--fr-accent)")}
         </>
       )}
 
@@ -6323,20 +6323,20 @@ export function FrostApp() {
         60,
         460,
         <>
-          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{t("Generate API key")}</h2>
+          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px" }}>{t("Generate API key")}</h2>
           <div style={{ marginTop: 20 }}><label className="flabel">{t("Key name")}</label><input className="finp" placeholder={t("e.g. CI pipeline")} value={state.apiKeyName} onChange={(e) => setState({ apiKeyName: e.target.value })} /></div>
           <div style={{ marginTop: 16 }}>
             <label className="flabel">{t("Permissions")}</label>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2, border: "1px solid var(--st-divider)", borderRadius: 11, overflow: "hidden", marginTop: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, border: "1px solid var(--fr-divider)", borderRadius: 11, overflow: "hidden", marginTop: 6 }}>
               {API_SCOPES.map((s) => {
                 const checked = !!state.apiKeyScopes[s];
                 return (
-                  <div key={s} className="clk" onClick={() => toggleApiScope(s)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderTop: "1px solid var(--st-divider)", cursor: "pointer" }}>
-                    <span style={{ width: 18, height: 18, flex: "none", borderRadius: 5, border: `1.5px solid ${checked ? "var(--st-accent)" : "var(--st-border)"}`, background: checked ? "var(--st-accent)" : "var(--st-surface)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {checked && <Icon name="check" size={12} color="var(--st-on-accent)" sw={3} />}
+                  <div key={s} className="clk" onClick={() => toggleApiScope(s)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderTop: "1px solid var(--fr-divider)", cursor: "pointer" }}>
+                    <span style={{ width: 18, height: 18, flex: "none", borderRadius: 5, border: `1.5px solid ${checked ? "var(--fr-accent)" : "var(--fr-border)"}`, background: checked ? "var(--fr-accent)" : "var(--fr-surface)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {checked && <Icon name="check" size={12} color="var(--fr-on-accent)" sw={3} />}
                     </span>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--st-text)", flex: "none" }}>{s}</span>
-                    <span style={{ fontSize: 12, color: "var(--st-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{API_SCOPE_LABELS[s]}</span>
+                    <span className="mono" style={{ fontSize: 12, color: "var(--fr-text)", flex: "none" }}>{s}</span>
+                    <span style={{ fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{API_SCOPE_LABELS[s]}</span>
                   </div>
                 );
               })}
@@ -6349,19 +6349,19 @@ export function FrostApp() {
               <div className="clk" onClick={() => setState({ apiKeyAllProjects: false })} style={{ font: "600 12.5px Inter,sans-serif", padding: "7px 13px", borderRadius: 9, cursor: "pointer", ...vfPill(!state.apiKeyAllProjects) }}>{t("Selected projects")}</div>
             </div>
             {!state.apiKeyAllProjects && (
-              <div style={{ marginTop: 8, border: "1px solid var(--st-divider)", borderRadius: 11, maxHeight: 168, overflow: "auto" }}>
+              <div style={{ marginTop: 8, border: "1px solid var(--fr-divider)", borderRadius: 11, maxHeight: 168, overflow: "auto" }}>
                 {(state.apiProjects ?? []).map((p) => {
                   const checked = state.apiKeyProjectIds.includes(p.id);
                   return (
-                    <div key={p.id} className="clk" onClick={() => toggleApiProject(p.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderTop: "1px solid var(--st-divider)", cursor: "pointer" }}>
-                      <span style={{ width: 18, height: 18, flex: "none", borderRadius: 5, border: `1.5px solid ${checked ? "var(--st-accent)" : "var(--st-border)"}`, background: checked ? "var(--st-accent)" : "var(--st-surface)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {checked && <Icon name="check" size={12} color="var(--st-on-accent)" sw={3} />}
+                    <div key={p.id} className="clk" onClick={() => toggleApiProject(p.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderTop: "1px solid var(--fr-divider)", cursor: "pointer" }}>
+                      <span style={{ width: 18, height: 18, flex: "none", borderRadius: 5, border: `1.5px solid ${checked ? "var(--fr-accent)" : "var(--fr-border)"}`, background: checked ? "var(--fr-accent)" : "var(--fr-surface)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {checked && <Icon name="check" size={12} color="var(--fr-on-accent)" sw={3} />}
                       </span>
-                      <span style={{ fontSize: 12.5, color: "var(--st-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+                      <span style={{ fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
                     </div>
                   );
                 })}
-                {(state.apiProjects ?? []).length === 0 && <div style={{ padding: 16, textAlign: "center", color: "var(--st-text-faint)", fontSize: 12.5 }}>{t("No projects available.")}</div>}
+                {(state.apiProjects ?? []).length === 0 && <div style={{ padding: 16, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 12.5 }}>{t("No projects available.")}</div>}
               </div>
             )}
           </div>
@@ -6369,7 +6369,7 @@ export function FrostApp() {
             <label className="flabel">{t("Expiry")}</label>
             <FrostDatePicker value={state.apiKeyExpiry} onChange={(v) => setState({ apiKeyExpiry: v })} min={new Date().toISOString().slice(0, 10)} placeholder={t("No expiry")} />
           </div>
-          {modalFooter(closeApiKeyModal, createApiKey, t("Generate key"), "var(--st-accent)")}
+          {modalFooter(closeApiKeyModal, createApiKey, t("Generate key"), "var(--fr-accent)")}
         </>
       )}
 
@@ -6380,8 +6380,8 @@ export function FrostApp() {
         60,
         480,
         <>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{t("New project")}</h2>
-          <div style={{ fontSize: 13.5, color: "var(--st-text-3)", marginTop: 6 }}>{t("Create a project workspace for a new engagement.")}</div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px" }}>{t("New project")}</h2>
+          <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", marginTop: 6 }}>{t("Create a project workspace for a new engagement.")}</div>
           <div style={{ marginTop: 22 }}><label className="flabel">{t("Project name")}</label><input className="finp" placeholder={t("e.g. Acme Corp — External Perimeter")} value={state.newName} onChange={(e) => setState({ newName: e.target.value })} /></div>
           <div style={{ marginTop: 16 }}><label className="flabel">{t("Description")}</label><textarea className="finp" rows={3} placeholder={t("Short summary of the engagement scope…")} value={state.newDesc} onChange={(e) => setState({ newDesc: e.target.value })} /></div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
@@ -6390,7 +6390,7 @@ export function FrostApp() {
             <div><label className="flabel">{t("End date")}</label><FrostDatePicker value={state.newEnd} onChange={(v) => setState({ newEnd: v })} min={state.newStart || undefined} /></div>
           </div>
           {datesInvalid(state.newStart, state.newEnd) && (
-            <div style={{ marginTop: 8, font: "600 12px Inter,sans-serif", color: "var(--st-danger)" }}>{DATES_ERROR}</div>
+            <div style={{ marginTop: 8, font: "600 12px Inter,sans-serif", color: "var(--fr-danger)" }}>{DATES_ERROR}</div>
           )}
           {modalFooter(() => setState({ modalOpen: false, newName: "", newDesc: "", newStart: "", newEnd: "" }), createProject, "Create project")}
         </>
@@ -6403,7 +6403,7 @@ export function FrostApp() {
         60,
         480,
         <>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{t("Edit project")}</h2>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px" }}>{t("Edit project")}</h2>
           <div style={{ marginTop: 20 }}><label className="flabel">{t("Project name")}</label><input className="finp" value={state.projEditName} onChange={(e) => setState({ projEditName: e.target.value })} /></div>
           <div style={{ marginTop: 16 }}><label className="flabel">{t("Description")}</label><textarea className="finp" rows={3} value={state.projEditDesc} onChange={(e) => setState({ projEditDesc: e.target.value })} /></div>
           <div style={{ marginTop: 16 }}>
@@ -6417,7 +6417,7 @@ export function FrostApp() {
             <div><label className="flabel">{t("End date")}</label><FrostDatePicker value={state.projEditEnd} onChange={(v) => setState({ projEditEnd: v })} min={state.projEditStart || undefined} /></div>
           </div>
           {datesInvalid(state.projEditStart, state.projEditEnd) && (
-            <div style={{ marginTop: 8, font: "600 12px Inter,sans-serif", color: "var(--st-danger)" }}>{DATES_ERROR}</div>
+            <div style={{ marginTop: 8, font: "600 12px Inter,sans-serif", color: "var(--fr-danger)" }}>{DATES_ERROR}</div>
           )}
           {modalFooter(closeProjEdit, saveProjEdit, t("Save"))}
         </>
@@ -6433,15 +6433,15 @@ export function FrostApp() {
           60,
           620,
           <>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px" }}>
               {g ? `${g.actor} ${g.verb} ${g.subject}` : ""}
             </h2>
-            {g && <div className="mono" style={{ marginTop: 6, fontSize: 11.5, color: "var(--st-text-faint)" }}>{g.time}</div>}
-            <div style={{ marginTop: 16, background: "var(--st-code-bg)", borderRadius: 10, padding: "12px 13px", display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflow: "auto" }}>
+            {g && <div className="mono" style={{ marginTop: 6, fontSize: 11.5, color: "var(--fr-text-faint)" }}>{g.time}</div>}
+            <div style={{ marginTop: 16, background: "var(--fr-code-bg)", borderRadius: 10, padding: "12px 13px", display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflow: "auto" }}>
               {g?.lines.map((l) => activityLineRow(l, g.tone))}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-              <button className="clk" onClick={close} style={{ height: 40, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-text-2)", cursor: "pointer" }}>{t("Close")}</button>
+              <button className="clk" onClick={close} style={{ height: 40, padding: "0 20px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>{t("Close")}</button>
             </div>
           </>
         );
@@ -6454,7 +6454,7 @@ export function FrostApp() {
         60,
         480,
         <>
-          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px" }}>{t("Export report")}</h2>
+          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px" }}>{t("Export report")}</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
             {REPORT_KINDS.map((r) => {
               const on = state.exportKind === r.kind;
@@ -6463,22 +6463,22 @@ export function FrostApp() {
                   key={r.kind}
                   className="clk"
                   onClick={() => setState({ exportKind: r.kind })}
-                  style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${on ? "var(--st-accent-2)" : "var(--st-border-light)"}`, background: on ? "var(--st-accent-soft)" : "var(--st-surface)" }}
+                  style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 16px", borderRadius: 12, cursor: "pointer", border: `1.5px solid ${on ? "var(--fr-accent-2)" : "var(--fr-border-light)"}`, background: on ? "var(--fr-accent-soft)" : "var(--fr-surface)" }}
                 >
-                  <span style={{ width: 18, height: 18, flex: "none", marginTop: 2, borderRadius: "50%", border: `1.5px solid ${on ? "var(--st-accent)" : "var(--st-border)"}`, display: "flex", alignItems: "center", justifyContent: "center", background: on ? "var(--st-accent)" : "var(--st-surface)" }}>
-                    {on && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--st-surface)" }} />}
+                  <span style={{ width: 18, height: 18, flex: "none", marginTop: 2, borderRadius: "50%", border: `1.5px solid ${on ? "var(--fr-accent)" : "var(--fr-border)"}`, display: "flex", alignItems: "center", justifyContent: "center", background: on ? "var(--fr-accent)" : "var(--fr-surface)" }}>
+                    {on && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--fr-surface)" }} />}
                   </span>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ font: "700 13.5px Inter,sans-serif", color: "var(--st-text)" }}>{t(r.title)}</div>
-                    <div style={{ fontSize: 12.5, color: "var(--st-text-3)", marginTop: 3, lineHeight: 1.5 }}>{t(r.desc)}</div>
+                    <div style={{ font: "700 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{t(r.title)}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--fr-text-3)", marginTop: 3, lineHeight: 1.5 }}>{t(r.desc)}</div>
                   </div>
                 </div>
               );
             })}
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
-            <button className="clk" onClick={closeExportModal} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-            <button className="clk" onClick={doExport} disabled={state.exportBusy} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: state.exportBusy ? "var(--st-accent-muted)" : "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: state.exportBusy ? "default" : "pointer" }}>
+            <button className="clk" onClick={closeExportModal} style={{ height: 42, padding: "0 20px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Cancel")}</button>
+            <button className="clk" onClick={doExport} disabled={state.exportBusy} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: state.exportBusy ? "var(--fr-accent-muted)" : "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif", cursor: state.exportBusy ? "default" : "pointer" }}>
               {state.exportBusy ? t("Generating…") : t("Download .docx")}
             </button>
           </div>
@@ -6492,7 +6492,7 @@ export function FrostApp() {
         60,
         480,
         <>
-          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--st-text)", letterSpacing: "-.4px", textTransform: "capitalize" }}>{`${state.editorMode === "add" ? t("Add") : t("Edit")} ${t(TYPELABEL[state.editorType])}`}</h2>
+          <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px", textTransform: "capitalize" }}>{`${state.editorMode === "add" ? t("Add") : t("Edit")} ${t(TYPELABEL[state.editorType])}`}</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 15, marginTop: 22 }}>
             {editorFields.map((f) => (
               <div key={f.key}>
@@ -6522,7 +6522,7 @@ export function FrostApp() {
                       autoComplete="off"
                     />
                     {f.comboOpen && (
-                      <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 12, boxShadow: "0 18px 44px rgba(15,27,45,.16)", zIndex: 60, padding: 6, overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 12, boxShadow: "0 18px 44px rgba(15,27,45,.16)", zIndex: 60, padding: 6, overflow: "hidden" }}>
                         {f.suggestions.map((o) => (
                           <div
                             key={o.value}
@@ -6533,10 +6533,10 @@ export function FrostApp() {
                               e.preventDefault();
                               o.onPick();
                             }}
-                            style={{ display: "flex", flexDirection: "column", gap: 1, padding: "8px 10px", borderRadius: 9, background: o.active ? "var(--st-accent-soft)" : "transparent" }}
+                            style={{ display: "flex", flexDirection: "column", gap: 1, padding: "8px 10px", borderRadius: 9, background: o.active ? "var(--fr-accent-soft)" : "transparent" }}
                           >
-                            <span style={{ font: "600 13.5px Inter,sans-serif", color: o.active ? "var(--st-accent)" : "var(--st-text)" }}>{o.label}</span>
-                            {o.sub && <span className="mono" style={{ fontSize: 11.5, color: "var(--st-text-3)" }}>{o.sub}</span>}
+                            <span style={{ font: "600 13.5px Inter,sans-serif", color: o.active ? "var(--fr-accent)" : "var(--fr-text)" }}>{o.label}</span>
+                            {o.sub && <span className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-3)" }}>{o.sub}</span>}
                           </div>
                         ))}
                       </div>
@@ -6548,9 +6548,9 @@ export function FrostApp() {
                     {f.tags.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                         {f.tags.map((t, ti) => (
-                          <span key={ti} className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 600, color: "var(--st-text-2)", background: "var(--st-hover)", border: "1px solid var(--st-border-light)", borderRadius: 7, padding: "4px 6px 4px 9px" }}>
+                          <span key={ti} className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 600, color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 7, padding: "4px 6px 4px 9px" }}>
                             {t.value}
-                            <span className="clk" onClick={t.onRemove} style={{ display: "flex", color: "var(--st-text-faint)" }}><Icon name="close" size={12} sw={2.4} /></span>
+                            <span className="clk" onClick={t.onRemove} style={{ display: "flex", color: "var(--fr-text-faint)" }}><Icon name="close" size={12} sw={2.4} /></span>
                           </span>
                         ))}
                       </div>
@@ -6576,33 +6576,33 @@ export function FrostApp() {
              (действие обратимо: разблокировать можно тут же на странице участников). */
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 14 }}>
-              <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--st-danger-soft)", color: "var(--st-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="lock" size={20} /></span>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{t("Block user")}</h2>
+              <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--fr-danger-soft)", color: "var(--fr-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="lock" size={20} /></span>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{t("Block user")}</h2>
             </div>
-            <div style={{ fontSize: 14, color: "var(--st-text-2)", lineHeight: 1.55 }}>
-              <b style={{ color: "var(--st-text)" }}>{state.confirmLabel}</b> {t("will lose access, but their projects, findings and notes stay. You can reactivate them here later.")}
+            <div style={{ fontSize: 14, color: "var(--fr-text-2)", lineHeight: 1.55 }}>
+              <b style={{ color: "var(--fr-text)" }}>{state.confirmLabel}</b> {t("will lose access, but their projects, findings and notes stay. You can reactivate them here later.")}
             </div>
-            {modalFooter(closeConfirm, confirmDelete, t("Block"), "var(--st-danger)")}
+            {modalFooter(closeConfirm, confirmDelete, t("Block"), "var(--fr-danger)")}
           </>
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 14 }}>
-              <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--st-danger-soft)", color: "var(--st-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={20} /></span>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{t("Confirm deletion")}</h2>
+              <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--fr-danger-soft)", color: "var(--fr-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={20} /></span>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{t("Confirm deletion")}</h2>
             </div>
-            <div style={{ fontSize: 14, color: "var(--st-text-2)", lineHeight: 1.55 }}>{t("Are you sure you want to delete")} <b style={{ color: "var(--st-text)" }}>{state.confirmLabel}</b>{t("? This action cannot be undone.")}</div>
-            {modalFooter(closeConfirm, confirmDelete, t("Delete"), "var(--st-danger)")}
+            <div style={{ fontSize: 14, color: "var(--fr-text-2)", lineHeight: 1.55 }}>{t("Are you sure you want to delete")} <b style={{ color: "var(--fr-text)" }}>{state.confirmLabel}</b>{t("? This action cannot be undone.")}</div>
+            {modalFooter(closeConfirm, confirmDelete, t("Delete"), "var(--fr-danger)")}
           </>
         )
       )}
 
       {/* endpoint detail */}
       <div className={`modalback ${state.epOpen ? "open" : ""}`} onClick={closeEndpoint} style={{ position: "absolute", inset: 0, zIndex: 66, background: "rgba(20,28,40,.42)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 24px", overflow: "auto" }}>
-        <div className="modalcard" onClick={stop} style={{ width: 820, maxWidth: "100%", background: "var(--st-surface)", borderRadius: 20, boxShadow: "0 30px 80px rgba(15,27,45,.3)", padding: "24px 26px 22px" }}>
+        <div className="modalcard" onClick={stop} style={{ width: 820, maxWidth: "100%", background: "var(--fr-surface)", borderRadius: 20, boxShadow: "0 30px 80px rgba(15,27,45,.3)", padding: "24px 26px 22px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
             <span className="mono" style={{ fontWeight: 700, borderRadius: 6, padding: "3px 10px", fontSize: 12, background: (METHOD[state.epData.method] ?? PORT.closed).bg, color: (METHOD[state.epData.method] ?? PORT.closed).color }}>{state.epData.method}</span>
-            <span className="mono" style={{ font: "700 15px 'JetBrains Mono',monospace", color: "var(--st-text)" }}>{state.epData.path}</span>
-            <span className="mono" style={{ fontSize: 12, color: "var(--st-text-3)", background: "var(--st-hover)", borderRadius: 6, padding: "3px 9px" }}>{state.epData.host}</span>
+            <span className="mono" style={{ font: "700 15px 'JetBrains Mono',monospace", color: "var(--fr-text)" }}>{state.epData.path}</span>
+            <span className="mono" style={{ fontSize: 12, color: "var(--fr-text-3)", background: "var(--fr-hover)", borderRadius: 6, padding: "3px 9px" }}>{state.epData.host}</span>
             <div style={{ flex: 1 }} />
             <div className="clk actbtn" onClick={closeEndpoint}><Icon name="close" size={18} /></div>
           </div>
@@ -6611,10 +6611,10 @@ export function FrostApp() {
               still editable and stored on the endpoint. */}
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--st-text-faint)", fontWeight: 700 }}>{t("REQUEST")}</div>
+              <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("REQUEST")}</div>
               <div style={{ flex: 1 }} />
               <Tip label={t("Copy cURL request")}>
-                <span className="clk" onClick={() => copyCurl(state.epData)} style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 11.5px Inter,sans-serif", color: "var(--st-accent-2)", cursor: "pointer" }}>
+                <span className="clk" onClick={() => copyCurl(state.epData)} style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 11.5px Inter,sans-serif", color: "var(--fr-accent-2)", cursor: "pointer" }}>
                   <Icon name="copy" size={13} />{t("Copy cURL")}
                 </span>
               </Tip>
@@ -6622,44 +6622,44 @@ export function FrostApp() {
             <textarea className="finp mono" rows={9} style={{ fontSize: 12, lineHeight: 1.6, resize: "vertical" }} value={state.epRequest} onChange={(e) => setState({ epRequest: e.target.value })} placeholder={`${state.epData.method} ${state.epData.path} HTTP/1.1`} />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-            <button className="clk" onClick={() => copyText(state.epRequest, "Request")} style={{ display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}>
-              <Icon name="copy" size={15} color="var(--st-on-accent)" />{t("Copy request")}
+            <button className="clk" onClick={() => copyText(state.epRequest, "Request")} style={{ display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: "pointer" }}>
+              <Icon name="copy" size={15} color="var(--fr-on-accent)" />{t("Copy request")}
             </button>
           </div>
-          <div style={{ height: 1, background: "var(--st-divider)", margin: "22px 0 18px" }} />
-          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--st-text-faint)", fontWeight: 700, marginBottom: 10 }}>{t("DISCUSSION")}</div>
-          <div style={{ background: "var(--st-hover)", border: "1px solid var(--st-divider)", borderRadius: 12, padding: 16, fontSize: 13, color: "var(--st-text-3)", marginBottom: 12 }}>{t("No comments yet — start the discussion.")}</div>
+          <div style={{ height: 1, background: "var(--fr-divider)", margin: "22px 0 18px" }} />
+          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700, marginBottom: 10 }}>{t("DISCUSSION")}</div>
+          <div style={{ background: "var(--fr-hover)", border: "1px solid var(--fr-divider)", borderRadius: 12, padding: 16, fontSize: 13, color: "var(--fr-text-3)", marginBottom: 12 }}>{t("No comments yet — start the discussion.")}</div>
           <textarea className="finp" rows={3} placeholder={t("Share progress, blockers, or review notes…")} />
           <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: 12 }}>
-            <button className="clk" onClick={closeEndpoint} style={{ height: 40, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--st-accent-2)", color: "var(--st-on-accent)", font: "700 13px Inter,sans-serif" }}>{t("Post comment")}</button>
+            <button className="clk" onClick={closeEndpoint} style={{ height: 40, padding: "0 18px", border: "none", borderRadius: 10, background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif" }}>{t("Post comment")}</button>
           </div>
         </div>
       </div>
 
       {/* notifications panel */}
       <div className={`notifback ${state.notifOpen ? "open" : ""}`} onClick={() => setState({ notifOpen: false })} style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(20,28,40,.3)", display: "flex", justifyContent: "flex-end" }}>
-        <div className="notifpanel" onClick={stop} style={{ width: 390, maxWidth: "90%", height: "100%", background: "var(--st-surface)", boxShadow: "-20px 0 60px rgba(15,27,45,.2)", display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "22px 24px 18px", borderBottom: "1px solid var(--st-divider)" }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: "var(--st-text)" }}>{t("Notifications")}</div>
-            <span className="mono" style={{ padding: "3px 9px", borderRadius: 8, background: "var(--st-accent-soft)", color: "var(--st-accent)", fontSize: 11, fontWeight: 700 }}>{newCount} {t("new")}</span>
+        <div className="notifpanel" onClick={stop} style={{ width: 390, maxWidth: "90%", height: "100%", background: "var(--fr-surface)", boxShadow: "-20px 0 60px rgba(15,27,45,.2)", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "22px 24px 18px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: "var(--fr-text)" }}>{t("Notifications")}</div>
+            <span className="mono" style={{ padding: "3px 9px", borderRadius: 8, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", fontSize: 11, fontWeight: 700 }}>{newCount} {t("new")}</span>
             <div style={{ flex: 1 }} />
-            <div className="clk" onClick={markAllNotifsRead} style={{ font: "600 13px Inter,sans-serif", color: "var(--st-accent-2)" }}>{t("Mark all read")}</div>
+            <div className="clk" onClick={markAllNotifsRead} style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-accent-2)" }}>{t("Mark all read")}</div>
           </div>
           <div style={{ flex: 1, overflow: "auto", padding: 6 }}>
             {notifs.map((n) => (
               <div key={n.key} className="notifitem clk" onClick={n.onClick} style={{ display: "flex", gap: 13, padding: "14px 16px", borderRadius: 12, alignItems: "flex-start" }}>
-                <div style={{ width: 36, height: 36, flex: "none", borderRadius: "50%", background: n.avBg, color: "var(--st-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 12px 'JetBrains Mono',monospace" }}>{n.initials}</div>
+                <div style={{ width: 36, height: 36, flex: "none", borderRadius: "50%", background: n.avBg, color: "var(--fr-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", font: "700 12px 'JetBrains Mono',monospace" }}>{n.initials}</div>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 13.5, color: "var(--st-text)", lineHeight: 1.45 }}>
-                    <span className="mono" style={{ color: "var(--st-accent)", fontWeight: 600 }}>{n.user}</span> {n.action}{" "}
-                    <span style={{ fontWeight: 700, color: "var(--st-text)" }}>{n.where}</span>
+                  <div style={{ fontSize: 13.5, color: "var(--fr-text)", lineHeight: 1.45 }}>
+                    <span className="mono" style={{ color: "var(--fr-accent)", fontWeight: 600 }}>{n.user}</span> {n.action}{" "}
+                    <span style={{ fontWeight: 700, color: "var(--fr-text)" }}>{n.where}</span>
                   </div>
-                  <div className="mono" style={{ fontSize: 11, color: "var(--st-text-faint)", marginTop: 5 }}>{n.meta}</div>
+                  <div className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)", marginTop: 5 }}>{n.meta}</div>
                 </div>
-                {n.unread && <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--st-accent-2)", marginTop: 5 }} />}
+                {n.unread && <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--fr-accent-2)", marginTop: 5 }} />}
               </div>
             ))}
-            {notifs.length === 0 && <div style={{ padding: 48, textAlign: "center", color: "var(--st-text-faint)", fontSize: 13.5 }}>{t("No notifications.")}</div>}
+            {notifs.length === 0 && <div style={{ padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No notifications.")}</div>}
           </div>
         </div>
       </div>
@@ -6668,8 +6668,8 @@ export function FrostApp() {
       {state.lightboxSrc && (
         <div onClick={() => setState({ lightboxSrc: null })} style={{ position: "fixed", inset: 0, zIndex: 90, background: "rgba(10,16,26,.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 40, cursor: "zoom-out", animation: "frost-fade .18s ease both" }}>
           <img src={state.lightboxSrc} alt="Step screenshot" onClick={stop} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12, boxShadow: "0 30px 80px rgba(0,0,0,.5)", display: "block", cursor: "default" }} />
-          <div className="clk" onClick={() => setState({ lightboxSrc: null })} style={{ position: "fixed", top: 22, right: 24, width: 40, height: 40, borderRadius: "50%", background: "rgba(255,255,255,.12)", color: "var(--st-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <Icon name="close" size={20} color="var(--st-on-accent)" />
+          <div className="clk" onClick={() => setState({ lightboxSrc: null })} style={{ position: "fixed", top: 22, right: 24, width: 40, height: 40, borderRadius: "50%", background: "rgba(255,255,255,.12)", color: "var(--fr-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <Icon name="close" size={20} color="var(--fr-on-accent)" />
           </div>
         </div>
       )}

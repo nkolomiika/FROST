@@ -37,7 +37,7 @@ export function PasswordInput({ id, value, onChange, placeholder, autoComplete, 
         onClick={() => setShow((s) => !s)}
         aria-label={show ? "Hide password" : "Show password"}
         title={show ? "Hide password" : "Show password"}
-        style={{ position: "absolute", top: 0, right: 0, height: "100%", width: 42, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", color: "var(--st-text-faint)", cursor: "pointer", padding: 0 }}
+        style={{ position: "absolute", top: 0, right: 0, height: "100%", width: 42, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", color: "var(--fr-text-faint)", cursor: "pointer", padding: 0 }}
       >
         <Icon name={show ? "eye-off" : "eye"} size={18} />
       </button>

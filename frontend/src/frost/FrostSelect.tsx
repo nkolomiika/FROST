@@ -64,15 +64,15 @@ export function FrostSelect({ value, options, onChange, id, placeholder }: Frost
           display: "flex",
           alignItems: "center",
           gap: 9,
-          border: `1px solid ${open ? "var(--st-focus-border)" : "var(--st-border)"}`,
+          border: `1px solid ${open ? "var(--fr-focus-border)" : "var(--fr-border)"}`,
           borderRadius: 11,
           padding: "0 12px",
-          background: "var(--st-surface)",
+          background: "var(--fr-surface)",
           font: "500 14px Inter,sans-serif",
-          color: selected ? "var(--st-text)" : "var(--st-text-faint)",
+          color: selected ? "var(--fr-text)" : "var(--fr-text-faint)",
           cursor: "pointer",
           outline: "none",
-          boxShadow: open ? "0 0 0 3px var(--st-focus-ring)" : "none",
+          boxShadow: open ? "0 0 0 3px var(--fr-focus-ring)" : "none",
           transition: "border-color .12s, box-shadow .12s",
         }}
       >
@@ -83,7 +83,7 @@ export function FrostSelect({ value, options, onChange, id, placeholder }: Frost
         <Icon
           name="chevron-down"
           size={16}
-          color="var(--st-text-faint)"
+          color="var(--fr-text-faint)"
           sw={2.2}
           style={{ transition: "transform .18s ease", transform: open ? "rotate(180deg)" : "none" }}
         />
@@ -97,10 +97,10 @@ export function FrostSelect({ value, options, onChange, id, placeholder }: Frost
           top: 48,
           left: 0,
           right: 0,
-          background: "var(--st-surface)",
-          border: "1px solid var(--st-border-light)",
+          background: "var(--fr-surface)",
+          border: "1px solid var(--fr-border-light)",
           borderRadius: 12,
-          boxShadow: "0 20px 54px var(--st-shadow-strong)",
+          boxShadow: "0 20px 54px var(--fr-shadow-strong)",
           zIndex: 50,
           padding: 6,
           transformOrigin: "top",
@@ -125,15 +125,15 @@ export function FrostSelect({ value, options, onChange, id, placeholder }: Frost
                 padding: "9px 10px",
                 borderRadius: 9,
                 cursor: "pointer",
-                background: on ? "var(--st-accent-soft)" : "transparent",
+                background: on ? "var(--fr-accent-soft)" : "transparent",
               }}
             >
               {o.dot && <span style={{ width: 9, height: 9, borderRadius: "50%", flex: "none", background: o.dot }} />}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ font: "600 13.5px Inter,sans-serif", color: on ? "var(--st-accent)" : "var(--st-text)" }}>{o.label}</div>
-                {o.desc && <div style={{ fontSize: 11.5, color: "var(--st-text-3)", marginTop: 1 }}>{o.desc}</div>}
+                <div style={{ font: "600 13.5px Inter,sans-serif", color: on ? "var(--fr-accent)" : "var(--fr-text)" }}>{o.label}</div>
+                {o.desc && <div style={{ fontSize: 11.5, color: "var(--fr-text-3)", marginTop: 1 }}>{o.desc}</div>}
               </div>
-              {on && <Icon name="check" size={16} color="var(--st-accent)" sw={2.4} />}
+              {on && <Icon name="check" size={16} color="var(--fr-accent)" sw={2.4} />}
             </div>
           );
         })}

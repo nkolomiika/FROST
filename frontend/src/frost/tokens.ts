@@ -1,4 +1,4 @@
-/* Design tokens ported from the FROST prototype (PCF.dc.html).
+/* FROST design tokens — the workspace colour system.
    Colour pairs are {bg, color}; single dot/text colours are plain strings. */
 
 import type { HostStatus, Method, PortState, Role, Severity, VStatus, WsRole } from "./data";
@@ -10,51 +10,51 @@ export interface ColorPair {
 
 /** Host status dot colours. */
 export const STDOT: Record<HostStatus, string> = {
-  up: "var(--st-success)",
-  down: "var(--st-danger)",
-  unknown: "var(--st-warn)",
+  up: "var(--fr-success)",
+  down: "var(--fr-danger)",
+  unknown: "var(--fr-warn)",
 };
 
 /** Port pill colours by TCP/UDP state. */
 export const PORT: Record<PortState, ColorPair> = {
-  open: { bg: "var(--st-success-soft)", color: "var(--st-success)" },
-  filtered: { bg: "var(--st-warn-soft)", color: "var(--st-warn)" },
-  closed: { bg: "var(--st-elevated)", color: "var(--st-text-3)" },
+  open: { bg: "var(--fr-success-soft)", color: "var(--fr-success)" },
+  filtered: { bg: "var(--fr-warn-soft)", color: "var(--fr-warn)" },
+  closed: { bg: "var(--fr-elevated)", color: "var(--fr-text-3)" },
 };
 
 /** HTTP method badge colours. */
 export const METHOD: Record<Method, ColorPair> = {
-  GET: { bg: "var(--st-success-soft)", color: "var(--st-success)" },
-  POST: { bg: "var(--st-accent-soft)", color: "var(--st-accent)" },
-  PUT: { bg: "var(--st-purple-soft)", color: "var(--st-purple)" },
-  PATCH: { bg: "var(--st-warn-soft)", color: "var(--st-warn)" },
-  DELETE: { bg: "var(--st-danger-soft)", color: "var(--st-danger)" },
-  QUERY: { bg: "var(--st-cyan-soft)", color: "var(--st-cyan)" },
+  GET: { bg: "var(--fr-success-soft)", color: "var(--fr-success)" },
+  POST: { bg: "var(--fr-accent-soft)", color: "var(--fr-accent)" },
+  PUT: { bg: "var(--fr-purple-soft)", color: "var(--fr-purple)" },
+  PATCH: { bg: "var(--fr-warn-soft)", color: "var(--fr-warn)" },
+  DELETE: { bg: "var(--fr-danger-soft)", color: "var(--fr-danger)" },
+  QUERY: { bg: "var(--fr-cyan-soft)", color: "var(--fr-cyan)" },
 };
 
 /** Severity badge colours. */
 export const SEV: Record<Severity, ColorPair> = {
-  critical: { bg: "var(--st-danger-soft)", color: "var(--st-danger)" },
-  high: { bg: "var(--st-warn-soft)", color: "var(--st-orange)" },
-  medium: { bg: "var(--st-warn-soft)", color: "var(--st-warn)" },
-  low: { bg: "var(--st-accent-soft)", color: "var(--st-accent)" },
-  info: { bg: "var(--st-elevated)", color: "var(--st-text-3)" },
+  critical: { bg: "var(--fr-danger-soft)", color: "var(--fr-danger)" },
+  high: { bg: "var(--fr-warn-soft)", color: "var(--fr-orange)" },
+  medium: { bg: "var(--fr-warn-soft)", color: "var(--fr-warn)" },
+  low: { bg: "var(--fr-accent-soft)", color: "var(--fr-accent)" },
+  info: { bg: "var(--fr-elevated)", color: "var(--fr-text-3)" },
 };
 
 /** Badge colour for a secret found in JS, by its severity. */
 export const SECRET_SEV: Record<string, ColorPair> = {
-  high: { bg: "var(--st-danger-soft)", color: "var(--st-danger)" },
-  medium: { bg: "var(--st-warn-soft)", color: "var(--st-warn)" },
-  low: { bg: "var(--st-elevated)", color: "var(--st-text-3)" },
+  high: { bg: "var(--fr-danger-soft)", color: "var(--fr-danger)" },
+  medium: { bg: "var(--fr-warn-soft)", color: "var(--fr-warn)" },
+  low: { bg: "var(--fr-elevated)", color: "var(--fr-text-3)" },
 };
 
 /** Vulnerability status dot/text colour. */
 export const VSTATUS: Record<VStatus, string> = {
-  open: "var(--st-danger)",
-  in_progress: "var(--st-warn)",
-  fixed: "var(--st-success)",
-  wont_fix: "var(--st-text-3)",
-  accepted_risk: "var(--st-purple)",
+  open: "var(--fr-danger)",
+  in_progress: "var(--fr-warn)",
+  fixed: "var(--fr-success)",
+  wont_fix: "var(--fr-text-3)",
+  accepted_risk: "var(--fr-purple)",
 };
 
 /** Human labels for the backend's vulnerability statuses. */
@@ -84,25 +84,25 @@ export const EPSTATUS: Record<Method, string> = {
 
 /** Project status chip: label + colours + dot. Mirrors the backend's ProjectStatus. */
 export const PROJ_STATUS: Record<string, { label: string; bg: string; color: string; dot: string }> = {
-  active: { label: "Active", bg: "var(--st-success-soft)", color: "var(--st-success)", dot: "var(--st-success)" },
+  active: { label: "Active", bg: "var(--fr-success-soft)", color: "var(--fr-success)", dot: "var(--fr-success)" },
   // Заморожен — голубой.
-  freeze: { label: "Freeze", bg: "var(--st-cyan-soft)", color: "var(--st-cyan)", dot: "var(--st-cyan)" },
-  handover_to_development: { label: "Handover to dev", bg: "var(--st-purple-soft)", color: "var(--st-purple)", dot: "var(--st-purple)" },
-  vulnerability_recheck: { label: "Recheck", bg: "var(--st-accent-soft)", color: "var(--st-accent)", dot: "var(--st-accent-2)" },
-  completed: { label: "Completed", bg: "var(--st-warn-soft)", color: "var(--st-warn)", dot: "var(--st-warn)" },
-  archived: { label: "Archived", bg: "var(--st-elevated)", color: "var(--st-text-3)", dot: "var(--st-text-faint)" },
+  freeze: { label: "Freeze", bg: "var(--fr-cyan-soft)", color: "var(--fr-cyan)", dot: "var(--fr-cyan)" },
+  handover_to_development: { label: "Handover to dev", bg: "var(--fr-purple-soft)", color: "var(--fr-purple)", dot: "var(--fr-purple)" },
+  vulnerability_recheck: { label: "Recheck", bg: "var(--fr-accent-soft)", color: "var(--fr-accent)", dot: "var(--fr-accent-2)" },
+  completed: { label: "Completed", bg: "var(--fr-warn-soft)", color: "var(--fr-warn)", dot: "var(--fr-warn)" },
+  archived: { label: "Archived", bg: "var(--fr-elevated)", color: "var(--fr-text-3)", dot: "var(--fr-text-faint)" },
 };
 
 /** Project role badge colours. */
 export const ROLE: Record<Role, ColorPair> = {
-  lead: { bg: "var(--st-accent-soft)", color: "var(--st-accent)" },
-  pentester: { bg: "var(--st-success-soft)", color: "var(--st-success)" },
+  lead: { bg: "var(--fr-accent-soft)", color: "var(--fr-accent)" },
+  pentester: { bg: "var(--fr-success-soft)", color: "var(--fr-success)" },
 };
 
 /** Workspace (account) role badge colours. */
 export const WS_ROLE: Record<WsRole, ColorPair> = {
-  admin: { bg: "var(--st-purple-soft)", color: "var(--st-purple)" },
-  user: { bg: "var(--st-elevated)", color: "var(--st-text-3)" },
+  admin: { bg: "var(--fr-purple-soft)", color: "var(--fr-purple)" },
+  user: { bg: "var(--fr-elevated)", color: "var(--fr-text-3)" },
 };
 
 export const WS_ROLE_LABEL: Record<WsRole, string> = {
@@ -112,33 +112,33 @@ export const WS_ROLE_LABEL: Record<WsRole, string> = {
 
 /** Activity log tag colours (dark chips — dark in both themes by design). */
 export const ATAG: Record<string, ColorPair> = {
-  new: { bg: "var(--st-tag-green-bg)", color: "var(--st-tag-green)" },
-  down: { bg: "var(--st-tag-red-bg)", color: "var(--st-tag-red)" },
-  changed: { bg: "var(--st-tag-amber-bg)", color: "var(--st-tag-amber)" },
-  dns: { bg: "var(--st-tag-blue-bg)", color: "var(--st-tag-blue)" },
+  new: { bg: "var(--fr-tag-green-bg)", color: "var(--fr-tag-green)" },
+  down: { bg: "var(--fr-tag-red-bg)", color: "var(--fr-tag-red)" },
+  changed: { bg: "var(--fr-tag-amber-bg)", color: "var(--fr-tag-amber)" },
+  dns: { bg: "var(--fr-tag-blue-bg)", color: "var(--fr-tag-blue)" },
 };
 
 /** Host-status summary tiles. */
 export const HSTAT: Record<HostStatus, { label: string; color: string; bg: string }> = {
-  up: { label: "Up", color: "var(--st-success)", bg: "var(--st-success-soft)" },
-  down: { label: "Down", color: "var(--st-danger)", bg: "var(--st-danger-soft)" },
-  unknown: { label: "Unknown", color: "var(--st-warn)", bg: "var(--st-warn-soft)" },
+  up: { label: "Up", color: "var(--fr-success)", bg: "var(--fr-success-soft)" },
+  down: { label: "Down", color: "var(--fr-danger)", bg: "var(--fr-danger-soft)" },
+  unknown: { label: "Unknown", color: "var(--fr-warn)", bg: "var(--fr-warn-soft)" },
 };
 
 /** Vulnerability-status summary tiles. */
 export const VSTAT: Record<VStatus, { label: string; color: string; bg: string }> = {
-  open: { label: "Open", color: "var(--st-danger)", bg: "var(--st-danger-soft)" },
-  in_progress: { label: "In progress", color: "var(--st-warn)", bg: "var(--st-warn-soft)" },
-  fixed: { label: "Fixed", color: "var(--st-success)", bg: "var(--st-success-soft)" },
-  wont_fix: { label: "Won't fix", color: "var(--st-text-3)", bg: "var(--st-elevated)" },
-  accepted_risk: { label: "Accepted risk", color: "var(--st-purple)", bg: "var(--st-purple-soft)" },
+  open: { label: "Open", color: "var(--fr-danger)", bg: "var(--fr-danger-soft)" },
+  in_progress: { label: "In progress", color: "var(--fr-warn)", bg: "var(--fr-warn-soft)" },
+  fixed: { label: "Fixed", color: "var(--fr-success)", bg: "var(--fr-success-soft)" },
+  wont_fix: { label: "Won't fix", color: "var(--fr-text-3)", bg: "var(--fr-elevated)" },
+  accepted_risk: { label: "Accepted risk", color: "var(--fr-purple)", bg: "var(--fr-purple-soft)" },
 };
 
 /** Project-list "findings" badge colours. */
 export const FINDING_SEV: Record<"none" | "med" | "high", { fBg: string; fColor: string; fDot: string }> = {
-  none: { fBg: "var(--st-elevated)", fColor: "var(--st-text-3)", fDot: "var(--st-text-faint)" },
-  med: { fBg: "var(--st-warn-soft)", fColor: "var(--st-warn)", fDot: "var(--st-warn)" },
-  high: { fBg: "var(--st-danger-soft)", fColor: "var(--st-danger)", fDot: "var(--st-danger)" },
+  none: { fBg: "var(--fr-elevated)", fColor: "var(--fr-text-3)", fDot: "var(--fr-text-faint)" },
+  med: { fBg: "var(--fr-warn-soft)", fColor: "var(--fr-warn)", fDot: "var(--fr-warn)" },
+  high: { fBg: "var(--fr-danger-soft)", fColor: "var(--fr-danger)", fDot: "var(--fr-danger)" },
 };
 
 /* Scopes агент-токенов /api/v2. ЕДИНСТВЕННЫЙ источник истины — бэкенд
@@ -157,7 +157,7 @@ export const API_SCOPE_LABELS: Record<string, string> = {
 };
 
 /** Avatar colour rotation used when adding new project members. */
-export const MEMBER_COLORS = ["var(--st-accent)", "var(--st-success)", "var(--st-purple)", "var(--st-orange)"];
+export const MEMBER_COLORS = ["var(--fr-accent)", "var(--fr-success)", "var(--fr-purple)", "var(--fr-orange)"];
 
 export type EditorType = "host" | "ip" | "endpoint" | "vuln" | "note" | "member" | "cred";
 

@@ -1,5 +1,5 @@
-/* Inline SVG icons (Feather/Lucide-style, 2px outline) ported from the FROST
-   prototype. Rendered through a single <Icon name=…> component. */
+/* Inline SVG icons (Feather/Lucide-style, 2px outline) for the FROST UI.
+   Rendered through a single <Icon name=…> component. */
 
 import type { CSSProperties, ReactNode } from "react";
 

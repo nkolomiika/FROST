@@ -84,17 +84,17 @@ export function FrostLogin() {
   };
 
   return (
-    <div className="frost" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--st-bg)" }}>
+    <div className="frost" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--fr-bg)" }}>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: 420, maxWidth: "100%" }}>
           {/* brand */}
           <div style={{ display: "flex", alignItems: "center", gap: 11, justifyContent: "center", marginBottom: 22 }}>
-            <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: 3, color: "var(--st-text)" }}>FROST</div>
+            <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: 3, color: "var(--fr-text)" }}>FROST</div>
           </div>
 
           {stage === "credentials" ? (
-            <form onSubmit={handleSubmit} style={{ background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
-              <h1 style={{ margin: "0 0 22px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--st-text)" }}>Sign in</h1>
+            <form onSubmit={handleSubmit} style={{ background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
+              <h1 style={{ margin: "0 0 22px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--fr-text)" }}>Sign in</h1>
 
               <div style={{ marginBottom: 15 }}>
                 <label className="flabel" htmlFor="frost-user">Username</label>
@@ -114,8 +114,8 @@ export function FrostLogin() {
                   height: 46,
                   border: "none",
                   borderRadius: 12,
-                  background: disabled ? "var(--st-accent-muted)" : "var(--st-accent)",
-                  color: "var(--st-on-accent)",
+                  background: disabled ? "var(--fr-accent-muted)" : "var(--fr-accent)",
+                  color: "var(--fr-on-accent)",
                   font: "700 14px Inter,sans-serif",
                   cursor: disabled ? "not-allowed" : "pointer",
                   display: "flex",
@@ -126,22 +126,22 @@ export function FrostLogin() {
                 }}
               >
                 {isLoading ? "Signing in…" : "Sign in"}
-                {!isLoading && <Icon name="chevron-right" size={16} color="var(--st-on-accent)" sw={2.4} />}
+                {!isLoading && <Icon name="chevron-right" size={16} color="var(--fr-on-accent)" sw={2.4} />}
               </button>
 
               <button
                 type="button"
                 className="clk"
                 onClick={() => setStage("forgot")}
-                style={{ width: "100%", marginTop: 12, height: 38, border: "none", borderRadius: 10, background: "transparent", color: "var(--st-text-2)", font: "600 13px Inter,sans-serif", cursor: "pointer" }}
+                style={{ width: "100%", marginTop: 12, height: 38, border: "none", borderRadius: 10, background: "transparent", color: "var(--fr-text-2)", font: "600 13px Inter,sans-serif", cursor: "pointer" }}
               >
                 Forgot password?
               </button>
             </form>
           ) : stage === "forgot" ? (
-            <form onSubmit={handleForgot} style={{ background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
-              <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--st-text)" }}>Reset password</h1>
-              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--st-text-2)", lineHeight: 1.5 }}>
+            <form onSubmit={handleForgot} style={{ background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
+              <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--fr-text)" }}>Reset password</h1>
+              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--fr-text-2)", lineHeight: 1.5 }}>
                 Enter the email address of your account — we'll send you a link to set a new password.
               </p>
 
@@ -168,8 +168,8 @@ export function FrostLogin() {
                   height: 46,
                   border: "none",
                   borderRadius: 12,
-                  background: resetDisabled ? "var(--st-accent-muted)" : "var(--st-accent)",
-                  color: "var(--st-on-accent)",
+                  background: resetDisabled ? "var(--fr-accent-muted)" : "var(--fr-accent)",
+                  color: "var(--fr-on-accent)",
                   font: "700 14px Inter,sans-serif",
                   cursor: resetDisabled ? "not-allowed" : "pointer",
                   display: "flex",
@@ -180,44 +180,44 @@ export function FrostLogin() {
                 }}
               >
                 {resetBusy ? "Sending…" : "Send reset link"}
-                {!resetBusy && <Icon name="chevron-right" size={16} color="var(--st-on-accent)" sw={2.4} />}
+                {!resetBusy && <Icon name="chevron-right" size={16} color="var(--fr-on-accent)" sw={2.4} />}
               </button>
 
               <button
                 type="button"
                 className="clk"
                 onClick={backToLogin}
-                style={{ width: "100%", marginTop: 12, height: 40, border: "none", borderRadius: 10, background: "transparent", color: "var(--st-text-2)", font: "600 13px Inter,sans-serif", cursor: "pointer" }}
+                style={{ width: "100%", marginTop: 12, height: 40, border: "none", borderRadius: 10, background: "transparent", color: "var(--fr-text-2)", font: "600 13px Inter,sans-serif", cursor: "pointer" }}
               >
                 Back to sign in
               </button>
             </form>
           ) : stage === "forgotSent" ? (
-            <div style={{ background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
+            <div style={{ background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--st-accent-soft)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon name="mail" size={20} color="var(--st-accent)" sw={2} />
+                <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--fr-accent-soft)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon name="mail" size={20} color="var(--fr-accent)" sw={2} />
                 </span>
-                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-.5px", color: "var(--st-text)" }}>Check your email</h1>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-.5px", color: "var(--fr-text)" }}>Check your email</h1>
               </div>
               {/* Формулировка намеренно не подтверждает существование аккаунта. */}
-              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--st-text-2)", lineHeight: 1.6 }}>
-                If an account exists for <b style={{ color: "var(--st-text)" }}>{resetEmail.trim()}</b>, we've sent it a link to set a new password. The link is single-use and expires shortly.
+              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--fr-text-2)", lineHeight: 1.6 }}>
+                If an account exists for <b style={{ color: "var(--fr-text)" }}>{resetEmail.trim()}</b>, we've sent it a link to set a new password. The link is single-use and expires shortly.
               </p>
               <button
                 type="button"
                 className="clk"
                 onClick={backToLogin}
-                style={{ width: "100%", height: 46, border: "none", borderRadius: 12, background: "var(--st-accent)", color: "var(--st-on-accent)", font: "700 14px Inter,sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}
+                style={{ width: "100%", height: 46, border: "none", borderRadius: 12, background: "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 14px Inter,sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}
               >
                 Back to sign in
-                <Icon name="chevron-right" size={16} color="var(--st-on-accent)" sw={2.4} />
+                <Icon name="chevron-right" size={16} color="var(--fr-on-accent)" sw={2.4} />
               </button>
             </div>
           ) : (
-            <form onSubmit={handleVerify} style={{ background: "var(--st-surface)", border: "1px solid var(--st-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
-              <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--st-text)" }}>Two-factor code</h1>
-              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--st-text-2)", lineHeight: 1.5 }}>Enter the 6-digit code from your authenticator app.</p>
+            <form onSubmit={handleVerify} style={{ background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, boxShadow: "0 24px 60px rgba(15,27,45,.10)", padding: "32px 34px 30px" }}>
+              <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--fr-text)" }}>Two-factor code</h1>
+              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--fr-text-2)", lineHeight: 1.5 }}>Enter the 6-digit code from your authenticator app.</p>
 
               <div style={{ marginBottom: 22 }}>
                 <label className="flabel" htmlFor="frost-2fa">Authentication code</label>
@@ -244,8 +244,8 @@ export function FrostLogin() {
                   height: 46,
                   border: "none",
                   borderRadius: 12,
-                  background: codeDisabled ? "var(--st-accent-muted)" : "var(--st-accent)",
-                  color: "var(--st-on-accent)",
+                  background: codeDisabled ? "var(--fr-accent-muted)" : "var(--fr-accent)",
+                  color: "var(--fr-on-accent)",
                   font: "700 14px Inter,sans-serif",
                   cursor: codeDisabled ? "not-allowed" : "pointer",
                   display: "flex",
@@ -256,14 +256,14 @@ export function FrostLogin() {
                 }}
               >
                 {isLoading ? "Verifying…" : "Verify"}
-                {!isLoading && <Icon name="chevron-right" size={16} color="var(--st-on-accent)" sw={2.4} />}
+                {!isLoading && <Icon name="chevron-right" size={16} color="var(--fr-on-accent)" sw={2.4} />}
               </button>
 
               <button
                 type="button"
                 className="clk"
                 onClick={backToCredentials}
-                style={{ width: "100%", marginTop: 12, height: 40, border: "none", borderRadius: 10, background: "transparent", color: "var(--st-text-2)", font: "600 13px Inter,sans-serif", cursor: "pointer" }}
+                style={{ width: "100%", marginTop: 12, height: 40, border: "none", borderRadius: 10, background: "transparent", color: "var(--fr-text-2)", font: "600 13px Inter,sans-serif", cursor: "pointer" }}
               >
                 Back to sign in
               </button>
@@ -272,8 +272,8 @@ export function FrostLogin() {
         </div>
       </div>
 
-      <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--st-text-faint)", flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 700, color: "var(--st-text-3)" }}>FROST</span>
+      <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 700, color: "var(--fr-text-3)" }}>FROST</span>
         <span>·</span>
         <span>Copyright © 2026. All rights reserved.</span>
       </footer>

@@ -19,8 +19,8 @@ const REASON_TEXT: Record<string, string> = {
 };
 
 const card: React.CSSProperties = {
-  background: "var(--st-surface)",
-  border: "1px solid var(--st-border-light)",
+  background: "var(--fr-surface)",
+  border: "1px solid var(--fr-border-light)",
   borderRadius: 20,
   boxShadow: "0 24px 60px rgba(15,27,45,.10)",
   padding: "32px 34px 30px",
@@ -79,36 +79,36 @@ export function FrostResetPassword() {
   };
 
   return (
-    <div className="frost" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--st-bg)" }}>
+    <div className="frost" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--fr-bg)" }}>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: 420, maxWidth: "100%" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11, justifyContent: "center", marginBottom: 22 }}>
-            <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: 3, color: "var(--st-text)" }}>FROST</div>
+            <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: 3, color: "var(--fr-text)" }}>FROST</div>
           </div>
 
           {loading ? (
-            <div style={{ ...card, textAlign: "center", color: "var(--st-text-3)", fontSize: 14 }}>Checking the link…</div>
+            <div style={{ ...card, textAlign: "center", color: "var(--fr-text-3)", fontSize: 14 }}>Checking the link…</div>
           ) : !info?.valid ? (
             <div style={card}>
-              <h1 style={{ margin: "0 0 12px", fontSize: 24, fontWeight: 800, letterSpacing: "-.5px", color: "var(--st-text)" }}>Invalid link</h1>
-              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--st-text-2)", lineHeight: 1.55 }}>
+              <h1 style={{ margin: "0 0 12px", fontSize: 24, fontWeight: 800, letterSpacing: "-.5px", color: "var(--fr-text)" }}>Invalid link</h1>
+              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--fr-text-2)", lineHeight: 1.55 }}>
                 {REASON_TEXT[info?.reason ?? "not_found"] ?? REASON_TEXT.not_found}
               </p>
               <button
                 type="button"
                 className="clk"
                 onClick={() => navigate("/login", { replace: true })}
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 44, padding: "0 20px", border: "none", borderRadius: 12, background: "var(--st-accent)", color: "var(--st-on-accent)", font: "700 14px Inter,sans-serif", cursor: "pointer" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 44, padding: "0 20px", border: "none", borderRadius: 12, background: "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 14px Inter,sans-serif", cursor: "pointer" }}
               >
                 Go to sign in
-                <Icon name="chevron-right" size={16} color="var(--st-on-accent)" sw={2.4} />
+                <Icon name="chevron-right" size={16} color="var(--fr-on-accent)" sw={2.4} />
               </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={card}>
-              <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--st-text)" }}>Set a new password</h1>
-              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--st-text-2)", lineHeight: 1.5 }}>
-                For account <b style={{ color: "var(--st-text)" }}>{info.username}</b>.
+              <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, letterSpacing: "-.6px", color: "var(--fr-text)" }}>Set a new password</h1>
+              <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--fr-text-2)", lineHeight: 1.5 }}>
+                For account <b style={{ color: "var(--fr-text)" }}>{info.username}</b>.
               </p>
 
               <div style={{ marginBottom: 15 }}>
@@ -120,7 +120,7 @@ export function FrostResetPassword() {
                 <label className="flabel" htmlFor="rp-confirm">Confirm password</label>
                 <PasswordInput id="rp-confirm" autoComplete="new-password" placeholder="repeat the password" value={confirm} onChange={setConfirm} />
                 {confirm.length > 0 && !confirmValid && (
-                  <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: "var(--st-danger)" }}>Passwords don't match</div>
+                  <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: "var(--fr-danger)" }}>Passwords don't match</div>
                 )}
               </div>
 
@@ -133,8 +133,8 @@ export function FrostResetPassword() {
                   height: 46,
                   border: "none",
                   borderRadius: 12,
-                  background: !canSubmit ? "var(--st-accent-muted)" : "var(--st-accent)",
-                  color: "var(--st-on-accent)",
+                  background: !canSubmit ? "var(--fr-accent-muted)" : "var(--fr-accent)",
+                  color: "var(--fr-on-accent)",
                   font: "700 14px Inter,sans-serif",
                   cursor: !canSubmit ? "not-allowed" : "pointer",
                   display: "flex",
@@ -145,15 +145,15 @@ export function FrostResetPassword() {
                 }}
               >
                 {submitting ? "Saving…" : "Save password"}
-                {!submitting && <Icon name="chevron-right" size={16} color="var(--st-on-accent)" sw={2.4} />}
+                {!submitting && <Icon name="chevron-right" size={16} color="var(--fr-on-accent)" sw={2.4} />}
               </button>
             </form>
           )}
         </div>
       </div>
 
-      <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, fontSize: 12.5, color: "var(--st-text-faint)", flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 700, color: "var(--st-text-3)" }}>FROST</span>
+      <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 700, color: "var(--fr-text-3)" }}>FROST</span>
         <span>·</span>
         <span>Copyright © 2026. All rights reserved.</span>
       </footer>

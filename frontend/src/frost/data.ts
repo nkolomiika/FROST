@@ -1,8 +1,8 @@
 /* Shapes rendered by the FROST UI.
  *
- * This module used to also carry the prototype's seed data (DETAIL / ALL /
- * NOTIFS / ACTIVITY). Everything the UI shows now comes from the backend, so
- * only the types remain — each entity carries its real backend id.
+ * Only the view types live here — each entity carries its real backend id.
+ * Everything the UI shows is fetched from the backend at runtime; this module
+ * holds no seed or sample data.
  */
 
 export type PortState = "open" | "filtered" | "closed";

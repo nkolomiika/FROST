@@ -68,9 +68,9 @@ export function FrostRoot() {
   let content: React.ReactNode;
   if (!isInitialized) {
     content = (
-      <div className="frost" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, background: "var(--st-bg)" }}>
-        <div style={{ fontWeight: 800, fontSize: 26, letterSpacing: "-.4px", color: "var(--st-text)" }}>FROST</div>
-        <div className="mono" style={{ fontSize: 11, letterSpacing: 2, color: "var(--st-text-faint)", fontWeight: 700 }}>LOADING FROST…</div>
+      <div className="frost" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, background: "var(--fr-bg)" }}>
+        <div style={{ fontWeight: 800, fontSize: 26, letterSpacing: "-.4px", color: "var(--fr-text)" }}>FROST</div>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: 2, color: "var(--fr-text-faint)", fontWeight: 700 }}>LOADING FROST…</div>
       </div>
     );
   } else if (onActivate && !user) {

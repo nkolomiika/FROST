@@ -250,7 +250,7 @@ vi.mock("../api", async (importOriginal) => {
   };
 });
 
-describe("FrostApp (design prototype port)", () => {
+describe("FrostApp workspace screen", () => {
   // FrostApp only ever renders behind auth, and admin-only surfaces (the
   // workspace Members page) key off the signed-in user — so sign one in.
   beforeEach(() => {
@@ -812,7 +812,7 @@ describe("FrostApp (design prototype port)", () => {
   /* "All" is the resting state of every filter group — a fresh view must show it
      selected, not an empty row of pills where nothing looks active. */
   it("starts every recon filter group on All", async () => {
-    const activePill = (el: HTMLElement) => el.style.background === "var(--st-accent-2)";
+    const activePill = (el: HTMLElement) => el.style.background === "var(--fr-accent-2)";
     await openHostsSection();
     await screen.findByText("api.northwind.test", { selector: ".hostname" });
     // Two groups on the hosts view too — Cloudflare and Status.

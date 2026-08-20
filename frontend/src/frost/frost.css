@@ -1,5 +1,5 @@
 /* FROST — Findings, Research, Offensive Security & Testing Console
-   Global styles ported from the design prototype (PCF.dc.html).
+   Global styles for the FROST workspace.
    Colours reference the design tokens in theme.css — never a raw hex — so the
    whole UI re-themes (light/dark) by flipping <html data-theme>. */
 
@@ -8,19 +8,19 @@
 html, body, #root {
   margin: 0;
   height: 100%;
-  background: var(--st-bg);
-  color: var(--st-text);
+  background: var(--fr-bg);
+  color: var(--fr-text);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 * { box-sizing: border-box; }
 
 ::-webkit-scrollbar { width: 11px; height: 11px; }
-::-webkit-scrollbar-thumb { background: var(--st-border-strong); border-radius: 6px; border: 3px solid var(--st-bg); }
+::-webkit-scrollbar-thumb { background: var(--fr-border-strong); border-radius: 6px; border: 3px solid var(--fr-bg); }
 ::-webkit-scrollbar-track { background: transparent; }
 
-.frost a { color: var(--st-accent-2); text-decoration: none; }
-.frost a:hover { color: var(--st-accent); }
+.frost a { color: var(--fr-accent-2); text-decoration: none; }
+.frost a:hover { color: var(--fr-accent); }
 .frost .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 
 @keyframes frost-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -29,41 +29,41 @@ html, body, #root {
 .frost .frost-spin { animation: frost-spin .7s linear infinite; }
 
 .frost .prow { transition: background .12s; }
-.frost .prow:hover { background: var(--st-hover); }
+.frost .prow:hover { background: var(--fr-hover); }
 
 .frost .statc { transition: box-shadow .16s, border-color .16s; min-width: 0; overflow: hidden; user-select: none; }
-.frost .statc:hover { box-shadow: 0 8px 22px var(--st-shadow); border-color: var(--st-border-strong); }
+.frost .statc:hover { box-shadow: 0 8px 22px var(--fr-shadow); border-color: var(--fr-border-strong); }
 
 .frost .nav { transition: background .12s, color .12s; cursor: pointer; }
-.frost .nav:hover { background: var(--st-hover); }
+.frost .nav:hover { background: var(--fr-hover); }
 
 .frost .clk { cursor: pointer; }
 
 .frost .iconbtn { transition: background .12s; }
-.frost .iconbtn:hover { background: var(--st-hover); }
+.frost .iconbtn:hover { background: var(--fr-hover); }
 
-.frost .actbtn { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--st-text-faint); cursor: pointer; transition: background .12s, color .12s; }
-.frost .actbtn:hover { background: var(--st-accent-soft); color: var(--st-accent-2); }
-.frost .actbtn.del:hover { background: var(--st-danger-soft); color: var(--st-danger); }
+.frost .actbtn { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--fr-text-faint); cursor: pointer; transition: background .12s, color .12s; }
+.frost .actbtn:hover { background: var(--fr-accent-soft); color: var(--fr-accent-2); }
+.frost .actbtn.del:hover { background: var(--fr-danger-soft); color: var(--fr-danger); }
 
-.frost .addbtn { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 15px; border: none; border-radius: 10px; background: var(--st-accent-2); color: var(--st-on-accent); font: 700 12.5px Inter, sans-serif; cursor: pointer; }
+.frost .addbtn { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 15px; border: none; border-radius: 10px; background: var(--fr-accent-2); color: var(--fr-on-accent); font: 700 12.5px Inter, sans-serif; cursor: pointer; }
 
-.frost .esel { width: 100%; height: 42px; border: 1px solid var(--st-border); border-radius: 11px; padding: 0 12px; font: 500 14px Inter, sans-serif; color: var(--st-text); background: var(--st-surface); outline: none; cursor: pointer; }
-.frost .esel:focus { border-color: var(--st-focus-border); box-shadow: 0 0 0 3px var(--st-focus-ring); }
+.frost .esel { width: 100%; height: 42px; border: 1px solid var(--fr-border); border-radius: 11px; padding: 0 12px; font: 500 14px Inter, sans-serif; color: var(--fr-text); background: var(--fr-surface); outline: none; cursor: pointer; }
+.frost .esel:focus { border-color: var(--fr-focus-border); box-shadow: 0 0 0 3px var(--fr-focus-ring); }
 
-.frost .fq input { width: 100%; height: 40px; border: 1px solid var(--st-border); border-radius: 20px; padding: 0 14px 0 38px; font: 500 13.5px Inter, sans-serif; color: var(--st-text); background: var(--st-surface); outline: none; }
-.frost .fq input::placeholder { color: var(--st-text-faint); }
-.frost .fq input:focus { border-color: var(--st-focus-border); box-shadow: 0 0 0 3px var(--st-focus-ring); }
+.frost .fq input { width: 100%; height: 40px; border: 1px solid var(--fr-border); border-radius: 20px; padding: 0 14px 0 38px; font: 500 13.5px Inter, sans-serif; color: var(--fr-text); background: var(--fr-surface); outline: none; }
+.frost .fq input::placeholder { color: var(--fr-text-faint); }
+.frost .fq input:focus { border-color: var(--fr-focus-border); box-shadow: 0 0 0 3px var(--fr-focus-ring); }
 
-.frost .pillinp { font: 600 12px Inter, sans-serif; padding: 6px 12px; border-radius: 20px; background: var(--st-surface); color: var(--st-text-2); border: 1px solid var(--st-border); width: 150px; outline: none; transition: border-color .12s, box-shadow .12s; }
-.frost .pillinp::placeholder { color: var(--st-text-faint); }
-.frost .pillinp:focus { border-color: var(--st-focus-border); box-shadow: 0 0 0 3px var(--st-focus-ring); }
+.frost .pillinp { font: 600 12px Inter, sans-serif; padding: 6px 12px; border-radius: 20px; background: var(--fr-surface); color: var(--fr-text-2); border: 1px solid var(--fr-border); width: 150px; outline: none; transition: border-color .12s, box-shadow .12s; }
+.frost .pillinp::placeholder { color: var(--fr-text-faint); }
+.frost .pillinp:focus { border-color: var(--fr-focus-border); box-shadow: 0 0 0 3px var(--fr-focus-ring); }
 
-.frost .finp { width: 100%; border: 1px solid var(--st-border); border-radius: 11px; padding: 11px 13px; font: 500 14px Inter, sans-serif; color: var(--st-text); background: var(--st-surface); outline: none; resize: none; }
-.frost .finp::placeholder { color: var(--st-text-faint); }
-.frost .finp:focus { border-color: var(--st-focus-border); box-shadow: 0 0 0 3px var(--st-focus-ring); }
+.frost .finp { width: 100%; border: 1px solid var(--fr-border); border-radius: 11px; padding: 11px 13px; font: 500 14px Inter, sans-serif; color: var(--fr-text); background: var(--fr-surface); outline: none; resize: none; }
+.frost .finp::placeholder { color: var(--fr-text-faint); }
+.frost .finp:focus { border-color: var(--fr-focus-border); box-shadow: 0 0 0 3px var(--fr-focus-ring); }
 
-.frost .flabel { font: 600 12.5px Inter, sans-serif; color: var(--st-text-2); margin: 0 0 7px; display: block; }
+.frost .flabel { font: 600 12.5px Inter, sans-serif; color: var(--fr-text-2); margin: 0 0 7px; display: block; }
 
 .frost .menu { transform-origin: top right; opacity: 0; transform: translateY(-8px) scale(.97); pointer-events: none; transition: opacity .16s ease, transform .16s ease; }
 .frost .menu.open { opacity: 1; transform: none; pointer-events: auto; }
@@ -78,7 +78,7 @@ html, body, #root {
 .frost .notifback { opacity: 0; transition: opacity .28s ease; pointer-events: none; }
 .frost .notifback.open { opacity: 1; pointer-events: auto; }
 .frost .notifitem { transition: background .12s; }
-.frost .notifitem:hover { background: var(--st-hover); }
+.frost .notifitem:hover { background: var(--fr-hover); }
 
 .frost .sb { transition: width .26s cubic-bezier(.4,0,.2,1); }
 .frost .sb .lbl { white-space: nowrap; transition: opacity .12s ease; }
@@ -93,18 +93,18 @@ html, body, #root {
    underline (light blue wash + blue line) while the accent text still tells the
    two apart. Colour and underline live here rather than in inline styles, which
    would otherwise win over :hover. */
-.frost .sectab { border-radius: 9px 9px 0 0; border-bottom: 2px solid transparent; color: var(--st-text-2);
+.frost .sectab { border-radius: 9px 9px 0 0; border-bottom: 2px solid transparent; color: var(--fr-text-2);
   transition: background .14s ease, border-color .14s ease, color .14s ease; }
-.frost .sectab:hover { background: var(--st-accent-soft); border-bottom-color: var(--st-accent-2); }
-.frost .sectab.on { border-bottom-color: var(--st-accent-2); color: var(--st-accent); }
+.frost .sectab:hover { background: var(--fr-accent-soft); border-bottom-color: var(--fr-accent-2); }
+.frost .sectab.on { border-bottom-color: var(--fr-accent-2); color: var(--fr-accent); }
 
 /* Recon menu rows (Hosts / IPs / Endpoints) — hover is the same light blue wash
    as the section tabs; the open row keeps that wash and adds accent text so it
    still reads as selected. Colour and background live here for the same reason as
    .sectab: an inline background would win over :hover and kill the effect. */
-.frost .reconrow { color: var(--st-text); transition: background .14s ease, color .14s ease; }
-.frost .reconrow:hover { background: var(--st-accent-soft); }
-.frost .reconrow.on { background: var(--st-accent-soft); color: var(--st-accent); }
+.frost .reconrow { color: var(--fr-text); transition: background .14s ease, color .14s ease; }
+.frost .reconrow:hover { background: var(--fr-accent-soft); }
+.frost .reconrow.on { background: var(--fr-accent-soft); color: var(--fr-accent); }
 
 .frost .hostname:hover { text-decoration: underline; }
 
@@ -118,24 +118,24 @@ html, body, #root {
 /* Live markdown editor (FrostMarkdownEditor): the text renders in place as it is
    typed, so the editing surface has to look like the rendered note, not a form
    field with markup in it. Frame matches .finp. */
-.frost .frostmd { width: 100%; border: 1px solid var(--st-border); border-radius: 11px; padding: 12px 14px; background: var(--st-sunken); cursor: text; }
-.frost .frostmd:focus-within { border-color: var(--st-focus-border); box-shadow: 0 0 0 3px var(--st-focus-ring); background: var(--st-surface); }
-.frost .frostmd-input { outline: none; font: 500 14px Inter, sans-serif; color: var(--st-text); line-height: 1.65; }
+.frost .frostmd { width: 100%; border: 1px solid var(--fr-border); border-radius: 11px; padding: 12px 14px; background: var(--fr-sunken); cursor: text; }
+.frost .frostmd:focus-within { border-color: var(--fr-focus-border); box-shadow: 0 0 0 3px var(--fr-focus-ring); background: var(--fr-surface); }
+.frost .frostmd-input { outline: none; font: 500 14px Inter, sans-serif; color: var(--fr-text); line-height: 1.65; }
 .frost .frostmd-input > * { margin: 0 0 8px; }
 .frost .frostmd-input > *:last-child { margin-bottom: 0; }
-.frost .frostmd-input h1 { font: 800 24px Inter, sans-serif; color: var(--st-text); margin: 14px 0 6px; letter-spacing: -.4px; }
-.frost .frostmd-input h2 { font: 800 19px Inter, sans-serif; color: var(--st-text); margin: 12px 0 6px; letter-spacing: -.3px; }
-.frost .frostmd-input h3 { font: 700 16px Inter, sans-serif; color: var(--st-text); margin: 10px 0 5px; }
-.frost .frostmd-input h4, .frost .frostmd-input h5, .frost .frostmd-input h6 { font: 700 14px Inter, sans-serif; color: var(--st-text-2); margin: 9px 0 4px; }
+.frost .frostmd-input h1 { font: 800 24px Inter, sans-serif; color: var(--fr-text); margin: 14px 0 6px; letter-spacing: -.4px; }
+.frost .frostmd-input h2 { font: 800 19px Inter, sans-serif; color: var(--fr-text); margin: 12px 0 6px; letter-spacing: -.3px; }
+.frost .frostmd-input h3 { font: 700 16px Inter, sans-serif; color: var(--fr-text); margin: 10px 0 5px; }
+.frost .frostmd-input h4, .frost .frostmd-input h5, .frost .frostmd-input h6 { font: 700 14px Inter, sans-serif; color: var(--fr-text-2); margin: 9px 0 4px; }
 .frost .frostmd-input ul, .frost .frostmd-input ol { padding-left: 22px; margin: 6px 0; }
 .frost .frostmd-input li { margin: 2px 0; }
 .frost .frostmd-input li > p { margin: 0; }
-.frost .frostmd-input blockquote { border-left: 3px solid var(--st-border-strong); padding-left: 12px; margin: 8px 0; color: var(--st-text-2); }
-.frost .frostmd-input code { background: var(--st-divider); border-radius: 5px; padding: 1px 5px; font: 500 12.5px 'JetBrains Mono', ui-monospace, monospace; color: var(--st-text-2); }
-.frost .frostmd-input pre { background: var(--st-code-bg); color: var(--st-code-text); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font: 500 12.5px 'JetBrains Mono', ui-monospace, monospace; }
+.frost .frostmd-input blockquote { border-left: 3px solid var(--fr-border-strong); padding-left: 12px; margin: 8px 0; color: var(--fr-text-2); }
+.frost .frostmd-input code { background: var(--fr-divider); border-radius: 5px; padding: 1px 5px; font: 500 12.5px 'JetBrains Mono', ui-monospace, monospace; color: var(--fr-text-2); }
+.frost .frostmd-input pre { background: var(--fr-code-bg); color: var(--fr-code-text); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font: 500 12.5px 'JetBrains Mono', ui-monospace, monospace; }
 .frost .frostmd-input pre code { background: none; color: inherit; padding: 0; }
-.frost .frostmd-input a { color: var(--st-accent-2); text-decoration: underline; }
-.frost .frostmd-input hr { border: none; border-top: 1px solid var(--st-border-light); margin: 12px 0; }
+.frost .frostmd-input a { color: var(--fr-accent-2); text-decoration: underline; }
+.frost .frostmd-input hr { border: none; border-top: 1px solid var(--fr-border-light); margin: 12px 0; }
 .frost .frostmd-input img { max-width: 100%; height: auto; border-radius: 8px; }
 /* Placeholder for the empty document (TipTap's Placeholder extension). */
-.frost .frostmd-input p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--st-text-faint); float: left; height: 0; pointer-events: none; }
+.frost .frostmd-input p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--fr-text-faint); float: left; height: 0; pointer-events: none; }
