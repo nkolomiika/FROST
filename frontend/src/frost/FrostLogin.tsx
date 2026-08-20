@@ -94,7 +94,7 @@ export function FrostLogin() {
               <FrostMark size={40} />
               <FrostWordmark size={27} spacing={4} />
             </div>
-            <div className="mono" style={{ fontSize: 9.5, letterSpacing: 2.5, color: "var(--fr-text-faint)", fontWeight: 600 }}>OFFENSIVE RESEARCH &amp; MANAGEMENT</div>
+            <div className="mono" style={{ fontSize: 9.5, letterSpacing: 1.4, color: "var(--fr-text-faint)", fontWeight: 600 }}>FINDINGS · RESEARCH · OFFENSIVE · SECURITY · TESTING</div>
           </div>
 
           {stage === "credentials" ? (
