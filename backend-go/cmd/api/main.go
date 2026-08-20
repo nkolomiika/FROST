@@ -26,6 +26,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/notificationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/reconrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/reportrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
@@ -37,6 +38,7 @@ import (
 	"github.com/nkolomiika/frost/internal/app/notifications"
 	"github.com/nkolomiika/frost/internal/app/projects"
 	"github.com/nkolomiika/frost/internal/app/recon"
+	"github.com/nkolomiika/frost/internal/app/report"
 	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
@@ -141,6 +143,9 @@ func run() error {
 	reconSvc := recon.NewService(reconrepo.New(pool), recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
 	reconHandler := httpadapter.NewReconHandler(reconSvc, projectsSvc, authSvc, cfg.CSRFOrigins(), cfg.FarmMaxRawBytes)
 
+	// Контекст reports (Python-sidecar, интерим).
+	reportsHandler := httpadapter.NewReportsHandler(report.NewService(reportrepo.New(pool), fileStorage, cfg.ReportsSidecarURL, cfg.ReportsSidecarToken), projectsSvc, authSvc, cfg.CSRFOrigins())
+
 	// Контекст users (профиль/2FA/аватары/инвайты, admin-управление).
 	usersHandler := httpadapter.NewUsersHandler(
 		users.NewService(usersrepo.New(pool), cipher, fileStorage, users.Config{
@@ -150,7 +155,7 @@ func run() error {
 		}, nil),
 		authSvc, cfg.CSRFOrigins())
 
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler})
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler, Reports: reportsHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{

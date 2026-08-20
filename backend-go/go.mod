@@ -3,7 +3,6 @@ module github.com/nkolomiika/frost
 go 1.26.4
 
 require (
-	github.com/beevik/etree v1.7.1
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611
 	github.com/getkin/kin-openapi v0.147.0

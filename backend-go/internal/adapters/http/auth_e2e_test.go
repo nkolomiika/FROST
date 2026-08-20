@@ -20,6 +20,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/notificationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/reportrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/sqlc"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
@@ -31,6 +32,7 @@ import (
 	"github.com/nkolomiika/frost/internal/app/inventory"
 	"github.com/nkolomiika/frost/internal/app/notifications"
 	"github.com/nkolomiika/frost/internal/app/projects"
+	"github.com/nkolomiika/frost/internal/app/report"
 	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
 )
@@ -115,6 +117,8 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	agentTokH := NewAgentTokenHandler(agentSvc, svc, []string{testOrigin})
 	agentV2H := NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc)
 	notifH := NewNotificationsHandler(notifications.NewService(notificationsrepo.New(pool)), svc, []string{testOrigin})
+	sidecar := os.Getenv("FROST_TEST_SIDECAR_URL")
+	reportsH := NewReportsHandler(report.NewService(reportrepo.New(pool), storage.Stub{}, sidecar, ""), projectsSvc, svc, []string{testOrigin})
 	usersH := NewUsersHandler(users.NewService(usersrepo.New(pool), cipher, storage.Stub{}, users.Config{
 		AppBaseURL: "https://app", MailEnabled: true, Brand: "FROST", MinioBucketName: "frost",
 		InviteTokenExpireHours: 168, ReactivationExpireHours: 24,
@@ -122,7 +126,7 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	return httptest.NewServer(NewRouter(Deps{
 		Logger: logger, Auth: handler, Projects: projectsH, Audit: auditH,
 		Inventory: inventoryH, Vulns: vulnsH, Users: usersH,
-		AgentTokens: agentTokH, AgentV2: agentV2H, Notifications: notifH,
+		AgentTokens: agentTokH, AgentV2: agentV2H, Notifications: notifH, Reports: reportsH,
 	}))
 }
 

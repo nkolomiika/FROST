@@ -69,6 +69,10 @@ type Config struct {
 	GoogleOAuthRefresh  string  `env:"GOOGLE_OAUTH_REFRESH_TOKEN"`
 	GoogleOAuthTokenURI string  `env:"GOOGLE_OAUTH_TOKEN_URI" envDefault:"https://oauth2.googleapis.com/token"`
 
+	// --- Reports sidecar (интерим: Python word_builder за внутренним HTTP) ---
+	ReportsSidecarURL   string `env:"REPORTS_SIDECAR_URL" envDefault:"http://report-sidecar:8100"`
+	ReportsSidecarToken string `env:"REPORTS_SIDECAR_TOKEN"`
+
 	// --- Ссылки в письмах и сроки жизни токенов (часы) ---
 	AppBaseURL               string `env:"APP_BASE_URL" envDefault:"https://localhost:3000"`
 	InviteTokenExpireHours   int    `env:"INVITE_TOKEN_EXPIRE_HOURS" envDefault:"168"`
