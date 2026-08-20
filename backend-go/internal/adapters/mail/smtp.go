@@ -2,6 +2,7 @@ package mail
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"mime"
@@ -131,15 +132,44 @@ func (s *Sender) buildMessage(to, subject, text, htmlBody string) string {
 		b.WriteString(text)
 		return b.String()
 	}
-	boundary := "frost-" + fmt.Sprint(time.Now().UnixNano())
-	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
-	b.WriteString("--" + boundary + "\r\n")
+	// multipart/related объединяет письмо (text+html как alternative) и
+	// inline-логотип, на который html ссылается по cid:. Клиент показывает html
+	// с картинкой; при блокировке картинок остаётся текстовый бренд в шапке.
+	nano := fmt.Sprint(time.Now().UnixNano())
+	rel := "frost-rel-" + nano
+	alt := "frost-alt-" + nano
+	b.WriteString("Content-Type: multipart/related; boundary=\"" + rel + "\"\r\n\r\n")
+	b.WriteString("--" + rel + "\r\n")
+	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + alt + "\"\r\n\r\n")
+	b.WriteString("--" + alt + "\r\n")
 	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
 	b.WriteString(text + "\r\n")
-	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("--" + alt + "\r\n")
 	b.WriteString("Content-Type: text/html; charset=UTF-8\r\n\r\n")
 	b.WriteString(htmlBody + "\r\n")
-	b.WriteString("--" + boundary + "--\r\n")
+	b.WriteString("--" + alt + "--\r\n")
+	if len(logoPNG) > 0 {
+		b.WriteString("--" + rel + "\r\n")
+		b.WriteString("Content-Type: image/png\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n")
+		b.WriteString("Content-ID: <" + logoCID + ">\r\n")
+		b.WriteString("Content-Disposition: inline; filename=\"frost.png\"\r\n\r\n")
+		b.WriteString(base64Wrap(logoPNG) + "\r\n")
+	}
+	b.WriteString("--" + rel + "--\r\n")
+	return b.String()
+}
+
+// base64Wrap кодирует данные в base64 и переносит строки по 76 символов (RFC 2045).
+func base64Wrap(data []byte) string {
+	enc := base64.StdEncoding.EncodeToString(data)
+	var b strings.Builder
+	for len(enc) > 76 {
+		b.WriteString(enc[:76])
+		b.WriteString("\r\n")
+		enc = enc[76:]
+	}
+	b.WriteString(enc)
 	return b.String()
 }
 

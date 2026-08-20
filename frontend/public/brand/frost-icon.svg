@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FROST">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16294a"/>
+      <stop offset="1" stop-color="#0b1626"/>
+    </linearGradient>
+    <linearGradient id="ice" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#54d2ec"/>
+      <stop offset=".55" stop-color="#6f9bef"/>
+      <stop offset="1" stop-color="#3f63c9"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" fill="url(#bg)"/>
+  <polygon points="60,22 98,60 60,98 22,60" fill="url(#ice)"/>
+  <polygon points="60,22 98,60 60,60" fill="#ffffff" fill-opacity=".22"/>
+  <polygon points="22,60 60,22 60,60" fill="#ffffff" fill-opacity=".08"/>
+  <polygon points="98,60 60,98 60,60" fill="#24407e" fill-opacity=".45"/>
+  <polygon points="22,60 60,98 60,60" fill="#24407e" fill-opacity=".25"/>
+  <g stroke="#ffffff" stroke-opacity=".9" stroke-width="2.2" stroke-linecap="round">
+    <line x1="60" y1="48" x2="60" y2="72"/>
+    <line x1="48" y1="60" x2="72" y2="60"/>
+  </g>
+</svg>
