@@ -13,9 +13,18 @@ services:
       COOKIE_SECURE: "true"
       REPORTS_SIDECAR_URL: "http://report-sidecar:8100"
     depends_on:
-      - db
-      - minio
-      - report-sidecar
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      report-sidecar:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
 
   mail-worker:
     build:
@@ -25,8 +34,10 @@ services:
     env_file:
       - ${ENV_FILE:-.env}
     depends_on:
-      - db
-      - mailpit
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
 
   # Рекон-ферма: пробив вставленных списков хостов/IP отдельным процессом.
   recon-worker:
@@ -37,7 +48,8 @@ services:
     env_file:
       - ${ENV_FILE:-.env}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   # Python-sidecar генерации Word-отчётов (интерим Go-миграции): Go-API дёргает
   # его по внутренней сети. Переиспользует образ backend (word_builder + шаблоны).
@@ -50,7 +62,8 @@ services:
     expose:
       - "8100"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./backend:/app
 
@@ -58,7 +71,8 @@ services:
     build:
       context: ./frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       VITE_PROXY_TARGET: http://backend:8000
     command: sh -c "npm install && npm run dev"
@@ -79,6 +93,12 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d pcf"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
   minio:
     image: minio/minio
@@ -91,6 +111,12 @@ services:
       - "9001:9001"
     volumes:
       - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -115,8 +141,10 @@ services:
   nginx:
     image: nginx:1.27-alpine
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
