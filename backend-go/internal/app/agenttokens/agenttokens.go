@@ -64,6 +64,22 @@ type Store interface {
 	Delete(ctx context.Context, id int32) error
 	MemberProjectIDs(ctx context.Context, userID int32) ([]int32, error)
 	InsertAudit(ctx context.Context, action string, userID *int32, entityType string, entityID *int32) error
+
+	// Для bearer-аутентификации /api/v2.
+	GetByHash(ctx context.Context, tokenHash string) (*Token, error)
+	TouchLastUsed(ctx context.Context, id int32, t time.Time) error
+	CreatorIsAdmin(ctx context.Context, userID int32) (bool, error)
+}
+
+// AgentContext — контекст аутентифицированного agent-токена (порт get_agent_token_context).
+type AgentContext struct {
+	TokenID           int32
+	CreatedBy         int32
+	Scopes            map[string]bool
+	AllProjects       bool
+	ProjectIDs        map[int32]bool
+	CreatorIsAdmin    bool
+	CreatorProjectIDs map[int32]bool
 }
 
 // Service — use-cases управления токенами.
@@ -219,3 +235,78 @@ func join(xs []string) string {
 }
 
 func itoa(v int32) string { return strconv.Itoa(int(v)) }
+
+// Authenticate проверяет Bearer-токен и собирает AgentContext (порт get_agent_token_context).
+func (s *Service) Authenticate(ctx context.Context, rawToken string) (*AgentContext, error) {
+	if rawToken == "" {
+		return nil, apperr.Unauthorized("Требуется Bearer token")
+	}
+	token, err := s.store.GetByHash(ctx, security.HashTokenSHA256(rawToken))
+	if err != nil || token == nil || token.RevokedAt != nil {
+		return nil, apperr.Unauthorized("Agent API token недействителен")
+	}
+	if token.ExpiresAt != nil && !token.ExpiresAt.After(s.now().UTC()) {
+		return nil, apperr.Unauthorized("Agent API token истёк")
+	}
+	grants, err := s.store.ListGrants(ctx, token.ID)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.TouchLastUsed(ctx, token.ID, s.now().UTC())
+
+	creatorIsAdmin, err := s.store.CreatorIsAdmin(ctx, token.CreatedBy)
+	if err != nil {
+		return nil, err
+	}
+	creatorProjects := map[int32]bool{}
+	if !creatorIsAdmin {
+		ids, err := s.store.MemberProjectIDs(ctx, token.CreatedBy)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			creatorProjects[id] = true
+		}
+	}
+	scopes := map[string]bool{}
+	for _, sc := range token.Scopes {
+		scopes[sc] = true
+	}
+	projectIDs := map[int32]bool{}
+	for _, id := range grants {
+		projectIDs[id] = true
+	}
+	return &AgentContext{
+		TokenID: token.ID, CreatedBy: token.CreatedBy, Scopes: scopes,
+		AllProjects: token.AllProjects, ProjectIDs: projectIDs,
+		CreatorIsAdmin: creatorIsAdmin, CreatorProjectIDs: creatorProjects,
+	}, nil
+}
+
+// RequireScope проверяет наличие scope (порт require_agent_scope).
+func (s *Service) RequireScope(ac *AgentContext, scope string) error {
+	if ac == nil || !ac.Scopes[scope] {
+		return apperr.Forbidden("Недостаточно прав agent token: требуется " + scope)
+	}
+	return nil
+}
+
+// AuthorizeProject — доступ токена к проекту: грант токена ∩ права создателя
+// (порт require_agent_project_access; существование проекта проверяет вызывающий).
+func (s *Service) AuthorizeProject(ac *AgentContext, projectID int32) error {
+	if ac == nil {
+		return apperr.Forbidden("Agent token не имеет доступа к проекту")
+	}
+	if !ac.AllProjects && !ac.ProjectIDs[projectID] {
+		return apperr.Forbidden("Agent token не имеет доступа к проекту")
+	}
+	if !ac.CreatorIsAdmin && !ac.CreatorProjectIDs[projectID] {
+		return apperr.Forbidden("Agent token не имеет доступа к проекту")
+	}
+	return nil
+}
+
+// AllowedProjectID сообщает, виден ли проект токену (для inline-фильтра GET /projects).
+func (s *Service) AllowedProjectID(ac *AgentContext, projectID int32) bool {
+	return s.AuthorizeProject(ac, projectID) == nil
+}

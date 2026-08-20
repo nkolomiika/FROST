@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nkolomiika/frost/internal/adapters/postgres/agenttokenrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
@@ -23,6 +24,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
 	"github.com/nkolomiika/frost/internal/adapters/storage"
+	"github.com/nkolomiika/frost/internal/app/agenttokens"
 	"github.com/nkolomiika/frost/internal/app/audit"
 	"github.com/nkolomiika/frost/internal/app/auth"
 	"github.com/nkolomiika/frost/internal/app/inventory"
@@ -103,8 +105,13 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	projectsSvc := projects.NewService(projectsrepo.New(pool), cipher, nil)
 	projectsH := NewProjectsHandler(projectsSvc, svc, []string{testOrigin})
 	auditH := NewAuditHandler(audit.NewService(auditrepo.New(pool)), svc)
-	inventoryH := NewInventoryHandler(inventory.NewService(inventoryrepo.New(pool), nil), projectsSvc, svc, []string{testOrigin})
-	vulnsH := NewVulnsHandler(vulns.NewService(vulnsrepo.New(pool), storage.Stub{}, "frost"), projectsSvc, svc, []string{testOrigin})
+	inventorySvc := inventory.NewService(inventoryrepo.New(pool), nil)
+	inventoryH := NewInventoryHandler(inventorySvc, projectsSvc, svc, []string{testOrigin})
+	vulnsSvc := vulns.NewService(vulnsrepo.New(pool), storage.Stub{}, "frost")
+	vulnsH := NewVulnsHandler(vulnsSvc, projectsSvc, svc, []string{testOrigin})
+	agentSvc := agenttokens.NewService(agenttokenrepo.New(pool), nil)
+	agentTokH := NewAgentTokenHandler(agentSvc, svc, []string{testOrigin})
+	agentV2H := NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc)
 	usersH := NewUsersHandler(users.NewService(usersrepo.New(pool), cipher, storage.Stub{}, users.Config{
 		AppBaseURL: "https://app", MailEnabled: true, Brand: "FROST", MinioBucketName: "frost",
 		InviteTokenExpireHours: 168, ReactivationExpireHours: 24,
@@ -112,6 +119,7 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	return httptest.NewServer(NewRouter(Deps{
 		Logger: logger, Auth: handler, Projects: projectsH, Audit: auditH,
 		Inventory: inventoryH, Vulns: vulnsH, Users: usersH,
+		AgentTokens: agentTokH, AgentV2: agentV2H,
 	}))
 }
 

@@ -25,6 +25,8 @@ type Store interface {
 	// projects
 	ListProjects(ctx context.Context, p ProjectListParams) ([]Project, int64, error)
 	GetProject(ctx context.Context, id int32) (*Project, error)
+	ProjectsByIDs(ctx context.Context, ids []int32) ([]Project, error)
+	AllProjectIDs(ctx context.Context) ([]int32, error)
 	InsertProject(ctx context.Context, np NewProject) (*Project, error)
 	UpdateProject(ctx context.Context, up ProjectUpdate) (*Project, error)
 	DeleteProject(ctx context.Context, id int32) error

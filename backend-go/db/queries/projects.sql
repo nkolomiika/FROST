@@ -273,3 +273,9 @@ ORDER BY a.created_at DESC LIMIT sqlc.arg('lim');
 
 -- name: ListVulnsForActivity :many
 SELECT id, title, severity FROM vulnerabilities WHERE id = ANY(sqlc.arg('ids')::int[]);
+
+-- name: ListProjectsByIDs :many
+SELECT * FROM projects WHERE id = ANY(sqlc.arg('ids')::int[]) ORDER BY created_at DESC;
+
+-- name: ListAllProjectIDs :many
+SELECT id FROM projects ORDER BY id;

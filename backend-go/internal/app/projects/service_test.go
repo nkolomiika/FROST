@@ -50,6 +50,24 @@ func (f *fakeStore) GetProject(_ context.Context, id int32) (*Project, error) {
 	return nil, ErrNoRows
 }
 
+func (f *fakeStore) ProjectsByIDs(_ context.Context, ids []int32) ([]Project, error) {
+	var out []Project
+	for _, id := range ids {
+		if p, ok := f.projects[id]; ok {
+			out = append(out, *cloneProject(p))
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeStore) AllProjectIDs(_ context.Context) ([]int32, error) {
+	out := make([]int32, 0, len(f.projects))
+	for id := range f.projects {
+		out = append(out, id)
+	}
+	return out, nil
+}
+
 func (f *fakeStore) UpdateProject(_ context.Context, up ProjectUpdate) (*Project, error) {
 	f.updated = &up
 	p := &Project{

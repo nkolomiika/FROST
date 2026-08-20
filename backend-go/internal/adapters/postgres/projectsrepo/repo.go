@@ -110,6 +110,22 @@ func (r *Repo) GetProject(ctx context.Context, id int32) (*projects.Project, err
 	return mapProject(p), nil
 }
 
+func (r *Repo) ProjectsByIDs(ctx context.Context, ids []int32) ([]projects.Project, error) {
+	rows, err := r.q.ListProjectsByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]projects.Project, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, *mapProject(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) AllProjectIDs(ctx context.Context) ([]int32, error) {
+	return r.q.ListAllProjectIDs(ctx)
+}
+
 func (r *Repo) InsertProject(ctx context.Context, np projects.NewProject) (*projects.Project, error) {
 	p, err := r.q.InsertProject(ctx, sqlc.InsertProjectParams{
 		Name:        np.Name,

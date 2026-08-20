@@ -677,6 +677,30 @@ func (q *Queries) IsProjectMember(ctx context.Context, arg IsProjectMemberParams
 	return exists, err
 }
 
+const listAllProjectIDs = `-- name: ListAllProjectIDs :many
+SELECT id FROM projects ORDER BY id
+`
+
+func (q *Queries) ListAllProjectIDs(ctx context.Context) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listAllProjectIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int32{}
+	for rows.Next() {
+		var id int32
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCredentials = `-- name: ListCredentials :many
 SELECT c.id, c.project_id, c.username, c.password_encrypted, c.host, c.created_by, c.created_at, c.updated_at, u.username AS created_by_username
 FROM project_credentials c LEFT JOIN users u ON u.id = c.created_by
@@ -1101,6 +1125,42 @@ type ListProjectsAdminParams struct {
 
 func (q *Queries) ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminParams) ([]Project, error) {
 	rows, err := q.db.Query(ctx, listProjectsAdmin, arg.Status, arg.Offset, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Project{}
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Folder,
+			&i.Description,
+			&i.StartDate,
+			&i.EndDate,
+			&i.TimelineFrozenAt,
+			&i.Status,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsByIDs = `-- name: ListProjectsByIDs :many
+SELECT id, name, folder, description, start_date, end_date, timeline_frozen_at, status, created_by, created_at, updated_at FROM projects WHERE id = ANY($1::int[]) ORDER BY created_at DESC
+`
+
+func (q *Queries) ListProjectsByIDs(ctx context.Context, ids []int32) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsByIDs, ids)
 	if err != nil {
 		return nil, err
 	}

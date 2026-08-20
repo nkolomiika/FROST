@@ -143,6 +143,7 @@ type Querier interface {
 	IsProjectMember(ctx context.Context, arg IsProjectMemberParams) (bool, error)
 	ListAgentTokenGrants(ctx context.Context, tokenID int32) ([]int32, error)
 	ListAgentTokensByCreator(ctx context.Context, createdBy int32) ([]AgentApiToken, error)
+	ListAllProjectIDs(ctx context.Context) ([]int32, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
 	ListCommentMentions(ctx context.Context, commentID int32) ([]ListCommentMentionsRow, error)
 	// ─────────── credentials ───────────
@@ -174,6 +175,7 @@ type Querier interface {
 	ListPortsForIPs(ctx context.Context, ipIds []int32) ([]Port, error)
 	ListProjectActivity(ctx context.Context, arg ListProjectActivityParams) ([]ListProjectActivityRow, error)
 	ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminParams) ([]Project, error)
+	ListProjectsByIDs(ctx context.Context, ids []int32) ([]Project, error)
 	ListProjectsForMember(ctx context.Context, arg ListProjectsForMemberParams) ([]Project, error)
 	// ─────────── services ───────────
 	ListServicesForPort(ctx context.Context, portID int32) ([]Service, error)

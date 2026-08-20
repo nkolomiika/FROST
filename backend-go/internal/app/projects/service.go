@@ -128,6 +128,19 @@ func (s *Service) EnsureCanEditProject(ctx context.Context, projectID int32, act
 
 // ListProjects — список проектов с учётом доступа и опционального фильтра статуса.
 // statusFilter приходит с http в нижнем регистре; приводим к БД-регистру.
+// ProjectsByIDs возвращает проекты по набору id (для agent /api/v2).
+func (s *Service) ProjectsByIDs(ctx context.Context, ids []int32) ([]Project, error) {
+	if len(ids) == 0 {
+		return []Project{}, nil
+	}
+	return s.store.ProjectsByIDs(ctx, ids)
+}
+
+// AllProjectIDs возвращает id всех проектов (для agent /api/v2 all_projects+admin).
+func (s *Service) AllProjectIDs(ctx context.Context) ([]int32, error) {
+	return s.store.AllProjectIDs(ctx)
+}
+
 func (s *Service) ListProjects(ctx context.Context, actor Actor, page, size int, statusFilter string) ([]Project, int64, error) {
 	status := ""
 	if statusFilter != "" {

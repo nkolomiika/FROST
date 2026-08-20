@@ -4,6 +4,7 @@ package agenttokenrepo
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -105,4 +106,24 @@ func (r *Repo) InsertAudit(ctx context.Context, action string, userID *int32, en
 		EntityType: pgconv.Text(entityType),
 		EntityID:   pgconv.Int4(entityID),
 	})
+}
+
+func (r *Repo) GetByHash(ctx context.Context, tokenHash string) (*agenttokens.Token, error) {
+	row, err := r.q.GetAgentTokenByHash(ctx, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+	return mapToken(row), nil
+}
+
+func (r *Repo) TouchLastUsed(ctx context.Context, id int32, t time.Time) error {
+	return r.q.TouchAgentTokenLastUsed(ctx, sqlc.TouchAgentTokenLastUsedParams{ID: id, LastUsedAt: pgconv.Ts(t)})
+}
+
+func (r *Repo) CreatorIsAdmin(ctx context.Context, userID int32) (bool, error) {
+	row, err := r.q.GetUserRoleByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return string(row.Role) == "ADMIN", nil
 }
