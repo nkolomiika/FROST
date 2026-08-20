@@ -18,6 +18,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/notificationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/sqlc"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
@@ -28,6 +29,7 @@ import (
 	"github.com/nkolomiika/frost/internal/app/audit"
 	"github.com/nkolomiika/frost/internal/app/auth"
 	"github.com/nkolomiika/frost/internal/app/inventory"
+	"github.com/nkolomiika/frost/internal/app/notifications"
 	"github.com/nkolomiika/frost/internal/app/projects"
 	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
@@ -112,6 +114,7 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	agentSvc := agenttokens.NewService(agenttokenrepo.New(pool), nil)
 	agentTokH := NewAgentTokenHandler(agentSvc, svc, []string{testOrigin})
 	agentV2H := NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc)
+	notifH := NewNotificationsHandler(notifications.NewService(notificationsrepo.New(pool)), svc, []string{testOrigin})
 	usersH := NewUsersHandler(users.NewService(usersrepo.New(pool), cipher, storage.Stub{}, users.Config{
 		AppBaseURL: "https://app", MailEnabled: true, Brand: "FROST", MinioBucketName: "frost",
 		InviteTokenExpireHours: 168, ReactivationExpireHours: 24,
@@ -119,7 +122,7 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	return httptest.NewServer(NewRouter(Deps{
 		Logger: logger, Auth: handler, Projects: projectsH, Audit: auditH,
 		Inventory: inventoryH, Vulns: vulnsH, Users: usersH,
-		AgentTokens: agentTokH, AgentV2: agentV2H,
+		AgentTokens: agentTokH, AgentV2: agentV2H, Notifications: notifH,
 	}))
 }
 

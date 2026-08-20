@@ -14,15 +14,16 @@ import (
 
 // Deps — зависимости HTTP-слоя (composition root передаёт сюда адаптеры).
 type Deps struct {
-	Logger      *slog.Logger
-	Auth        *AuthHandler       // nil до подключения контекста auth
-	Audit       *AuditHandler      // nil до подключения контекста audit
-	AgentTokens *AgentTokenHandler // nil до подключения контекста agenttokens
-	Projects    *ProjectsHandler   // nil до подключения контекста projects
-	Inventory   *InventoryHandler  // nil до подключения контекста inventory
-	Vulns       *VulnsHandler      // nil до подключения контекста vulns
-	Users       *UsersHandler      // nil до подключения контекста users
-	AgentV2     *AgentV2Handler    // nil до подключения /api/v2
+	Logger        *slog.Logger
+	Auth          *AuthHandler          // nil до подключения контекста auth
+	Audit         *AuditHandler         // nil до подключения контекста audit
+	AgentTokens   *AgentTokenHandler    // nil до подключения контекста agenttokens
+	Projects      *ProjectsHandler      // nil до подключения контекста projects
+	Inventory     *InventoryHandler     // nil до подключения контекста inventory
+	Vulns         *VulnsHandler         // nil до подключения контекста vulns
+	Users         *UsersHandler         // nil до подключения контекста users
+	AgentV2       *AgentV2Handler       // nil до подключения /api/v2
+	Notifications *NotificationsHandler // nil до подключения notifications
 }
 
 // NewRouter собирает chi-роутер с базовыми middleware и служебными эндпоинтами.
@@ -61,6 +62,9 @@ func NewRouter(d Deps) http.Handler {
 	}
 	if d.AgentV2 != nil {
 		d.AgentV2.Register(r)
+	}
+	if d.Notifications != nil {
+		d.Notifications.Register(r)
 	}
 
 	return r

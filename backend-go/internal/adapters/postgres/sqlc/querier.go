@@ -17,8 +17,10 @@ type Querier interface {
 	CountHosts(ctx context.Context, arg CountHostsParams) (int64, error)
 	// ─────────── note comments ───────────
 	CountNoteComments(ctx context.Context, arg CountNoteCommentsParams) (int64, error)
+	CountNotifications(ctx context.Context, arg CountNotificationsParams) (int64, error)
 	CountProjectsAdmin(ctx context.Context, status NullProjectStatus) (int64, error)
 	CountProjectsForMember(ctx context.Context, arg CountProjectsForMemberParams) (int64, error)
+	CountUnreadNotifications(ctx context.Context, userID int32) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	// ─────────── comments ───────────
 	CountVulnComments(ctx context.Context, vulnerabilityID int32) (int64, error)
@@ -68,6 +70,9 @@ type Querier interface {
 	GetActivePendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
 	GetAgentTokenByHash(ctx context.Context, tokenHash string) (AgentApiToken, error)
 	GetAgentTokenByID(ctx context.Context, id int32) (AgentApiToken, error)
+	GetCommentHostID(ctx context.Context, id int32) (int32, error)
+	// ─────────── резолверы контекста ───────────
+	GetCommentNotificationContext(ctx context.Context, id int32) (GetCommentNotificationContextRow, error)
 	GetCredential(ctx context.Context, arg GetCredentialParams) (GetCredentialRow, error)
 	GetEndpointForHost(ctx context.Context, arg GetEndpointForHostParams) (Endpoint, error)
 	GetFileByID(ctx context.Context, id int32) (File, error)
@@ -82,6 +87,7 @@ type Querier interface {
 	GetMember(ctx context.Context, arg GetMemberParams) (ProjectMember, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (GetNoteRow, error)
 	GetNoteComment(ctx context.Context, arg GetNoteCommentParams) (ProjectNoteComment, error)
+	GetNoteCommentNotificationContext(ctx context.Context, id int32) (GetNoteCommentNotificationContextRow, error)
 	GetPasswordResetByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
 	GetPort(ctx context.Context, arg GetPortParams) (Port, error)
@@ -89,6 +95,7 @@ type Querier interface {
 	// креды, hidden-ips, статистика, активность, уведомления, упоминания.
 	// ─────────── projects ───────────
 	GetProjectByID(ctx context.Context, id int32) (Project, error)
+	GetProjectName(ctx context.Context, id int32) (string, error)
 	GetReactivationByHash(ctx context.Context, tokenHash string) (AccountReactivationToken, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetRefreshTokenForUser(ctx context.Context, arg GetRefreshTokenForUserParams) (RefreshToken, error)
@@ -100,11 +107,13 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id int32) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserRoleByID(ctx context.Context, id int32) (GetUserRoleByIDRow, error)
+	GetUsernameByID(ctx context.Context, id int32) (string, error)
 	// Контекст vulns: vulnerabilities (+CVSS 4.0), assets, comments/mentions, files.
 	// ─────────── vulnerabilities ───────────
 	GetVuln(ctx context.Context, arg GetVulnParams) (GetVulnRow, error)
 	GetVulnAssetLink(ctx context.Context, arg GetVulnAssetLinkParams) (VulnerabilityAsset, error)
 	GetVulnComment(ctx context.Context, arg GetVulnCommentParams) (Comment, error)
+	GetVulnTitleAndProject(ctx context.Context, id int32) (GetVulnTitleAndProjectRow, error)
 	HiddenIPExists(ctx context.Context, arg HiddenIPExistsParams) (bool, error)
 	// asset-in-project existence checks (polymorphic)
 	HostAssetInProject(ctx context.Context, arg HostAssetInProjectParams) (bool, error)
@@ -172,6 +181,8 @@ type Querier interface {
 	ListNotes(ctx context.Context, projectID int32) ([]ListNotesRow, error)
 	// ─────────── activity ───────────
 	ListNotesActivity(ctx context.Context, arg ListNotesActivityParams) ([]ListNotesActivityRow, error)
+	// Контекст notifications (читающая сторона; запись — в projects/vulns контекстах).
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]Notification, error)
 	ListPendingInvitations(ctx context.Context) ([]Invitation, error)
 	// ─────────── ports ───────────
 	ListPortsForHost(ctx context.Context, hostID int32) ([]Port, error)
@@ -201,12 +212,14 @@ type Querier interface {
 	ListVulns(ctx context.Context, arg ListVulnsParams) ([]ListVulnsRow, error)
 	ListVulnsForActivity(ctx context.Context, ids []int32) ([]ListVulnsForActivityRow, error)
 	ListVulnsForHost(ctx context.Context, arg ListVulnsForHostParams) ([]ListVulnsForHostRow, error)
+	MarkAllNotificationsRead(ctx context.Context, userID int32) error
 	MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error
 	MarkMailJobFailed(ctx context.Context, arg MarkMailJobFailedParams) error
 	MarkMailJobPending(ctx context.Context, arg MarkMailJobPendingParams) error
 	MarkMailJobProcessing(ctx context.Context, id int32) (MailJob, error)
 	MarkMailJobQueued(ctx context.Context, id int32) error
 	MarkMailJobSent(ctx context.Context, id int32) error
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (Notification, error)
 	MarkPasswordResetUsed(ctx context.Context, id int32) error
 	MarkReactivationUsed(ctx context.Context, id int32) error
 	MaxSiblingSortOrder(ctx context.Context, arg MaxSiblingSortOrderParams) (int32, error)

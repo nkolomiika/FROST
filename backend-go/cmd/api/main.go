@@ -23,6 +23,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/notificationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
@@ -32,6 +33,7 @@ import (
 	"github.com/nkolomiika/frost/internal/app/audit"
 	"github.com/nkolomiika/frost/internal/app/auth"
 	"github.com/nkolomiika/frost/internal/app/inventory"
+	"github.com/nkolomiika/frost/internal/app/notifications"
 	"github.com/nkolomiika/frost/internal/app/projects"
 	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
@@ -130,6 +132,9 @@ func run() error {
 	// Контекст agent-tokens v2 (/api/v2 bearer API).
 	agentV2Handler := httpadapter.NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc)
 
+	// Контекст notifications (лента уведомлений).
+	notificationsHandler := httpadapter.NewNotificationsHandler(notifications.NewService(notificationsrepo.New(pool)), authSvc, cfg.CSRFOrigins())
+
 	// Контекст users (профиль/2FA/аватары/инвайты, admin-управление).
 	usersHandler := httpadapter.NewUsersHandler(
 		users.NewService(usersrepo.New(pool), cipher, fileStorage, users.Config{
@@ -139,7 +144,7 @@ func run() error {
 		}, nil),
 		authSvc, cfg.CSRFOrigins())
 
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler})
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{
