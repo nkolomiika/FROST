@@ -1,24 +1,9 @@
+# Зависимости Python reports-sidecar (интерим Go-миграции). Остальной бэкенд
+# переписан на Go (../backend-go); здесь только word_builder + его цепочка.
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
 sqlalchemy==2.0.36
 asyncpg==0.30.0
-alembic==1.14.0
 pydantic-settings==2.6.1
-email-validator==2.2.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-pyotp==2.9.0
-qrcode[pil]==8.0
-python-multipart==0.0.12
-minio==7.2.12
-python-magic==0.4.27
 python-docx==1.1.2
 Pillow==10.4.0
-httpx==0.28.0
-PyYAML==6.0.3
-aio-pika==9.6.2
-aiosmtplib==5.1.0
-cvss==3.6
-pytest==8.3.4
-pytest-asyncio==0.24.0
