@@ -1,62 +1,58 @@
 services:
   backend:
     build:
-      context: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    # Порт наружу — чтобы Swagger (/docs, /api/v2/docs) был доступен с хоста.
+      context: ./backend-go
+      args:
+        CMD: api
+    # Go-API: сам применяет goose-миграции и создаёт стартового админа на старте.
     ports:
       - "8000:8000"
-    # Источник окружения: dev → .env, prod → .env.prod (ENV_FILE=.env.prod).
-    # Единственное отличие прода от дева; код не меняется.
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       COOKIE_SECURE: "true"
-      # BACKEND_CORS_ORIGINS / CSRF_ALLOWED_ORIGINS намеренно НЕ задаём здесь:
-      # значения из environment перекрывают env_file, и правки .env молча не
-      # применялись бы. Единственный источник истины — .env.
+      REPORTS_SIDECAR_URL: "http://report-sidecar:8100"
     depends_on:
       - db
       - minio
-      - rabbitmq
-    volumes:
-      - ./backend:/app
-      - ./:/workspace
-      - ./:/workspace
+      - report-sidecar
 
   mail-worker:
     build:
-      context: ./backend
+      context: ./backend-go
+      args:
+        CMD: mail-worker
     env_file:
       - ${ENV_FILE:-.env}
-    command: python -m app.worker.mail_worker
     depends_on:
-      db:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
-      mailpit:
-        condition: service_started
-    volumes:
-      - ./backend:/app
-      - ./:/workspace
+      - db
+      - mailpit
 
-  # Рекон-ферма: пробив вставленных списков хостов и IP. Отдельный процесс —
-  # это минуты сетевого ожидания, которым нечего делать в воркерах uvicorn.
+  # Рекон-ферма: пробив вставленных списков хостов/IP отдельным процессом.
   recon-worker:
     build:
-      context: ./backend
+      context: ./backend-go
+      args:
+        CMD: recon-worker
     env_file:
       - ${ENV_FILE:-.env}
-    command: python -m app.worker.recon_worker
     depends_on:
-      db:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
+      - db
+
+  # Python-sidecar генерации Word-отчётов (интерим Go-миграции): Go-API дёргает
+  # его по внутренней сети. Переиспользует образ backend (word_builder + шаблоны).
+  report-sidecar:
+    build:
+      context: ./backend
+    command: uvicorn app.report_sidecar:app --host 0.0.0.0 --port 8100
+    env_file:
+      - ${ENV_FILE:-.env}
+    expose:
+      - "8100"
+    depends_on:
+      - db
     volumes:
       - ./backend:/app
-      - ./:/workspace
 
   frontend:
     build:

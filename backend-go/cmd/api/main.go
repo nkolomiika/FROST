@@ -9,15 +9,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nkolomiika/frost/config"
+	"github.com/nkolomiika/frost/db"
 	httpadapter "github.com/nkolomiika/frost/internal/adapters/http"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/agenttokenrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
@@ -27,6 +33,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/reconrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/reportrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/sqlc"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
@@ -60,12 +67,22 @@ func run() error {
 
 	logger := applog.New(cfg.Debug)
 
+	// Применяем миграции схемы (Go-API сам создаёт схему).
+	if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
+		return fmt.Errorf("migrations: %w", err)
+	}
+	logger.Info("migrations applied")
+
 	// Пул Postgres.
 	pool, err := postgres.NewPool(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("postgres: %w", err)
 	}
 	defer pool.Close()
+
+	if err := bootstrapAdmin(context.Background(), pool, cfg, logger); err != nil {
+		logger.Warn("bootstrap admin", "err", err)
+	}
 
 	// Контекст auth: security-адаптеры + репозиторий + use-cases + http-хендлер.
 	jwtManager := security.NewJWTManager(cfg.JWTSecretKey, cfg.JWTAccessTokenExpireMinutes, cfg.JWTRefreshTokenExpireDays)
@@ -189,5 +206,42 @@ func run() error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	logger.Info("api stopped cleanly")
+	return nil
+}
+
+// bootstrapAdmin создаёт стартового администратора при пустой таблице users
+// (порт UserService.bootstrap_admin — Go-API поднимается на чистой схеме).
+func bootstrapAdmin(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, logger *slog.Logger) error {
+	q := sqlc.New(pool)
+	exists, err := q.UsernameExists(ctx, cfg.InitialAdminUsername)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	total, err := q.CountUsers(ctx)
+	if err != nil {
+		return err
+	}
+	if total > 0 {
+		return nil
+	}
+	hash, err := security.HashPassword(cfg.InitialAdminPassword)
+	if err != nil {
+		return err
+	}
+	if _, err := q.CreateUser(ctx, sqlc.CreateUserParams{
+		Username:     cfg.InitialAdminUsername,
+		Email:        strings.ToLower(cfg.InitialAdminEmail),
+		FullName:     pgtype.Text{String: "Administrator", Valid: true},
+		PasswordHash: hash,
+		Role:         sqlc.UserRoleADMIN,
+		ProjectRole:  sqlc.ProjectRolePENTESTER,
+		IsActive:     true,
+	}); err != nil {
+		return err
+	}
+	logger.Info("initial admin created", "username", cfg.InitialAdminUsername)
 	return nil
 }
