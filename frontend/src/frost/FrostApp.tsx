@@ -5677,9 +5677,10 @@ export function FrostApp() {
     <div className="frost" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--fr-bg)", position: "relative" }}>
       {/* top app bar */}
       <header style={{ height: 58, flex: "none", display: "flex", alignItems: "center", gap: 14, padding: "0 22px", background: "var(--fr-surface)", borderBottom: "1px solid var(--fr-border-light)", zIndex: 30 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-          <FrostMark size={27} />
-          <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", margin: "0 2px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <FrostMark size={26} />
+          <FrostWordmark size={18} spacing={2.5} />
+          <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", margin: "0 4px" }} />
           <div className="mono" style={{ fontSize: 10.5, letterSpacing: 2, color: "var(--fr-text-faint)", fontWeight: 600 }}>OFFENSIVE RESEARCH &amp; MANAGEMENT</div>
         </div>
         <div style={{ flex: 1 }} />
@@ -5756,7 +5757,7 @@ export function FrostApp() {
             {state.view === "profile" && renderProfile()}
           </main>
           <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
-            <FrostMark size={15} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+            <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
           </footer>
         </div>
       </div>

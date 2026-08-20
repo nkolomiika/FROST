@@ -281,7 +281,7 @@ describe("FrostApp workspace screen", () => {
     // Brand: topbar carries the full name, the sidebar the FROST wordmark
     // (the leading F is a separate crystalline span, so match the whole node).
     expect(screen.getByText("OFFENSIVE RESEARCH & MANAGEMENT")).toBeInTheDocument();
-    expect(screen.getByText((_t, el) => el?.classList.contains("fr-wm") === true && el.textContent === "FROST")).toBeInTheDocument();
+    expect(screen.getAllByText((_t, el) => el?.classList.contains("fr-wm") === true && el.textContent === "FROST").length).toBeGreaterThan(0);
     expect(screen.getByText("My Tasks")).toBeInTheDocument();
   });
 
