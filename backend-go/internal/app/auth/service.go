@@ -258,6 +258,12 @@ func (s *Service) CheckInvitationUsernameAvailable(ctx context.Context, rawToken
 
 // AcceptInvitation — активация: приглашённый задаёт username+пароль, создаётся User.
 func (s *Service) AcceptInvitation(ctx context.Context, rawToken, username, password, ip string) (*User, error) {
+	if err := validateNewUsername(username); err != nil {
+		return nil, err
+	}
+	if err := validateNewPassword(password); err != nil {
+		return nil, err
+	}
 	inv, err := s.store.GetInvitationByTokenHash(ctx, security.HashTokenSHA256(rawToken))
 	if errors.Is(err, ErrNoRows) {
 		return nil, apperr.Unauthorized("Приглашение недействительно или истекло")
@@ -400,6 +406,9 @@ func (s *Service) GetPasswordResetInfo(ctx context.Context, rawToken string) (To
 
 // ConfirmPasswordReset ставит новый пароль по одноразовой ссылке и гасит все сессии.
 func (s *Service) ConfirmPasswordReset(ctx context.Context, rawToken, newPassword, ip string) error {
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
+	}
 	tok, err := s.store.GetPasswordResetByHash(ctx, security.HashTokenSHA256(rawToken))
 	if errors.Is(err, ErrNoRows) {
 		return apperr.Unauthorized("Ссылка недействительна или истекла")

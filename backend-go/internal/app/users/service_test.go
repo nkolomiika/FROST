@@ -25,12 +25,15 @@ type fakeStore struct {
 	mailJobs   []NewMailJob
 	audits     []AuditEntry
 	nextID     int32
+
+	pendingInvites     map[string]*Invitation // активные pending-приглашения по email
+	createdInvitations []NewInvitation        // перехват аргументов CreateInvitation
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		users: map[int32]*User{}, byUsername: map[string]int32{}, byEmail: map[string]int32{},
-		revoked: map[int32]int{}, nextID: 1,
+		revoked: map[int32]int{}, pendingInvites: map[string]*Invitation{}, nextID: 1,
 	}
 }
 
@@ -133,11 +136,16 @@ func (f *fakeStore) LockUser(_ context.Context, id int32) error {
 func (f *fakeStore) GetInvitationByID(context.Context, int32) (*Invitation, error) {
 	return nil, ErrNoRows
 }
-func (f *fakeStore) GetActivePendingInvitationByEmail(context.Context, string) (*Invitation, error) {
+func (f *fakeStore) GetActivePendingInvitationByEmail(_ context.Context, email string) (*Invitation, error) {
+	if inv, ok := f.pendingInvites[email]; ok {
+		cp := *inv
+		return &cp, nil
+	}
 	return nil, ErrNoRows
 }
 func (f *fakeStore) ListPendingInvitations(context.Context) ([]Invitation, error) { return nil, nil }
 func (f *fakeStore) CreateInvitation(_ context.Context, ni NewInvitation) (*Invitation, error) {
+	f.createdInvitations = append(f.createdInvitations, ni)
 	inv := &Invitation{ID: f.nextID, Email: ni.Email, FullName: ni.FullName, Role: ni.Role, ProjectRole: ni.ProjectRole, Status: "pending", ExpiresAt: ni.ExpiresAt, InvitedBy: ni.InvitedBy}
 	f.nextID++
 	return inv, nil

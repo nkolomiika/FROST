@@ -18,8 +18,15 @@ const (
 
 var sourceRank = map[string]int{SourcePTR: 0, SourceProject: 1}
 
+// dnsResolver — минимальный набор методов net.Resolver, которыми пользуется пакет.
+// Выделен в интерфейс, чтобы reverse/forward-резолв можно было мокать в тестах.
+type dnsResolver interface {
+	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
+	LookupAddr(ctx context.Context, addr string) ([]string, error)
+}
+
 // resolver — DNS-резолвер (переопределяется в тестах при необходимости).
-var resolver = net.DefaultResolver
+var resolver dnsResolver = net.DefaultResolver
 
 // ResolvedHost — результат прямого резолва (порт resolver.ResolvedHost).
 // IP=="" эквивалентно Python ip=None.

@@ -21,6 +21,30 @@ type fakeStore struct {
 	notifications []Notification
 	audits        []AuditEntry
 	updated       *ProjectUpdate
+
+	// ── data-driven поля для расширенных тестов ──
+	listParams       *ProjectListParams // захват параметров ListProjects
+	listResult       []Project
+	listTotal        int64
+	isMember         bool   // ответ IsProjectMember
+	deletedProjectID *int32 // захват DeleteProject
+	userBrief        *UserBrief
+	memberExists     bool  // ответ GetMember(found)
+	insertedMemberID int32 // возврат InsertMember
+	siblingNotes     []Note
+	credential       *Credential // ответ GetCredential
+	insertedCred     *NewCredential
+	insertedCredID   int32
+	updatedCred      *credUpdateCapture
+	noteComment      *NoteComment // ответ GetNoteComment
+}
+
+// credUpdateCapture — захват аргументов UpdateCredential.
+type credUpdateCapture struct {
+	id                int32
+	username          *string
+	passwordEncrypted string
+	host              *string
 }
 
 func newFakeStore() *fakeStore {
@@ -176,22 +200,34 @@ func cloneProject(p *Project) *Project { c := *p; return &c }
 
 // ─── незадействованные в тестах методы (заглушки) ───
 
-func (f *fakeStore) ListProjects(context.Context, ProjectListParams) ([]Project, int64, error) {
-	return nil, 0, nil
+func (f *fakeStore) ListProjects(_ context.Context, p ProjectListParams) ([]Project, int64, error) {
+	f.listParams = &p
+	return f.listResult, f.listTotal, nil
 }
 func (f *fakeStore) InsertProject(context.Context, NewProject) (*Project, error) { return nil, nil }
-func (f *fakeStore) DeleteProject(context.Context, int32) error                  { return nil }
-func (f *fakeStore) IsProjectMember(context.Context, int32, int32) (bool, error) { return false, nil }
+func (f *fakeStore) DeleteProject(_ context.Context, id int32) error {
+	f.deletedProjectID = &id
+	return nil
+}
+func (f *fakeStore) IsProjectMember(context.Context, int32, int32) (bool, error) {
+	return f.isMember, nil
+}
 func (f *fakeStore) ProjectStats(context.Context, int32, bool) ([]ProjectStat, error) {
 	return nil, nil
 }
-func (f *fakeStore) GetUserBrief(context.Context, int32) (*UserBrief, error)    { return nil, ErrNoRows }
+func (f *fakeStore) GetUserBrief(context.Context, int32) (*UserBrief, error) {
+	if f.userBrief == nil {
+		return nil, ErrNoRows
+	}
+	c := *f.userBrief
+	return &c, nil
+}
 func (f *fakeStore) ListMembers(context.Context, int32) ([]MemberDetail, error) { return nil, nil }
 func (f *fakeStore) GetMember(context.Context, int32, int32) (int32, bool, error) {
-	return 0, false, nil
+	return 0, f.memberExists, nil
 }
 func (f *fakeStore) InsertMember(context.Context, int32, int32) (int32, time.Time, error) {
-	return 0, time.Time{}, nil
+	return f.insertedMemberID, time.Time{}, nil
 }
 func (f *fakeStore) DeleteMember(context.Context, int32, int32) error         { return nil }
 func (f *fakeStore) ListFolders(context.Context) ([]Folder, error)            { return nil, nil }
@@ -202,7 +238,7 @@ func (f *fakeStore) InsertFolder(context.Context, string, string, *int32, int32)
 func (f *fakeStore) DeleteFolderCascade(context.Context, string) (int, int, error) { return 0, 0, nil }
 func (f *fakeStore) ListNotes(context.Context, int32) ([]Note, error)              { return nil, nil }
 func (f *fakeStore) ListSiblingNotes(context.Context, int32, *int32) ([]Note, error) {
-	return nil, nil
+	return f.siblingNotes, nil
 }
 func (f *fakeStore) InsertNote(context.Context, NewNote) (*Note, error)              { return nil, nil }
 func (f *fakeStore) UpdateNote(context.Context, int32, string, *string, int32) error { return nil }
@@ -213,16 +249,28 @@ func (f *fakeStore) ListNoteComments(context.Context, int32, int32, int32, int32
 	return nil, nil
 }
 func (f *fakeStore) GetNoteComment(context.Context, int32, int32, int32) (*NoteComment, error) {
-	return nil, ErrNoRows
+	if f.noteComment == nil {
+		return nil, ErrNoRows
+	}
+	c := *f.noteComment
+	return &c, nil
 }
 func (f *fakeStore) UpdateNoteComment(context.Context, int32, string) error       { return nil }
 func (f *fakeStore) DeleteNoteComment(context.Context, int32) error               { return nil }
 func (f *fakeStore) ListCredentials(context.Context, int32) ([]Credential, error) { return nil, nil }
 func (f *fakeStore) GetCredential(context.Context, int32, int32) (*Credential, error) {
-	return nil, ErrNoRows
+	if f.credential == nil {
+		return nil, ErrNoRows
+	}
+	c := *f.credential
+	return &c, nil
 }
-func (f *fakeStore) InsertCredential(context.Context, NewCredential) (int32, error) { return 0, nil }
-func (f *fakeStore) UpdateCredential(context.Context, int32, *string, string, *string) error {
+func (f *fakeStore) InsertCredential(_ context.Context, nc NewCredential) (int32, error) {
+	f.insertedCred = &nc
+	return f.insertedCredID, nil
+}
+func (f *fakeStore) UpdateCredential(_ context.Context, id int32, username *string, passwordEncrypted string, host *string) error {
+	f.updatedCred = &credUpdateCapture{id: id, username: username, passwordEncrypted: passwordEncrypted, host: host}
 	return nil
 }
 func (f *fakeStore) DeleteCredential(context.Context, int32) error          { return nil }
