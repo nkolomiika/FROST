@@ -24,6 +24,7 @@ type Deps struct {
 	Users         *UsersHandler         // nil до подключения контекста users
 	AgentV2       *AgentV2Handler       // nil до подключения /api/v2
 	Notifications *NotificationsHandler // nil до подключения notifications
+	Recon         *ReconHandler         // nil до подключения recon (ферма+scanner)
 }
 
 // NewRouter собирает chi-роутер с базовыми middleware и служебными эндпоинтами.
@@ -65,6 +66,9 @@ func NewRouter(d Deps) http.Handler {
 	}
 	if d.Notifications != nil {
 		d.Notifications.Register(r)
+	}
+	if d.Recon != nil {
+		d.Recon.Register(r)
 	}
 
 	return r

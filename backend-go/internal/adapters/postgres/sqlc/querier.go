@@ -6,10 +6,15 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
 	ClaimPendingMailJobs(ctx context.Context, arg ClaimPendingMailJobsParams) ([]MailJob, error)
+	// Атомарно берёт задачу в работу (status='running', attempts++) при статусе, не
+	// равном running/done (порт guard run_recon_job: повторную доставку не пробиваем).
+	ClaimReconJobRunning(ctx context.Context, id int32) (HostFarmJob, error)
 	ClearCommentMentions(ctx context.Context, commentID int32) error
 	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
 	CountFileImagesForVuln(ctx context.Context, arg CountFileImagesForVulnParams) (int64, error)
@@ -41,15 +46,18 @@ type Querier interface {
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteFile(ctx context.Context, id int32) error
 	DeleteHiddenIP(ctx context.Context, arg DeleteHiddenIPParams) error
+	DeleteHiddenIPs(ctx context.Context, arg DeleteHiddenIPsParams) error
 	DeleteHost(ctx context.Context, arg DeleteHostParams) error
 	DeleteHostByID(ctx context.Context, id int32) error
 	DeleteHostIP(ctx context.Context, id int32) error
+	DeleteJsSecretsForFile(ctx context.Context, jsFileID int32) error
 	DeleteMember(ctx context.Context, arg DeleteMemberParams) error
 	DeleteNote(ctx context.Context, id int32) error
 	DeleteNoteComment(ctx context.Context, id int32) error
 	DeletePort(ctx context.Context, id int32) error
 	DeleteProject(ctx context.Context, id int32) error
 	DeleteService(ctx context.Context, id int32) error
+	DeleteServicesForPort(ctx context.Context, portID int32) error
 	DeleteSubtreeFolders(ctx context.Context, path string) error
 	DeleteSubtreeProjects(ctx context.Context, folder string) error
 	DeleteVuln(ctx context.Context, id int32) error
@@ -80,17 +88,28 @@ type Querier interface {
 	GetFolderByID(ctx context.Context, id int32) (ProjectFolder, error)
 	GetFolderByPath(ctx context.Context, path string) (ProjectFolder, error)
 	GetHost(ctx context.Context, arg GetHostParams) (Host, error)
+	// ─────────── find-or-create / attach хостов (persist) ───────────
+	GetHostByHostname(ctx context.Context, arg GetHostByHostnameParams) (Host, error)
+	GetHostByIPLiteral(ctx context.Context, arg GetHostByIPLiteralParams) (Host, error)
+	GetHostFarmJob(ctx context.Context, id int32) (HostFarmJob, error)
+	GetHostFarmJobForProject(ctx context.Context, arg GetHostFarmJobForProjectParams) (HostFarmJob, error)
 	GetHostIPForHost(ctx context.Context, arg GetHostIPForHostParams) (HostIpAddress, error)
 	GetInvitationByID(ctx context.Context, id int32) (Invitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (Invitation, error)
+	// Контекст recon, ферма JS: js_files/js_secrets. Скан «в памяти» (файлы в БД не
+	// хранятся) — тут только находки, метаданные и апсерт по (project_id, url).
+	GetJsFileByProjectURL(ctx context.Context, arg GetJsFileByProjectURLParams) (JsFile, error)
 	GetMailJob(ctx context.Context, id int32) (MailJob, error)
 	GetMember(ctx context.Context, arg GetMemberParams) (ProjectMember, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (GetNoteRow, error)
 	GetNoteComment(ctx context.Context, arg GetNoteCommentParams) (ProjectNoteComment, error)
 	GetNoteCommentNotificationContext(ctx context.Context, id int32) (GetNoteCommentNotificationContextRow, error)
+	GetOriginIPHostByAddress(ctx context.Context, arg GetOriginIPHostByAddressParams) (Host, error)
 	GetPasswordResetByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPendingInvitationByEmail(ctx context.Context, email string) (Invitation, error)
 	GetPort(ctx context.Context, arg GetPortParams) (Port, error)
+	// ─────────── ports (upsert) ───────────
+	GetPortByIPNumberProto(ctx context.Context, arg GetPortByIPNumberProtoParams) (Port, error)
 	// Запросы контекста projects: проекты, папки, участники, заметки(+комментарии),
 	// креды, hidden-ips, статистика, активность, уведомления, упоминания.
 	// ─────────── projects ───────────
@@ -131,7 +150,15 @@ type Querier interface {
 	// hidden-ips живут в контексте projects (те же роуты) — здесь их нет.
 	// ─────────── hosts ───────────
 	InsertHost(ctx context.Context, arg InsertHostParams) (Host, error)
+	// Контекст recon (ферма + scanner): задачи host_farm_jobs как durable-очередь и
+	// запросы персиста хостов/адресов/портов сверх inventory.sql. Модель статусов
+	// (порт farm/jobs.py + worker/recon_worker.py): pending→queued→running→done|failed.
+	// attempts инкрементится при ВЗЯТИИ в работу (ClaimReconJobRunning), не при провале.
+	// Каждый Update*Job СБРАСЫВАЕТ updated_at=now() — reclaim застрявших зависит от него.
+	// ─────────── host_farm_jobs (очередь) ───────────
+	InsertHostFarmJob(ctx context.Context, arg InsertHostFarmJobParams) (HostFarmJob, error)
 	InsertHostIP(ctx context.Context, arg InsertHostIPParams) (HostIpAddress, error)
+	InsertJsSecret(ctx context.Context, arg InsertJsSecretParams) error
 	// Запросы контекста mail (outbox). Отправка — cmd/mail-worker.
 	// Модель статусов (порт mail_worker.py): pending→queued→processing→sent|failed.
 	// attempts инкрементится при ВЗЯТИИ в работу (MarkMailJobProcessing), не при провале.
@@ -172,6 +199,10 @@ type Querier interface {
 	ListHostIPs(ctx context.Context, hostID int32) ([]HostIpAddress, error)
 	ListHostIPsForHosts(ctx context.Context, hostIds []int32) ([]HostIpAddress, error)
 	ListHosts(ctx context.Context, arg ListHostsParams) ([]Host, error)
+	ListJsFileURLsForHost(ctx context.Context, arg ListJsFileURLsForHostParams) ([]string, error)
+	ListJsFileURLsForProject(ctx context.Context, projectID int32) ([]string, error)
+	ListJsFilesForProject(ctx context.Context, projectID int32) ([]JsFile, error)
+	ListJsSecretsForFile(ctx context.Context, jsFileID int32) ([]JsSecret, error)
 	ListMemberProjectIDs(ctx context.Context, userID int32) ([]int32, error)
 	ListMemberUserIDs(ctx context.Context, projectID int32) ([]int32, error)
 	// ─────────── members ───────────
@@ -188,6 +219,13 @@ type Querier interface {
 	ListPortsForHost(ctx context.Context, hostID int32) ([]Port, error)
 	ListPortsForIPs(ctx context.Context, ipIds []int32) ([]Port, error)
 	ListProjectActivity(ctx context.Context, arg ListProjectActivityParams) ([]ListProjectActivityRow, error)
+	ListProjectAllHostnames(ctx context.Context, projectID int32) ([]pgtype.Text, error)
+	// ─────────── выбор целей по проекту ───────────
+	ListProjectDomainHostnames(ctx context.Context, projectID int32) ([]pgtype.Text, error)
+	ListProjectHostIDNames(ctx context.Context, projectID int32) ([]ListProjectHostIDNamesRow, error)
+	ListProjectOriginHostRows(ctx context.Context, projectID int32) ([]ListProjectOriginHostRowsRow, error)
+	ListProjectOriginIPs(ctx context.Context, projectID int32) ([]string, error)
+	ListProjectScanTargets(ctx context.Context, projectID int32) ([]ListProjectScanTargetsRow, error)
 	ListProjectsAdmin(ctx context.Context, arg ListProjectsAdminParams) ([]Project, error)
 	ListProjectsByIDs(ctx context.Context, ids []int32) ([]Project, error)
 	ListProjectsForMember(ctx context.Context, arg ListProjectsForMemberParams) ([]Project, error)
@@ -230,6 +268,7 @@ type Querier interface {
 	// ─────────── project stats ───────────
 	ProjectStatsAdmin(ctx context.Context) ([]ProjectStatsAdminRow, error)
 	ProjectStatsForMember(ctx context.Context, userID int32) ([]ProjectStatsForMemberRow, error)
+	ReclaimStaleReconJobs(ctx context.Context, arg ReclaimStaleReconJobsParams) (int64, error)
 	ResetUserPasswordTemp(ctx context.Context, arg ResetUserPasswordTempParams) error
 	// ─────────── comment mentions ───────────
 	ResolveCommentMentionUsers(ctx context.Context, arg ResolveCommentMentionUsersParams) ([]ResolveCommentMentionUsersRow, error)
@@ -237,9 +276,23 @@ type Querier interface {
 	RevokeAllUserRefreshTokens(ctx context.Context, userID int32) error
 	RevokeInvitation(ctx context.Context, id int32) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
+	SelectExistingHostIPLiterals(ctx context.Context, arg SelectExistingHostIPLiteralsParams) ([]pgtype.Text, error)
+	// ─────────── existing-target keys (create_job) ───────────
+	SelectExistingHostnames(ctx context.Context, arg SelectExistingHostnamesParams) ([]pgtype.Text, error)
+	SelectExistingOriginIPAddresses(ctx context.Context, arg SelectExistingOriginIPAddressesParams) ([]string, error)
+	SelectPendingReconJobs(ctx context.Context, arg SelectPendingReconJobsParams) ([]int32, error)
 	ServiceAssetInProject(ctx context.Context, arg ServiceAssetInProjectParams) (bool, error)
+	// ─────────── host_ip_addresses (ensure_ips) ───────────
+	SetHostIPCloudflare(ctx context.Context, arg SetHostIPCloudflareParams) error
+	SetHostIPHostnames(ctx context.Context, arg SetHostIPHostnamesParams) error
 	SetHostPrimaryIP(ctx context.Context, arg SetHostPrimaryIPParams) error
+	SetHostStatus(ctx context.Context, arg SetHostStatusParams) error
+	SetJobDone(ctx context.Context, arg SetJobDoneParams) error
+	SetJobFailed(ctx context.Context, arg SetJobFailedParams) error
+	SetJobQueued(ctx context.Context, id int32) error
 	SetNoteSortOrder(ctx context.Context, arg SetNoteSortOrderParams) error
+	SetPortStateHTTP(ctx context.Context, arg SetPortStateHTTPParams) error
+	SetPortStateOpen(ctx context.Context, id int32) error
 	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
 	SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) error
 	SetUserLocked(ctx context.Context, arg SetUserLockedParams) error
@@ -265,6 +318,7 @@ type Querier interface {
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	UpdateVuln(ctx context.Context, arg UpdateVulnParams) (Vulnerability, error)
 	UpdateVulnComment(ctx context.Context, arg UpdateVulnCommentParams) error
+	UpsertJsFile(ctx context.Context, arg UpsertJsFileParams) (int32, error)
 	UsernameExists(ctx context.Context, username string) (bool, error)
 }
 

@@ -74,6 +74,54 @@ type Config struct {
 	InviteTokenExpireHours   int    `env:"INVITE_TOKEN_EXPIRE_HOURS" envDefault:"168"`
 	PasswordResetExpireHours int    `env:"PASSWORD_RESET_EXPIRE_HOURS" envDefault:"2"`
 	ReactivationExpireHours  int    `env:"REACTIVATION_EXPIRE_HOURS" envDefault:"24"`
+
+	// --- Recon-ферма: серверный пробив вставленных списков хостов и IP ---
+	// Зеркало config.py §5. float-секунды парсим как float64 (совпадает с .env).
+	FarmMaxTargets               int     `env:"FARM_MAX_TARGETS" envDefault:"256"`
+	FarmMaxPortsPerHost          int     `env:"FARM_MAX_PORTS_PER_HOST" envDefault:"32"`
+	FarmProbeTimeoutSeconds      float64 `env:"FARM_PROBE_TIMEOUT_SECONDS" envDefault:"8.0"`
+	FarmMaxConcurrency           int     `env:"FARM_MAX_CONCURRENCY" envDefault:"20"`
+	FarmMaxRawBytes              int     `env:"FARM_MAX_RAW_BYTES" envDefault:"262144"`
+	FarmAllowPrivateTargets      bool    `env:"FARM_ALLOW_PRIVATE_TARGETS" envDefault:"false"`
+	FarmReverseDNSEnabled        bool    `env:"FARM_REVERSE_DNS_ENABLED" envDefault:"true"`
+	FarmIPResolveHostsEnabled    bool    `env:"FARM_IP_RESOLVE_HOSTS_ENABLED" envDefault:"true"`
+	FarmHostResolveIPsEnabled    bool    `env:"FARM_HOST_RESOLVE_IPS_ENABLED" envDefault:"true"`
+	FarmReverseDNSTimeoutSeconds float64 `env:"FARM_REVERSE_DNS_TIMEOUT_SECONDS" envDefault:"3.0"`
+
+	ReconWorkerEnabled   bool `env:"RECON_WORKER_ENABLED" envDefault:"true"`
+	ReconMaxAttempts     int  `env:"RECON_MAX_ATTEMPTS" envDefault:"3"`
+	ReconStaleJobSeconds int  `env:"RECON_STALE_JOB_SECONDS" envDefault:"1800"`
+	ReconResultMaxItems  int  `env:"RECON_RESULT_MAX_ITEMS" envDefault:"200"`
+
+	// --- Ферма JS ---
+	JSFarmMaxFilesPerHost        int     `env:"JS_FARM_MAX_FILES_PER_HOST" envDefault:"50"`
+	JSFarmMaxFileBytes           int     `env:"JS_FARM_MAX_FILE_BYTES" envDefault:"5000000"`
+	JSFarmDownloadTimeoutSeconds float64 `env:"JS_FARM_DOWNLOAD_TIMEOUT_SECONDS" envDefault:"15.0"`
+	JSFarmMaxConcurrency         int     `env:"JS_FARM_MAX_CONCURRENCY" envDefault:"10"`
+	JSFarmMaxTotalFiles          int     `env:"JS_FARM_MAX_TOTAL_FILES" envDefault:"500"`
+
+	// --- Определение технологий/CDN веб-порта ---
+	ServicesDetectEnabled        bool    `env:"SERVICES_DETECT_ENABLED" envDefault:"true"`
+	ServicesDetectEngine         string  `env:"SERVICES_DETECT_ENGINE" envDefault:"httpx"`
+	ServicesHttpxBin             string  `env:"SERVICES_HTTPX_BIN" envDefault:"httpx-pd"`
+	ServicesWhatwebBin           string  `env:"SERVICES_WHATWEB_BIN" envDefault:"whatweb"`
+	ServicesDetectTimeoutSeconds float64 `env:"SERVICES_DETECT_TIMEOUT_SECONDS" envDefault:"20.0"`
+	ServicesMaxConcurrency       int     `env:"SERVICES_MAX_CONCURRENCY" envDefault:"6"`
+
+	// --- Scanner: поддомены ---
+	SubsCrtshEnabled            bool    `env:"SUBS_CRTSH_ENABLED" envDefault:"true"`
+	SubsCrtshTimeoutSeconds     float64 `env:"SUBS_CRTSH_TIMEOUT_SECONDS" envDefault:"30.0"`
+	SubsSubfinderEnabled        bool    `env:"SUBS_SUBFINDER_ENABLED" envDefault:"true"`
+	SubsSubfinderBin            string  `env:"SUBS_SUBFINDER_BIN" envDefault:"subfinder"`
+	SubsSubfinderTimeoutSeconds float64 `env:"SUBS_SUBFINDER_TIMEOUT_SECONDS" envDefault:"120.0"`
+	SubsMaxResults              int     `env:"SUBS_MAX_RESULTS" envDefault:"2000"`
+
+	// --- Scanner: скан портов (nmap) ---
+	PortscanEnabled        bool    `env:"PORTSCAN_ENABLED" envDefault:"true"`
+	PortscanNmapBin        string  `env:"PORTSCAN_NMAP_BIN" envDefault:"nmap"`
+	PortscanTopPorts       int     `env:"PORTSCAN_TOP_PORTS" envDefault:"1000"`
+	PortscanTimeoutSeconds float64 `env:"PORTSCAN_TIMEOUT_SECONDS" envDefault:"300.0"`
+	PortscanMaxTargets     int     `env:"PORTSCAN_MAX_TARGETS" envDefault:"64"`
 }
 
 // Load читает .env (если есть) и переменные окружения в Config.
