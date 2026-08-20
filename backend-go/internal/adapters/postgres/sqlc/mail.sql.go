@@ -12,11 +12,19 @@ import (
 )
 
 const claimPendingMailJobs = `-- name: ClaimPendingMailJobs :many
-SELECT id, user_id, created_by, recipient_email, subject, template, payload, status, attempts, published_at, sent_at, last_error, created_at, updated_at FROM mail_jobs WHERE status = 'pending' ORDER BY created_at LIMIT $1
+SELECT id, user_id, created_by, recipient_email, subject, template, payload, status, attempts, published_at, sent_at, last_error, created_at, updated_at FROM mail_jobs
+WHERE status = 'pending' OR (status = 'failed' AND attempts < $1)
+ORDER BY created_at ASC
+LIMIT $2
 `
 
-func (q *Queries) ClaimPendingMailJobs(ctx context.Context, limit int32) ([]MailJob, error) {
-	rows, err := q.db.Query(ctx, claimPendingMailJobs, limit)
+type ClaimPendingMailJobsParams struct {
+	MaxAttempts int32 `json:"max_attempts"`
+	Lim         int32 `json:"lim"`
+}
+
+func (q *Queries) ClaimPendingMailJobs(ctx context.Context, arg ClaimPendingMailJobsParams) ([]MailJob, error) {
+	rows, err := q.db.Query(ctx, claimPendingMailJobs, arg.MaxAttempts, arg.Lim)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +58,32 @@ func (q *Queries) ClaimPendingMailJobs(ctx context.Context, limit int32) ([]Mail
 	return items, nil
 }
 
+const getMailJob = `-- name: GetMailJob :one
+SELECT id, user_id, created_by, recipient_email, subject, template, payload, status, attempts, published_at, sent_at, last_error, created_at, updated_at FROM mail_jobs WHERE id = $1
+`
+
+func (q *Queries) GetMailJob(ctx context.Context, id int32) (MailJob, error) {
+	row := q.db.QueryRow(ctx, getMailJob, id)
+	var i MailJob
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CreatedBy,
+		&i.RecipientEmail,
+		&i.Subject,
+		&i.Template,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.PublishedAt,
+		&i.SentAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertMailJob = `-- name: InsertMailJob :one
 
 INSERT INTO mail_jobs (user_id, created_by, recipient_email, subject, template, payload, status)
@@ -66,7 +100,9 @@ type InsertMailJobParams struct {
 	Payload        []byte      `json:"payload"`
 }
 
-// Запросы контекста mail (outbox). Отправка писем — Phase 2 (mail-worker).
+// Запросы контекста mail (outbox). Отправка — cmd/mail-worker.
+// Модель статусов (порт mail_worker.py): pending→queued→processing→sent|failed.
+// attempts инкрементится при ВЗЯТИИ в работу (MarkMailJobProcessing), не при провале.
 func (q *Queries) InsertMailJob(ctx context.Context, arg InsertMailJobParams) (MailJob, error) {
 	row := q.db.QueryRow(ctx, insertMailJob,
 		arg.UserID,
@@ -97,7 +133,7 @@ func (q *Queries) InsertMailJob(ctx context.Context, arg InsertMailJobParams) (M
 }
 
 const markMailJobFailed = `-- name: MarkMailJobFailed :exec
-UPDATE mail_jobs SET status = 'failed', attempts = attempts + 1, last_error = $2 WHERE id = $1
+UPDATE mail_jobs SET status = 'failed', last_error = $2 WHERE id = $1
 `
 
 type MarkMailJobFailedParams struct {
@@ -110,8 +146,59 @@ func (q *Queries) MarkMailJobFailed(ctx context.Context, arg MarkMailJobFailedPa
 	return err
 }
 
+const markMailJobPending = `-- name: MarkMailJobPending :exec
+UPDATE mail_jobs SET status = 'pending', last_error = $2 WHERE id = $1
+`
+
+type MarkMailJobPendingParams struct {
+	ID        int32       `json:"id"`
+	LastError pgtype.Text `json:"last_error"`
+}
+
+func (q *Queries) MarkMailJobPending(ctx context.Context, arg MarkMailJobPendingParams) error {
+	_, err := q.db.Exec(ctx, markMailJobPending, arg.ID, arg.LastError)
+	return err
+}
+
+const markMailJobProcessing = `-- name: MarkMailJobProcessing :one
+UPDATE mail_jobs SET status = 'processing', attempts = attempts + 1
+WHERE id = $1 AND status <> 'sent'
+RETURNING id, user_id, created_by, recipient_email, subject, template, payload, status, attempts, published_at, sent_at, last_error, created_at, updated_at
+`
+
+func (q *Queries) MarkMailJobProcessing(ctx context.Context, id int32) (MailJob, error) {
+	row := q.db.QueryRow(ctx, markMailJobProcessing, id)
+	var i MailJob
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CreatedBy,
+		&i.RecipientEmail,
+		&i.Subject,
+		&i.Template,
+		&i.Payload,
+		&i.Status,
+		&i.Attempts,
+		&i.PublishedAt,
+		&i.SentAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markMailJobQueued = `-- name: MarkMailJobQueued :exec
+UPDATE mail_jobs SET status = 'queued', published_at = now(), last_error = NULL WHERE id = $1
+`
+
+func (q *Queries) MarkMailJobQueued(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, markMailJobQueued, id)
+	return err
+}
+
 const markMailJobSent = `-- name: MarkMailJobSent :exec
-UPDATE mail_jobs SET status = 'sent', sent_at = now() WHERE id = $1
+UPDATE mail_jobs SET status = 'sent', sent_at = now(), last_error = NULL WHERE id = $1
 `
 
 func (q *Queries) MarkMailJobSent(ctx context.Context, id int32) error {

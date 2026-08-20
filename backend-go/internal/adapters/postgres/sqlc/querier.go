@@ -9,7 +9,7 @@ import (
 )
 
 type Querier interface {
-	ClaimPendingMailJobs(ctx context.Context, limit int32) ([]MailJob, error)
+	ClaimPendingMailJobs(ctx context.Context, arg ClaimPendingMailJobsParams) ([]MailJob, error)
 	ClearCommentMentions(ctx context.Context, commentID int32) error
 	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
 	CountFileImagesForVuln(ctx context.Context, arg CountFileImagesForVulnParams) (int64, error)
@@ -78,6 +78,7 @@ type Querier interface {
 	GetHostIPForHost(ctx context.Context, arg GetHostIPForHostParams) (HostIpAddress, error)
 	GetInvitationByID(ctx context.Context, id int32) (Invitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (Invitation, error)
+	GetMailJob(ctx context.Context, id int32) (MailJob, error)
 	GetMember(ctx context.Context, arg GetMemberParams) (ProjectMember, error)
 	GetNote(ctx context.Context, arg GetNoteParams) (GetNoteRow, error)
 	GetNoteComment(ctx context.Context, arg GetNoteCommentParams) (ProjectNoteComment, error)
@@ -122,7 +123,9 @@ type Querier interface {
 	// ─────────── hosts ───────────
 	InsertHost(ctx context.Context, arg InsertHostParams) (Host, error)
 	InsertHostIP(ctx context.Context, arg InsertHostIPParams) (HostIpAddress, error)
-	// Запросы контекста mail (outbox). Отправка писем — Phase 2 (mail-worker).
+	// Запросы контекста mail (outbox). Отправка — cmd/mail-worker.
+	// Модель статусов (порт mail_worker.py): pending→queued→processing→sent|failed.
+	// attempts инкрементится при ВЗЯТИИ в работу (MarkMailJobProcessing), не при провале.
 	InsertMailJob(ctx context.Context, arg InsertMailJobParams) (MailJob, error)
 	InsertMember(ctx context.Context, arg InsertMemberParams) (ProjectMember, error)
 	// ─────────── notifications ───────────
@@ -200,6 +203,9 @@ type Querier interface {
 	ListVulnsForHost(ctx context.Context, arg ListVulnsForHostParams) ([]ListVulnsForHostRow, error)
 	MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error
 	MarkMailJobFailed(ctx context.Context, arg MarkMailJobFailedParams) error
+	MarkMailJobPending(ctx context.Context, arg MarkMailJobPendingParams) error
+	MarkMailJobProcessing(ctx context.Context, id int32) (MailJob, error)
+	MarkMailJobQueued(ctx context.Context, id int32) error
 	MarkMailJobSent(ctx context.Context, id int32) error
 	MarkPasswordResetUsed(ctx context.Context, id int32) error
 	MarkReactivationUsed(ctx context.Context, id int32) error
