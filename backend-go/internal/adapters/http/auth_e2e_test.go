@@ -19,6 +19,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/sqlc"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
 	"github.com/nkolomiika/frost/internal/adapters/storage"
@@ -26,6 +27,7 @@ import (
 	"github.com/nkolomiika/frost/internal/app/auth"
 	"github.com/nkolomiika/frost/internal/app/inventory"
 	"github.com/nkolomiika/frost/internal/app/projects"
+	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
 )
 
@@ -103,9 +105,13 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	auditH := NewAuditHandler(audit.NewService(auditrepo.New(pool)), svc)
 	inventoryH := NewInventoryHandler(inventory.NewService(inventoryrepo.New(pool), nil), projectsSvc, svc, []string{testOrigin})
 	vulnsH := NewVulnsHandler(vulns.NewService(vulnsrepo.New(pool), storage.Stub{}, "frost"), projectsSvc, svc, []string{testOrigin})
+	usersH := NewUsersHandler(users.NewService(usersrepo.New(pool), cipher, storage.Stub{}, users.Config{
+		AppBaseURL: "https://app", MailEnabled: true, Brand: "FROST", MinioBucketName: "frost",
+		InviteTokenExpireHours: 168, ReactivationExpireHours: 24,
+	}, nil), svc, []string{testOrigin})
 	return httptest.NewServer(NewRouter(Deps{
 		Logger: logger, Auth: handler, Projects: projectsH, Audit: auditH,
-		Inventory: inventoryH, Vulns: vulnsH,
+		Inventory: inventoryH, Vulns: vulnsH, Users: usersH,
 	}))
 }
 

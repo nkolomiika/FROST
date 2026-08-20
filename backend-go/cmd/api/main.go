@@ -24,6 +24,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
 	"github.com/nkolomiika/frost/internal/adapters/storage"
@@ -32,6 +33,7 @@ import (
 	"github.com/nkolomiika/frost/internal/app/auth"
 	"github.com/nkolomiika/frost/internal/app/inventory"
 	"github.com/nkolomiika/frost/internal/app/projects"
+	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
 	"github.com/nkolomiika/frost/internal/platform/postgres"
@@ -122,7 +124,16 @@ func run() error {
 	// Контекст vulns (уязвимости/CVSS/assets/комментарии/файлы).
 	vulnsHandler := httpadapter.NewVulnsHandler(vulns.NewService(vulnsrepo.New(pool), fileStorage, cfg.MinioBucketName), projectsSvc, authSvc, cfg.CSRFOrigins())
 
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler})
+	// Контекст users (профиль/2FA/аватары/инвайты, admin-управление).
+	usersHandler := httpadapter.NewUsersHandler(
+		users.NewService(usersrepo.New(pool), cipher, fileStorage, users.Config{
+			AppBaseURL: cfg.AppBaseURL, MailPreviewURL: cfg.MailPreviewURL, SMTPHost: cfg.SMTPHost,
+			MailEnabled: cfg.MailEnabled, Brand: "FROST", MinioBucketName: cfg.MinioBucketName,
+			InviteTokenExpireHours: cfg.InviteTokenExpireHours, ReactivationExpireHours: cfg.ReactivationExpireHours,
+		}, nil),
+		authSvc, cfg.CSRFOrigins())
+
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{
