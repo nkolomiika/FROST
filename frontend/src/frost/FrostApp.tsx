@@ -30,6 +30,7 @@ import { PasswordInput } from "./PasswordInput";
 import { useAuthStore, useToastStore } from "../store";
 import { useThemeStore } from "./theme";
 import { FrostSelect } from "./FrostSelect";
+import { FrostMark, FrostWordmark } from "./Brand";
 import { t, useLangStore } from "./i18n";
 import {
   getApiErrorMessage as rawGetApiErrorMessage,
@@ -5676,9 +5677,9 @@ export function FrostApp() {
     <div className="frost" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--fr-bg)", position: "relative" }}>
       {/* top app bar */}
       <header style={{ height: 58, flex: "none", display: "flex", alignItems: "center", gap: 14, padding: "0 22px", background: "var(--fr-surface)", borderBottom: "1px solid var(--fr-border-light)", zIndex: 30 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: "-.3px", color: "var(--fr-text)" }}>{t("FROST")}</div>
-          <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", margin: "0 4px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+          <FrostMark size={27} />
+          <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", margin: "0 2px" }} />
           <div className="mono" style={{ fontSize: 10.5, letterSpacing: 2, color: "var(--fr-text-faint)", fontWeight: 600 }}>OFFENSIVE RESEARCH &amp; MANAGEMENT</div>
         </div>
         <div style={{ flex: 1 }} />
@@ -5712,7 +5713,7 @@ export function FrostApp() {
         <aside className={`sb ${state.sidebarCollapsed ? "collapsed" : ""}`} style={{ width: sideW, flex: "none", background: "var(--fr-surface)", borderRight: "1px solid var(--fr-border-light)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div className="sbhead" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 14px 18px 18px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
-              <div className="lbl" style={{ fontWeight: 800, fontSize: 16, letterSpacing: 3, color: "var(--fr-text)" }}>{t("FROST")}</div>
+              <span className="lbl"><FrostWordmark size={18} spacing={3} /></span>
             </div>
             <div className="clk nav iconbtn" onClick={() => toggle("sidebarCollapsed")} style={{ width: 26, height: 26, flex: "none", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fr-text-faint)" }}>
               <Icon name="chevrons-left" size={18} color="currentColor" sw={2.4} style={{ transform: state.sidebarCollapsed ? "rotate(180deg)" : "none", transition: "transform .26s ease" }} />
@@ -5755,7 +5756,7 @@ export function FrostApp() {
             {state.view === "profile" && renderProfile()}
           </main>
           <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, color: "var(--fr-text-3)" }}>{t("FROST")}</span><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+            <FrostMark size={15} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
           </footer>
         </div>
       </div>

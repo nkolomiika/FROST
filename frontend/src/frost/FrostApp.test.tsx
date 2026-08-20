@@ -278,7 +278,10 @@ describe("FrostApp workspace screen", () => {
     render(<MemoryRouter><FrostApp /></MemoryRouter>);
     expect(await screen.findByText("Acme Corp — External Perimeter")).toBeInTheDocument();
     expect(screen.getByText("Northwind API")).toBeInTheDocument();
-    expect(screen.getAllByText("FROST").length).toBeGreaterThan(0);
+    // Brand: topbar carries the full name, the sidebar the FROST wordmark
+    // (the leading F is a separate crystalline span, so match the whole node).
+    expect(screen.getByText("OFFENSIVE RESEARCH & MANAGEMENT")).toBeInTheDocument();
+    expect(screen.getByText((_t, el) => el?.classList.contains("fr-wm") === true && el.textContent === "FROST")).toBeInTheDocument();
     expect(screen.getByText("My Tasks")).toBeInTheDocument();
   });
 

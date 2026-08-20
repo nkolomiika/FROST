@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import "./frost.css";
 import { Icon } from "./icons";
 import { PasswordInput } from "./PasswordInput";
+import { FrostMark, FrostWordmark } from "./Brand";
 import { getApiErrorMessage, requestPasswordReset } from "../api";
 import { useAuthStore, useToastStore } from "../store";
 
@@ -88,8 +89,10 @@ export function FrostLogin() {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: 420, maxWidth: "100%" }}>
           {/* brand */}
-          <div style={{ display: "flex", alignItems: "center", gap: 11, justifyContent: "center", marginBottom: 22 }}>
-            <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: 3, color: "var(--fr-text)" }}>FROST</div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 24 }}>
+            <FrostMark size={46} />
+            <FrostWordmark size={25} spacing={4} />
+            <div className="mono" style={{ fontSize: 9.5, letterSpacing: 2.5, color: "var(--fr-text-faint)", fontWeight: 600 }}>OFFENSIVE RESEARCH &amp; MANAGEMENT</div>
           </div>
 
           {stage === "credentials" ? (
@@ -273,7 +276,7 @@ export function FrostLogin() {
       </div>
 
       <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 700, color: "var(--fr-text-3)" }}>FROST</span>
+        <FrostMark size={14} />
         <span>·</span>
         <span>Copyright © 2026. All rights reserved.</span>
       </footer>
