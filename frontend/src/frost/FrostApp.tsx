@@ -5713,7 +5713,8 @@ export function FrostApp() {
         {/* sidebar */}
         <aside className={`sb ${state.sidebarCollapsed ? "collapsed" : ""}`} style={{ width: sideW, flex: "none", background: "var(--fr-surface)", borderRight: "1px solid var(--fr-border-light)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div className="sbhead" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 14px 18px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, overflow: "hidden" }}>
+              <FrostMark size={22} />
               <span className="lbl"><FrostWordmark size={18} spacing={3} /></span>
             </div>
             <div className="clk nav iconbtn" onClick={() => toggle("sidebarCollapsed")} style={{ width: 26, height: 26, flex: "none", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fr-text-faint)" }}>
@@ -5757,7 +5758,7 @@ export function FrostApp() {
             {state.view === "profile" && renderProfile()}
           </main>
           <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
-            <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><FrostMark size={14} /><FrostWordmark size={13} spacing={2} /></span><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
           </footer>
         </div>
       </div>

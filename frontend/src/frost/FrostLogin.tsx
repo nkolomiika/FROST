@@ -89,9 +89,11 @@ export function FrostLogin() {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: 420, maxWidth: "100%" }}>
           {/* brand */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 24 }}>
-            <FrostMark size={46} />
-            <FrostWordmark size={25} spacing={4} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 11, marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <FrostMark size={40} />
+              <FrostWordmark size={27} spacing={4} />
+            </div>
             <div className="mono" style={{ fontSize: 9.5, letterSpacing: 2.5, color: "var(--fr-text-faint)", fontWeight: 600 }}>OFFENSIVE RESEARCH &amp; MANAGEMENT</div>
           </div>
 

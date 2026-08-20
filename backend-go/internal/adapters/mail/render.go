@@ -67,12 +67,12 @@ func htmlShell(heading, intro, inner, outro string) string {
 		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6;">` +
 		`<tr><td align="center" style="padding:32px 12px;">` +
 		`<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">` +
-		// header — кристалл-логотип над словесным знаком (картинка inline по cid:,
-		// при блокировке картинок остаётся текстовый бейдж).
+		// header — кристалл-логотип слева от словесного знака (картинка inline по
+		// cid:, при блокировке картинок остаётся текстовый бейдж).
 		`<tr><td align="center" style="padding-bottom:18px;">` +
-		`<img src="cid:` + logoCID + `" width="54" height="54" alt="" ` +
-		`style="display:block;margin:0 auto 10px;border-radius:13px;">` +
-		`<span style="display:inline-block;background:` + ink + `;border-radius:14px;padding:12px 22px;` +
+		`<img src="cid:` + logoCID + `" width="42" height="42" alt="" ` +
+		`style="display:inline-block;vertical-align:middle;border-radius:11px;margin-right:11px;">` +
+		`<span style="display:inline-block;vertical-align:middle;background:` + ink + `;border-radius:14px;padding:12px 22px;` +
 		`color:#fff;font:700 18px/1 Arial,Helvetica,sans-serif;letter-spacing:3px;">` + brand + `</span></td></tr>` +
 		// card
 		`<tr><td style="background:#fff;border:1px solid #e9edf4;border-radius:16px;padding:32px 34px;">` +

@@ -62,7 +62,7 @@ type Config struct {
 	SMTPUseSSL          bool    `env:"SMTP_USE_SSL" envDefault:"false"`
 	SMTPTimeoutSecs     float64 `env:"SMTP_TIMEOUT_SECONDS" envDefault:"20.0"`
 	SMTPFromEmail       string  `env:"SMTP_FROM_EMAIL" envDefault:"noreply@example.com"`
-	SMTPFromName        string  `env:"SMTP_FROM_NAME" envDefault:"PCF"`
+	SMTPFromName        string  `env:"SMTP_FROM_NAME" envDefault:"FROST"`
 	SMTPAuthMethod      string  `env:"SMTP_AUTH_METHOD" envDefault:"password"`
 	GoogleOAuthID       string  `env:"GOOGLE_OAUTH_CLIENT_ID"`
 	GoogleOAuthSecret   string  `env:"GOOGLE_OAUTH_CLIENT_SECRET"`
