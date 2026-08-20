@@ -21,7 +21,7 @@
 
 ## Стек
 
-Backend: Python 3.12, FastAPI, SQLAlchemy 2 async, Alembic, Pydantic 2, JWT (cookie), bcrypt.
+Backend: **Go 1.26**, гексагональная архитектура — chi, pgx + sqlc, goose-миграции (применяются на старте), JWT (cookie), bcrypt, CVSS 4.0. Три бинаря: `cmd/api`, `cmd/mail-worker`, `cmd/recon-worker` (воркеры — DB-поллеры). Код в `backend-go/`. Генерация Word-отчётов (.docx) — временный Python-sidecar `report-sidecar` поверх проверенного `word_builder` (остальной Python удалён).
 Storage: PostgreSQL 16, MinIO, RabbitMQ.
 Frontend: React 18 + TypeScript + Vite 6, Zustand, TipTap (редактор заметок), axios.
 
@@ -91,8 +91,7 @@ cp .env.prod.example .env.prod   # заполнить: адрес, секрет�
 
 ## Учётные записи (локальный dev)
 
-Стартовый админ создаётся при первом запуске из `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` в `.env`.
-Демо-команду создаёт `backend/scripts/reset_and_seed.py`. Вход — по **username** (не по email).
+Стартовый админ создаётся Go-API при первом запуске (пустая таблица `users`) из `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` в `.env`. Вход — по **username** (не по email). Остальных пользователей заводят через приглашения (страница `/members`, доступна админу).
 
 | Логин | Пароль | Аккаунтная роль | Проектная роль | Email |
 |-----------|---------|-----------------|----------------|---------------------|
@@ -116,17 +115,18 @@ cp .env.prod.example .env.prod   # заполнить: адрес, секрет�
 
 Обе роли меняются только на странице `/members` (доступна админу).
 
-Пересоздать демо-данные (пользователи сохраняются):
-
-```bash
-docker compose exec backend python scripts/reset_and_seed.py
-```
-
 ## Тесты
 
 ```bash
-docker compose exec backend python -m pytest -q   # бэкенд
-cd frontend && npx vitest run                     # фронтенд
+cd backend-go && make test        # Go-бэкенд: go test ./... -race
+cd frontend && npx vitest run     # фронтенд
+```
+
+DB-e2e (поднимают схему на реальном Postgres) запускаются под env-флагом:
+
+```bash
+docker run -d --name pg -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=frost -p 55432:5432 postgres:16-alpine
+cd backend-go && FROST_TEST_DATABASE_URL='postgres://postgres:pw@127.0.0.1:55432/frost' go test ./internal/adapters/http/ -run E2E
 ```
 
 ## Документация
