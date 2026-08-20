@@ -32,24 +32,37 @@ func pathInt32(r *http.Request, name string) (int32, error) {
 	return int32(v), nil
 }
 
-// requireProjectAccess — middleware (после requireAuth): грузит проект по
+// projectAuthorizer — порт проверки доступа к проекту (реализует projects.Service).
+// Позволяет контекстам inventory/vulns переиспользовать ту же проверку.
+type projectAuthorizer interface {
+	AuthorizeAccess(ctx context.Context, projectID int32, actor projects.Actor) (*projects.Project, error)
+}
+
+// requireProjectAccessFor — middleware (после requireAuth): грузит проект по
 // {project_id}, отсутствие → 403 (не 404), админ проходит, иначе нужно членство.
 // Загруженный проект кладётся в контекст (projectCtxKey).
+func requireProjectAccessFor(authz projectAuthorizer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pid, err := pathInt32(r, "project_id")
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			project, err := authz.AuthorizeAccess(r.Context(), pid, actorFrom(r))
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			ctx := context.WithValue(r.Context(), projectCtxKey, project)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// requireProjectAccess — обёртка для ProjectsHandler.
 func (h *ProjectsHandler) requireProjectAccess(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pid, err := pathInt32(r, "project_id")
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		project, err := h.svc.AuthorizeAccess(r.Context(), pid, actorFrom(r))
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		ctx := context.WithValue(r.Context(), projectCtxKey, project)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	return requireProjectAccessFor(h.svc)(next)
 }
 
 // projectFromContext достаёт проект, загруженный requireProjectAccess.

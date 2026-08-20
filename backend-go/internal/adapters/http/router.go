@@ -19,6 +19,8 @@ type Deps struct {
 	Audit       *AuditHandler      // nil до подключения контекста audit
 	AgentTokens *AgentTokenHandler // nil до подключения контекста agenttokens
 	Projects    *ProjectsHandler   // nil до подключения контекста projects
+	Inventory   *InventoryHandler  // nil до подключения контекста inventory
+	Vulns       *VulnsHandler      // nil до подключения контекста vulns
 }
 
 // NewRouter собирает chi-роутер с базовыми middleware и служебными эндпоинтами.
@@ -45,6 +47,12 @@ func NewRouter(d Deps) http.Handler {
 	}
 	if d.Projects != nil {
 		d.Projects.Register(r)
+	}
+	if d.Inventory != nil {
+		d.Inventory.Register(r)
+	}
+	if d.Vulns != nil {
+		d.Vulns.Register(r)
 	}
 
 	return r

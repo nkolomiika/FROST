@@ -22,12 +22,17 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/agenttokenrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
+	"github.com/nkolomiika/frost/internal/adapters/storage"
 	"github.com/nkolomiika/frost/internal/app/agenttokens"
 	"github.com/nkolomiika/frost/internal/app/audit"
 	"github.com/nkolomiika/frost/internal/app/auth"
+	"github.com/nkolomiika/frost/internal/app/inventory"
 	"github.com/nkolomiika/frost/internal/app/projects"
+	"github.com/nkolomiika/frost/internal/app/vulns"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
 	"github.com/nkolomiika/frost/internal/platform/postgres"
 )
@@ -90,10 +95,34 @@ func run() error {
 	// Контекст agenttokens (управление токенами /api/v1/agent-tokens).
 	agentTokenHandler := httpadapter.NewAgentTokenHandler(agenttokens.NewService(agenttokenrepo.New(pool), nil), authSvc, cfg.CSRFOrigins())
 
-	// Контекст projects.
-	projectsHandler := httpadapter.NewProjectsHandler(projects.NewService(projectsrepo.New(pool), cipher, nil), authSvc, cfg.CSRFOrigins())
+	// Общий сервис projects (доступ к проектам + сам контекст). Переиспользуется
+	// контекстами inventory/vulns для require_project_access.
+	projectsSvc := projects.NewService(projectsrepo.New(pool), cipher, nil)
+	projectsHandler := httpadapter.NewProjectsHandler(projectsSvc, authSvc, cfg.CSRFOrigins())
 
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler})
+	// Объектное хранилище (MinIO) для файлов/аватаров; stub, если не сконфигурировано.
+	var fileStorage vulns.Storage
+	if cfg.MinioEndpoint != "" {
+		ms, err := storage.NewMinio(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucketName, cfg.MinioUseSSL)
+		if err != nil {
+			return fmt.Errorf("minio: %w", err)
+		}
+		if err := ms.EnsureBucket(context.Background()); err != nil {
+			logger.Warn("minio bucket ensure failed", "err", err)
+		}
+		fileStorage = ms
+	} else {
+		fileStorage = storage.Stub{}
+		logger.Warn("MINIO_ENDPOINT пуст — файловое хранилище отключено (stub)")
+	}
+
+	// Контекст inventory (hosts/ips/ports/services/endpoints).
+	inventoryHandler := httpadapter.NewInventoryHandler(inventory.NewService(inventoryrepo.New(pool), nil), projectsSvc, authSvc, cfg.CSRFOrigins())
+
+	// Контекст vulns (уязвимости/CVSS/assets/комментарии/файлы).
+	vulnsHandler := httpadapter.NewVulnsHandler(vulns.NewService(vulnsrepo.New(pool), fileStorage, cfg.MinioBucketName), projectsSvc, authSvc, cfg.CSRFOrigins())
+
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{

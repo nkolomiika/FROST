@@ -16,12 +16,17 @@ import (
 
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/sqlc"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
+	"github.com/nkolomiika/frost/internal/adapters/storage"
 	"github.com/nkolomiika/frost/internal/app/audit"
 	"github.com/nkolomiika/frost/internal/app/auth"
+	"github.com/nkolomiika/frost/internal/app/inventory"
 	"github.com/nkolomiika/frost/internal/app/projects"
+	"github.com/nkolomiika/frost/internal/app/vulns"
 )
 
 // E2E-тест сквозного пути auth: baseline → sqlc → repo → use-cases → HTTP.
@@ -93,9 +98,15 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	cookies := CookieConfig{Secure: false, SameSite: http.SameSiteLaxMode, AccessMaxAge: 1800, RefreshMaxAge: 2592000, TwoFAMaxAge: 300}
 	handler := NewAuthHandler(svc, cookies, []string{testOrigin})
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	projectsH := NewProjectsHandler(projects.NewService(projectsrepo.New(pool), cipher, nil), svc, []string{testOrigin})
+	projectsSvc := projects.NewService(projectsrepo.New(pool), cipher, nil)
+	projectsH := NewProjectsHandler(projectsSvc, svc, []string{testOrigin})
 	auditH := NewAuditHandler(audit.NewService(auditrepo.New(pool)), svc)
-	return httptest.NewServer(NewRouter(Deps{Logger: logger, Auth: handler, Projects: projectsH, Audit: auditH}))
+	inventoryH := NewInventoryHandler(inventory.NewService(inventoryrepo.New(pool), nil), projectsSvc, svc, []string{testOrigin})
+	vulnsH := NewVulnsHandler(vulns.NewService(vulnsrepo.New(pool), storage.Stub{}, "frost"), projectsSvc, svc, []string{testOrigin})
+	return httptest.NewServer(NewRouter(Deps{
+		Logger: logger, Auth: handler, Projects: projectsH, Audit: auditH,
+		Inventory: inventoryH, Vulns: vulnsH,
+	}))
 }
 
 func TestE2EAuthLoginRefreshLogout(t *testing.T) {
