@@ -1952,6 +1952,10 @@ export function FrostApp() {
     }
     const host = u.hostname.toLowerCase().replace(/\.$/, "");
     if (!host) return null;
+    // Отсекаем мусорные токены (bullets, «(1.2.3.4)», «;»), которые URL проглотил
+    // бы как «хост»: настоящий хост — буквы/цифры/точка/дефис (или IPv6 с «:»).
+    const bare = host.replace(/^\[|\]$/g, "");
+    if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(bare) && !bare.includes(":")) return null;
     let port = u.port;
     if (!port && hasScheme) port = /^https:/i.test(token) ? "443" : "80";
     return port ? `${host}:${port}` : host;
@@ -1960,11 +1964,16 @@ export function FrostApp() {
   const normalizeHostList = (raw: string): string => {
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const line of raw.split(/\r?\n/)) {
-      const l = line.trim();
+    for (const rawLine of raw.split(/\r?\n/)) {
+      let l = rawLine.trim();
       if (!l || l.startsWith("#") || l.startsWith("//")) continue;
-      for (const tok of l.split(/[\s,]+/)) {
-        const n = tok.trim() ? normalizeHostToken(tok.trim()) : null;
+      // Срезаем маркеры списка (-, *, •, –, —, ·, «1.»/«1)») и убираем скобочные
+      // аннотации вида «(1.2.3.4)», чтобы строка «host (IP);» парсилась в host.
+      l = l.replace(/^(?:[-*•·–—]+|\d+[.)])\s+/, "");
+      l = l.replace(/\([^)]*\)/g, " ");
+      for (const tok of l.split(/[\s,;]+/)) {
+        const cleaned = tok.replace(/[;,]+$/, "").trim();
+        const n = cleaned ? normalizeHostToken(cleaned) : null;
         if (n && !seen.has(n)) {
           seen.add(n);
           out.push(n);
