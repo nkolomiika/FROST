@@ -3502,7 +3502,7 @@ export function FrostApp() {
   const vdScore = vdCvss ? vdCvss.score.toFixed(1) : "—";
 
   const pfNav = (tab: ProfileTab): CSSProperties =>
-    state.profileTab === tab ? { background: "var(--fr-accent-soft)", color: "var(--fr-accent)", boxShadow: "inset 3px 0 0 var(--fr-accent)" } : { background: "transparent", color: "var(--fr-text-2)", boxShadow: "inset 3px 0 0 transparent" };
+    state.profileTab === tab ? { background: "var(--fr-accent-soft)", color: "var(--fr-accent)", boxShadow: "inset 3px 0 0 var(--fr-accent)" } : { background: undefined, color: "var(--fr-text-2)", boxShadow: "inset 3px 0 0 transparent" };
 
   // ================================================================= RENDER
 
@@ -5459,13 +5459,13 @@ export function FrostApp() {
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div className="clk" onClick={() => setState({ profileTab: "account" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("account") }}><Icon name="user1" size={17} />{t("Account")}</div>
-            <div className="clk" onClick={() => setState({ profileTab: "security" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("security") }}>
+            <div className="nav clk" onClick={() => setState({ profileTab: "account" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("account") }}><Icon name="user1" size={17} />{t("Account")}</div>
+            <div className="nav clk" onClick={() => setState({ profileTab: "security" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("security") }}>
               <Icon name="lock" size={17} /><span style={{ flex: 1 }}>{t("Security")}</span>
               {twoFAEnabled && <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: ".5px", color: "var(--fr-success)", background: "var(--fr-success-soft)", borderRadius: 6, padding: "2px 6px" }}>{t("2FA")}</span>}
             </div>
-            <div className="clk" onClick={() => setState({ profileTab: "api" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("api") }}><Icon name="plug" size={17} />API &amp; Automation</div>
-            <div className="clk" onClick={() => setState({ profileTab: "customizing" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("customizing") }}><Icon name={theme === "dark" ? "moon" : "sun"} size={17} />{t("Customizing")}</div>
+            <div className="nav clk" onClick={() => setState({ profileTab: "api" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("api") }}><Icon name="plug" size={17} />API &amp; Automation</div>
+            <div className="nav clk" onClick={() => setState({ profileTab: "customizing" })} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, cursor: "pointer", font: "600 13.5px Inter,sans-serif", ...pfNav("customizing") }}><Icon name={theme === "dark" ? "moon" : "sun"} size={17} />{t("Customizing")}</div>
           </div>
         </div>
 
