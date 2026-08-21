@@ -47,6 +47,10 @@ type Settings struct {
 	PortscanTopPorts   int
 	PortscanTimeout    time.Duration
 	PortscanMaxTargets int
+
+	// Активный брут поддоменов dnsx в полном прогоне фермы (kind='farm_run').
+	DnsxBin          string
+	DnsxBruteTimeout time.Duration
 }
 
 func (s Settings) maxConcurrency() int {

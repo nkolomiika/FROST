@@ -488,3 +488,53 @@ func (s *Service) SaveFarmConfig(ctx context.Context, projectID int32, cfg FarmC
 func (s *Service) DeleteJSForHost(ctx context.Context, projectID, hostID int32) error {
 	return s.store.DeleteJSFilesForHost(ctx, projectID, hostID)
 }
+
+// ─────────────────────────── полный прогон фермы ───────────────────────────
+
+// StartFarmRun ставит задачу полного прогона фермы (kind='farm_run'). useDefaults
+// — гнать с DefaultFarmConfig, иначе с сохранённым конфигом проекта. Выбранный
+// конфиг сериализуется в raw задачи, чтобы раннер не зависел от гонок с сохранением.
+func (s *Service) StartFarmRun(ctx context.Context, projectID, actorID int32, useDefaults bool) (JobView, error) {
+	cfg := DefaultFarmConfig()
+	if !useDefaults {
+		saved, err := s.store.GetFarmConfig(ctx, projectID)
+		if err != nil {
+			return JobView{}, err
+		}
+		cfg = saved
+	}
+	cfg.Sanitize()
+
+	roots, err := s.subsRoots(ctx, projectID, "")
+	if err != nil {
+		return JobView{}, err
+	}
+	if len(roots) == 0 {
+		return JobView{}, apperr.Validation("В проекте нет корневых доменов для прогона фермы")
+	}
+
+	raw := string(mustJSON(cfg))
+	tt := int32(len(roots))
+	initProgress := mustJSON(RunProgress{Stage: "queued", Percent: 0, Steps: []RunStep{}, Errors: []string{}})
+	view, err := s.store.InsertJob(ctx, NewJob{
+		ProjectID: projectID, CreatedBy: actorID, Kind: KindFarmRun, Status: jobPending,
+		TargetsTotal: &tt, Raw: raw, Progress: initProgress,
+	})
+	if err != nil {
+		return JobView{}, err
+	}
+	s.maybeInline(view)
+	return view, nil
+}
+
+// GetFarmRun — статус+прогресс задачи полного прогона (404 при чужом kind).
+func (s *Service) GetFarmRun(ctx context.Context, projectID, jobID int32) (JobView, error) {
+	view, err := s.store.GetJobForProject(ctx, projectID, jobID, KindFarmRun)
+	if err == ErrNoRows {
+		return JobView{}, apperr.NotFound("Задача прогона фермы не найдена")
+	}
+	if err != nil {
+		return JobView{}, err
+	}
+	return view, nil
+}

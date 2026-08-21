@@ -27,6 +27,10 @@ const (
 	KindSubs    = "subs"
 	KindPorts   = "ports"
 	KindReverse = "reverse"
+	// KindFarmRun — полный прогон фермы: subfinder/crt.sh (пассив) + dnsx-брут
+	// (актив) параллельно → резолв+liveness (httpx) → скан портов (nmap), с
+	// живым прогрессом. Гоняет весь стек одной кнопкой.
+	KindFarmRun = "farm_run"
 )
 
 // Статусы задачи (порт enums.ReconJobStatus).
@@ -198,6 +202,50 @@ type ReverseFarmResult struct {
 
 func newReverseFarmResult() *ReverseFarmResult { return &ReverseFarmResult{Errors: []string{}} }
 
+// ─────────────────────────── полный прогон фермы (farm_run) ───────────────────────────
+
+// RunStep — один инструмент, работающий ПРЯМО СЕЙЧАС: чем (Tool), с какими
+// аргументами (Args, готовая строка команды) и по какой цели (Target). Живая
+// панель во фронте показывает их списком; пассивные и активные шаги видны вместе.
+type RunStep struct {
+	Tool      string    `json:"tool"`
+	Args      string    `json:"args"`
+	Target    string    `json:"target"`
+	StartedAt time.Time `json:"started_at"`
+}
+
+// RunProgress — снимок прогресса прогона (persist в host_farm_jobs.progress).
+// Percent 0..100, Stage — текущая стадия, Steps — активные шаги, плюс бегущие
+// счётчики найденного.
+type RunProgress struct {
+	Percent    int       `json:"percent"`
+	Stage      string    `json:"stage"`
+	Steps      []RunStep `json:"steps"`
+	SubsFound  int       `json:"subs_found"`
+	HostsFound int       `json:"hosts_found"`
+	PortsFound int       `json:"ports_found"`
+	Done       bool      `json:"done"`
+	Errors     []string  `json:"errors"`
+}
+
+// FarmRunResult — итог полного прогона (job.result). Счётчики + список ошибок.
+type FarmRunResult struct {
+	Mode            string   `json:"mode"`
+	WordlistSize    string   `json:"wordlist_size"`
+	RootsScanned    int      `json:"roots_scanned"`
+	SubdomainsFound int      `json:"subdomains_found"`
+	SubdomainsNew   int      `json:"subdomains_new"`
+	HostsCreated    int      `json:"hosts_created"`
+	HostsOnline     int      `json:"hosts_online"`
+	PortsFound      int      `json:"ports_found"`
+	SourcesUsed     []string `json:"sources_used"`
+	Errors          []string `json:"errors"`
+}
+
+func newFarmRunResult() *FarmRunResult {
+	return &FarmRunResult{SourcesUsed: []string{}, Errors: []string{}}
+}
+
 // ─────────────────────────── job-структуры ───────────────────────────
 
 // NewJob — данные для вставки задачи (create_job).
@@ -210,6 +258,7 @@ type NewJob struct {
 	Raw            string
 	SkippedTargets []string
 	Result         []byte // JSON, nil = NULL
+	Progress       []byte // JSON снимок прогресса (farm_run), nil = NULL
 	Finished       bool   // finished_at=now() при short-circuit done
 }
 
@@ -221,6 +270,7 @@ type JobView struct {
 	Status       string
 	TargetsTotal *int32
 	Result       []byte // сырой JSON (nil = null)
+	Progress     []byte // сырой JSON снимка прогресса farm_run (nil = null)
 	Error        *string
 	CreatedAt    time.Time
 }

@@ -698,6 +698,7 @@ type HostFarmJob struct {
 	SkippedTargets []byte             `json:"skipped_targets"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Progress       []byte             `json:"progress"`
 }
 
 type HostIpAddress struct {

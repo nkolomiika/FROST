@@ -32,6 +32,49 @@ func TestFarmConfigDefaultsOverMissingFields(t *testing.T) {
 	if cfg.RateLimit != 20 || cfg.Concurrency != 10 || !cfg.Subfinder || cfg.KatanaDepth != 3 {
 		t.Fatalf("defaults not preserved: %+v", cfg)
 	}
+	// Высокоуровневые ручки тоже должны остаться дефолтными.
+	if cfg.WordlistSize != "medium" || cfg.PortScanScope != "top1000" || cfg.CrawlDepth != 3 {
+		t.Fatalf("high-level defaults not preserved: %+v", cfg)
+	}
+}
+
+func TestFarmConfigDefaults_HighLevelKnobs(t *testing.T) {
+	c := DefaultFarmConfig()
+	if c.Mode != "both" {
+		t.Fatalf("default mode = %q, want both", c.Mode)
+	}
+	if c.WordlistSize != "medium" {
+		t.Fatalf("default wordlist_size = %q, want medium", c.WordlistSize)
+	}
+	if c.PortScanScope != "top1000" {
+		t.Fatalf("default port_scan_scope = %q, want top1000", c.PortScanScope)
+	}
+	if c.RateLimit != 20 || c.Concurrency != 10 || c.CrawlDepth != 3 {
+		t.Fatalf("numeric defaults off: %+v", c)
+	}
+}
+
+func TestFarmConfigSanitize_HighLevelKnobs(t *testing.T) {
+	c := FarmConfig{Mode: "both", WordlistSize: "bogus", PortScanScope: "bogus", CrawlDepth: 99}
+	c.Sanitize()
+	if c.Mode != "both" {
+		t.Fatalf("both mode dropped: %q", c.Mode)
+	}
+	if c.WordlistSize != "medium" {
+		t.Fatalf("wordlist_size not normalized: %q", c.WordlistSize)
+	}
+	if c.PortScanScope != "top1000" {
+		t.Fatalf("port_scan_scope not normalized: %q", c.PortScanScope)
+	}
+	if c.CrawlDepth != 10 {
+		t.Fatalf("crawl_depth not clamped: %d", c.CrawlDepth)
+	}
+	// Валидные значения сохраняются.
+	ok := FarmConfig{Mode: "passive", WordlistSize: "large", PortScanScope: "all", CrawlDepth: 1}
+	ok.Sanitize()
+	if ok.Mode != "passive" || ok.WordlistSize != "large" || ok.PortScanScope != "all" || ok.CrawlDepth != 1 {
+		t.Fatalf("valid high-level values altered: %+v", ok)
+	}
 }
 
 func TestFarmConfigSanitizeClamps(t *testing.T) {
@@ -44,7 +87,7 @@ func TestFarmConfigSanitizeClamps(t *testing.T) {
 		HttpxThreads:   99999,
 	}
 	c.Sanitize()
-	if c.Mode != "active" {
+	if c.Mode != "both" {
 		t.Fatalf("mode not normalized: %q", c.Mode)
 	}
 	if c.RateLimit != 500 {

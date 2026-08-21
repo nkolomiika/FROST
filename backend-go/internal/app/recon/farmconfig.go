@@ -5,10 +5,14 @@ package recon
 // DefaultFarmConfig и накладывает сверху сохранённый JSON — отсутствующие поля
 // остаются дефолтными). Snake_case json-теги фиксируют формат провода для фронта.
 type FarmConfig struct {
-	// Global — глобальные параметры прогонов фермы.
-	Mode        string `json:"mode"`        // "passive" | "active"
-	RateLimit   int    `json:"rate_limit"`  // rps
-	Concurrency int    `json:"concurrency"` //
+	// Global — высокоуровневые ручки прогона (единственное, что видит пользователь).
+	// Mode "both" гоняет пассивный и активный сбор ОДНОВРЕМЕННО.
+	Mode          string `json:"mode"`            // "passive" | "active" | "both"
+	WordlistSize  string `json:"wordlist_size"`   // "small" | "medium" | "large" (файл выбирает FROST)
+	RateLimit     int    `json:"rate_limit"`      // rps
+	Concurrency   int    `json:"concurrency"`     // параллельных воркеров
+	PortScanScope string `json:"port_scan_scope"` // "top1000" | "all"
+	CrawlDepth    int    `json:"crawl_depth"`     // глубина краула (1..10)
 
 	// Subdomains — сбор поддоменов.
 	Subfinder         bool `json:"subfinder"`
@@ -51,9 +55,12 @@ type FarmConfig struct {
 // у проекта ещё нет сохранённой строки.
 func DefaultFarmConfig() FarmConfig {
 	return FarmConfig{
-		Mode:        "active",
-		RateLimit:   20,
-		Concurrency: 10,
+		Mode:          "both",
+		WordlistSize:  "medium",
+		RateLimit:     20,
+		Concurrency:   10,
+		PortScanScope: "top1000",
+		CrawlDepth:    3,
 
 		Subfinder:         true,
 		Assetfinder:       true,
@@ -99,9 +106,20 @@ func clampInt(v, lo, hi int) int {
 // Sanitize приводит конфиг к безопасным границам: зажимает числа в допустимые
 // диапазоны и нормализует Mode ("passive"|"active"). Вызывается перед сохранением.
 func (c *FarmConfig) Sanitize() {
-	if c.Mode != "passive" {
-		c.Mode = "active"
+	switch c.Mode {
+	case "passive", "active", "both":
+	default:
+		c.Mode = "both"
 	}
+	switch c.WordlistSize {
+	case "small", "medium", "large":
+	default:
+		c.WordlistSize = "medium"
+	}
+	if c.PortScanScope != "all" {
+		c.PortScanScope = "top1000"
+	}
+	c.CrawlDepth = clampInt(c.CrawlDepth, 1, 10)
 	c.RateLimit = clampInt(c.RateLimit, 1, 500)
 	c.Concurrency = clampInt(c.Concurrency, 1, 100)
 	c.KatanaDepth = clampInt(c.KatanaDepth, 1, 10)

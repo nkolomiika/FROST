@@ -32,6 +32,7 @@ func (f *fakeStore) GetJobForProject(context.Context, int32, int32, string) (Job
 	return JobView{}, ErrNoRows
 }
 func (f *fakeStore) ClaimJobRunning(context.Context, int32) (*JobClaim, error)   { return nil, nil }
+func (f *fakeStore) UpdateJobProgress(context.Context, int32, []byte) error      { return nil }
 func (f *fakeStore) MarkJobDone(context.Context, int32, []byte) error            { return nil }
 func (f *fakeStore) MarkJobFailed(context.Context, int32, string, *string) error { return nil }
 func (f *fakeStore) SelectPendingJobIDs(context.Context, int32, int32) ([]int32, error) {

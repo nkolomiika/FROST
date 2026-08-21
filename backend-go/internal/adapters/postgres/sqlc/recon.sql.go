@@ -15,7 +15,7 @@ const claimReconJobRunning = `-- name: ClaimReconJobRunning :one
 UPDATE host_farm_jobs
 SET status = 'running', attempts = attempts + 1, updated_at = now()
 WHERE id = $1 AND status NOT IN ('running', 'done')
-RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at
+RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress
 `
 
 // Атомарно берёт задачу в работу (status='running', attempts++) при статусе, не
@@ -40,6 +40,7 @@ func (q *Queries) ClaimReconJobRunning(ctx context.Context, id int32) (HostFarmJ
 		&i.SkippedTargets,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -125,7 +126,7 @@ func (q *Queries) GetHostByIPLiteral(ctx context.Context, arg GetHostByIPLiteral
 }
 
 const getHostFarmJob = `-- name: GetHostFarmJob :one
-SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at FROM host_farm_jobs WHERE id = $1
+SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress FROM host_farm_jobs WHERE id = $1
 `
 
 func (q *Queries) GetHostFarmJob(ctx context.Context, id int32) (HostFarmJob, error) {
@@ -148,12 +149,13 @@ func (q *Queries) GetHostFarmJob(ctx context.Context, id int32) (HostFarmJob, er
 		&i.SkippedTargets,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Progress,
 	)
 	return i, err
 }
 
 const getHostFarmJobForProject = `-- name: GetHostFarmJobForProject :one
-SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at FROM host_farm_jobs
+SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress FROM host_farm_jobs
 WHERE id = $1 AND project_id = $2 AND kind = $3
 `
 
@@ -183,6 +185,7 @@ func (q *Queries) GetHostFarmJobForProject(ctx context.Context, arg GetHostFarmJ
 		&i.SkippedTargets,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -250,9 +253,9 @@ func (q *Queries) GetPortByIPNumberProto(ctx context.Context, arg GetPortByIPNum
 const insertHostFarmJob = `-- name: InsertHostFarmJob :one
 
 
-INSERT INTO host_farm_jobs (project_id, created_by, kind, status, targets_total, raw, skipped_targets, result, finished_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at
+INSERT INTO host_farm_jobs (project_id, created_by, kind, status, targets_total, raw, skipped_targets, result, progress, finished_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress
 `
 
 type InsertHostFarmJobParams struct {
@@ -264,6 +267,7 @@ type InsertHostFarmJobParams struct {
 	Raw            pgtype.Text        `json:"raw"`
 	SkippedTargets []byte             `json:"skipped_targets"`
 	Result         []byte             `json:"result"`
+	Progress       []byte             `json:"progress"`
 	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
 }
 
@@ -283,6 +287,7 @@ func (q *Queries) InsertHostFarmJob(ctx context.Context, arg InsertHostFarmJobPa
 		arg.Raw,
 		arg.SkippedTargets,
 		arg.Result,
+		arg.Progress,
 		arg.FinishedAt,
 	)
 	var i HostFarmJob
@@ -303,6 +308,7 @@ func (q *Queries) InsertHostFarmJob(ctx context.Context, arg InsertHostFarmJobPa
 		&i.SkippedTargets,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -693,6 +699,22 @@ type SetJobFailedParams struct {
 
 func (q *Queries) SetJobFailed(ctx context.Context, arg SetJobFailedParams) error {
 	_, err := q.db.Exec(ctx, setJobFailed, arg.LastError, arg.Error, arg.ID)
+	return err
+}
+
+const setJobProgress = `-- name: SetJobProgress :exec
+UPDATE host_farm_jobs SET progress = $2, updated_at = now() WHERE id = $1
+`
+
+type SetJobProgressParams struct {
+	ID       int32  `json:"id"`
+	Progress []byte `json:"progress"`
+}
+
+// Обновляет JSON-снимок прогресса полного прогона фермы (kind='farm_run') по мере
+// продвижения стадий. Тоже сбрасывает updated_at, чтобы reclaim не забрал живую задачу.
+func (q *Queries) SetJobProgress(ctx context.Context, arg SetJobProgressParams) error {
+	_, err := q.db.Exec(ctx, setJobProgress, arg.ID, arg.Progress)
 	return err
 }
 

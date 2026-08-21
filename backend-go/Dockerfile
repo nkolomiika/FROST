@@ -36,5 +36,18 @@ COPY --from=trufflehog /usr/bin/trufflehog /usr/local/bin/trufflehog
 COPY --from=dnsx /usr/local/bin/dnsx /usr/local/bin/dnsx
 COPY --from=subfinder /usr/local/bin/subfinder /usr/local/bin/subfinder
 COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd
+# Тир-словари поддоменов (n0kovo_subdomains) для активного брута dnsx в полном
+# прогоне фермы. Три тира → small|medium|large (см. WordlistPath в Go). Каталог
+# переопределяется env RECON_WORDLIST_DIR (дефолт — этот). Скачивание
+# устойчивое: -fSL, при отсутствии файла стадия брута деградирует, не падает.
+RUN apk add --no-cache --virtual .wl-fetch wget \
+    && mkdir -p /usr/local/share/frost-wordlists \
+    && wget -qO /usr/local/share/frost-wordlists/n0kovo_subdomains_small.txt \
+        https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_small.txt \
+    && wget -qO /usr/local/share/frost-wordlists/n0kovo_subdomains_medium.txt \
+        https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_medium.txt \
+    && wget -qO /usr/local/share/frost-wordlists/n0kovo_subdomains_huge.txt \
+        https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_huge.txt \
+    && apk del .wl-fetch
 USER app
 ENTRYPOINT ["/usr/local/bin/app"]

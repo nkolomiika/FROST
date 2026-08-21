@@ -51,6 +51,9 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 		PortscanTopPorts:   c.PortscanTopPorts,
 		PortscanTimeout:    secs(c.PortscanTimeoutSeconds),
 		PortscanMaxTargets: c.PortscanMaxTargets,
+
+		DnsxBin:          c.ReconDnsxBin,
+		DnsxBruteTimeout: secs(c.ReconDnsxBruteTimeoutSecs),
 	}
 }
 

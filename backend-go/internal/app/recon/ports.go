@@ -16,6 +16,7 @@ type Store interface {
 	InsertJob(ctx context.Context, j NewJob) (JobView, error)
 	GetJobForProject(ctx context.Context, projectID, jobID int32, kind string) (JobView, error)
 	ClaimJobRunning(ctx context.Context, id int32) (*JobClaim, error)
+	UpdateJobProgress(ctx context.Context, id int32, progress []byte) error
 	MarkJobDone(ctx context.Context, id int32, result []byte) error
 	MarkJobFailed(ctx context.Context, id int32, lastErr string, terminalErr *string) error
 	SelectPendingJobIDs(ctx context.Context, maxAttempts, limit int32) ([]int32, error)

@@ -293,6 +293,9 @@ type Querier interface {
 	SetHostStatus(ctx context.Context, arg SetHostStatusParams) error
 	SetJobDone(ctx context.Context, arg SetJobDoneParams) error
 	SetJobFailed(ctx context.Context, arg SetJobFailedParams) error
+	// Обновляет JSON-снимок прогресса полного прогона фермы (kind='farm_run') по мере
+	// продвижения стадий. Тоже сбрасывает updated_at, чтобы reclaim не забрал живую задачу.
+	SetJobProgress(ctx context.Context, arg SetJobProgressParams) error
 	SetJobQueued(ctx context.Context, id int32) error
 	SetNoteSortOrder(ctx context.Context, arg SetNoteSortOrderParams) error
 	SetPortStateHTTP(ctx context.Context, arg SetPortStateHTTPParams) error

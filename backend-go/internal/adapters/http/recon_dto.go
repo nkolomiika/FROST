@@ -32,6 +32,34 @@ func jobResponse(v recon.JobView) reconJobResponse {
 	}
 }
 
+// farmRunResponse — статус+прогресс полного прогона фермы. progress уже готовый
+// JSON снимка RunProgress (snake_case), result — итог FarmRunResult (по done).
+type farmRunResponse struct {
+	ID           int32           `json:"id"`
+	ProjectID    int32           `json:"project_id"`
+	Kind         string          `json:"kind"`
+	Status       string          `json:"status"`
+	TargetsTotal *int32          `json:"targets_total"`
+	Progress     json.RawMessage `json:"progress"`
+	Result       json.RawMessage `json:"result"`
+	Error        *string         `json:"error"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
+func farmRunResp(v recon.JobView) farmRunResponse {
+	return farmRunResponse{
+		ID:           v.ID,
+		ProjectID:    v.ProjectID,
+		Kind:         v.Kind,
+		Status:       v.Status,
+		TargetsTotal: v.TargetsTotal,
+		Progress:     json.RawMessage(v.Progress),
+		Result:       json.RawMessage(v.Result),
+		Error:        v.Error,
+		CreatedAt:    v.CreatedAt,
+	}
+}
+
 // jsSecretResponse — JsSecretOut.
 type jsSecretResponse struct {
 	Kind         string  `json:"kind"`

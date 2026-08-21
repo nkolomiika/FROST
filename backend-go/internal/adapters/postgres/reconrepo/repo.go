@@ -78,6 +78,7 @@ func mapJobView(j sqlc.HostFarmJob) recon.JobView {
 		Status:       j.Status,
 		TargetsTotal: pgconv.Int4Val(j.TargetsTotal),
 		Result:       j.Result,
+		Progress:     j.Progress,
 		Error:        pgconv.TextValPtr(j.Error),
 		CreatedAt:    pgconv.TsVal(j.CreatedAt),
 	}
@@ -101,6 +102,7 @@ func (r *Repo) InsertJob(ctx context.Context, j recon.NewJob) (recon.JobView, er
 		Raw:            pgconv.Text(j.Raw),
 		SkippedTargets: skipped,
 		Result:         j.Result,
+		Progress:       j.Progress,
 		FinishedAt:     finished,
 	})
 	if err != nil {
@@ -141,6 +143,10 @@ func (r *Repo) ClaimJobRunning(ctx context.Context, id int32) (*recon.JobClaim, 
 		SkippedTargets: skipped,
 		Attempts:       row.Attempts,
 	}, nil
+}
+
+func (r *Repo) UpdateJobProgress(ctx context.Context, id int32, progress []byte) error {
+	return r.q.SetJobProgress(ctx, sqlc.SetJobProgressParams{ID: id, Progress: progress})
 }
 
 func (r *Repo) MarkJobDone(ctx context.Context, id int32, result []byte) error {

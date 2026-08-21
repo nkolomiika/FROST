@@ -25,13 +25,14 @@ type stubStore struct {
 	reclaimN      int64
 
 	// захваты
-	captured    *NewJob
-	jsFiles     []JSFileInput
-	auditCount  int
-	callOrder   []string
-	pendingIDs  []int32
-	claimByID   map[int32]*JobClaim
-	doneResults map[int32][]byte
+	captured     *NewJob
+	jsFiles      []JSFileInput
+	auditCount   int
+	callOrder    []string
+	pendingIDs   []int32
+	claimByID    map[int32]*JobClaim
+	doneResults  map[int32][]byte
+	lastProgress []byte
 }
 
 func (s *stubStore) note(m string) { s.callOrder = append(s.callOrder, m) }
@@ -102,6 +103,10 @@ func (s *stubStore) SelectPendingJobIDs(context.Context, int32, int32) ([]int32,
 }
 func (s *stubStore) ClaimJobRunning(_ context.Context, id int32) (*JobClaim, error) {
 	return s.claimByID[id], nil
+}
+func (s *stubStore) UpdateJobProgress(_ context.Context, _ int32, progress []byte) error {
+	s.lastProgress = progress
+	return nil
 }
 func (s *stubStore) MarkJobDone(_ context.Context, id int32, result []byte) error {
 	if s.doneResults == nil {

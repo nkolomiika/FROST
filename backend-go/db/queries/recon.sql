@@ -7,8 +7,8 @@
 -- ─────────── host_farm_jobs (очередь) ───────────
 
 -- name: InsertHostFarmJob :one
-INSERT INTO host_farm_jobs (project_id, created_by, kind, status, targets_total, raw, skipped_targets, result, finished_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO host_farm_jobs (project_id, created_by, kind, status, targets_total, raw, skipped_targets, result, progress, finished_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: GetHostFarmJob :one
@@ -39,6 +39,11 @@ WHERE id = sqlc.arg('id');
 
 -- name: SetJobQueued :exec
 UPDATE host_farm_jobs SET status = 'queued', published_at = now(), last_error = NULL, updated_at = now() WHERE id = $1;
+
+-- name: SetJobProgress :exec
+-- Обновляет JSON-снимок прогресса полного прогона фермы (kind='farm_run') по мере
+-- продвижения стадий. Тоже сбрасывает updated_at, чтобы reclaim не забрал живую задачу.
+UPDATE host_farm_jobs SET progress = $2, updated_at = now() WHERE id = $1;
 
 -- name: SelectPendingReconJobs :many
 SELECT id FROM host_farm_jobs

@@ -64,7 +64,22 @@ func (h *ReconHandler) Register(r chi.Router) {
 		// конфигурация фермы (пер-проектная)
 		ar.With(pa).Get(base+"/recon/farm-config", h.getFarmConfig)
 		ar.With(pa).Put(base+"/recon/farm-config", h.putFarmConfig)
+
+		// полный прогон фермы (один клик — весь стек)
+		ar.With(pa).Post(base+"/recon/farm/run", h.startFarmRun)
+		ar.With(pa).Get(base+"/recon/farm/run/{job_id}", h.getFarmRun)
 	})
+}
+
+// requireLeadOrAdmin — гейт lead/admin (создатель проекта тоже проходит) поверх
+// уже проверенного доступа к проекту. Возвращает false и пишет 403, если нельзя.
+func (h *ReconHandler) requireLeadOrAdmin(w http.ResponseWriter, r *http.Request) bool {
+	pid := projectFromContext(r.Context()).ID
+	if _, err := h.authz.EnsureCanEditProject(r.Context(), pid, actorFrom(r)); err != nil {
+		writeError(w, err)
+		return false
+	}
+	return true
 }
 
 // ─────────────────────────── farm-config ───────────────────────────
@@ -80,6 +95,10 @@ func (h *ReconHandler) getFarmConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReconHandler) putFarmConfig(w http.ResponseWriter, r *http.Request) {
+	// Правка конфига фермы — только лидам/админам (фронт гейтит на canEditProject).
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
 	var cfg recon.FarmConfig
 	if err := decodeJSON(r, &cfg); err != nil {
 		writeError(w, err)
@@ -92,6 +111,45 @@ func (h *ReconHandler) putFarmConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, saved)
+}
+
+// ─────────────────────────── полный прогон фермы ───────────────────────────
+
+func (h *ReconHandler) startFarmRun(w http.ResponseWriter, r *http.Request) {
+	// Запуск полного прогона — только лидам/админам.
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	var req struct {
+		UseDefaults bool `json:"use_defaults"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	actor := actorFrom(r).ID
+	view, err := h.svc.StartFarmRun(r.Context(), pid, actor, req.UseDefaults)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, farmRunResp(view))
+}
+
+func (h *ReconHandler) getFarmRun(w http.ResponseWriter, r *http.Request) {
+	pid := projectFromContext(r.Context()).ID
+	jobID, err := pathInt32(r, "job_id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	view, err := h.svc.GetFarmRun(r.Context(), pid, jobID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, farmRunResp(view))
 }
 
 // ─────────────────────────── общие помощники ───────────────────────────

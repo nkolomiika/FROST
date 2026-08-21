@@ -57,6 +57,8 @@ func (s *Service) RunReconJob(ctx context.Context, id int32) error {
 		result, perr = s.probePorts(ctx, claim.ProjectID, claim.CreatedBy, claim.Raw, claim.SkippedTargets)
 	case KindReverse:
 		result, perr = s.probeReverse(ctx, claim.ProjectID, claim.CreatedBy, claim.Raw, claim.SkippedTargets)
+	case KindFarmRun:
+		result, perr = s.runFarm(ctx, claim)
 	default:
 		msg := "Неизвестный тип задачи фермы: " + claim.Kind
 		return s.store.MarkJobFailed(ctx, id, msg, &msg)
