@@ -31,7 +31,14 @@ ENTRYPOINT ["/usr/local/bin/app"]
 #   trufflehog  — verified-секреты в JS
 FROM runtime AS recon
 USER root
-RUN apk add --no-cache nmap nmap-scripts
+# apk-зеркало Alpine на buildkit сервера периодически флапает ("temporary error").
+# nmap обязателен для recon-образа, поэтому тянем с ретраями, а не одним заходом —
+# иначе разовый сетевой сбой роняет всю пересборку стека.
+RUN for i in 1 2 3 4 5 6; do \
+      apk add --no-cache nmap nmap-scripts && break; \
+      echo "apk nmap: attempt $i failed, retrying in 5s"; sleep 5; \
+    done; \
+    command -v nmap >/dev/null 2>&1 || { echo "FATAL: nmap install failed after retries"; exit 1; }
 COPY --from=trufflehog /usr/bin/trufflehog /usr/local/bin/trufflehog
 COPY --from=dnsx /usr/local/bin/dnsx /usr/local/bin/dnsx
 COPY --from=subfinder /usr/local/bin/subfinder /usr/local/bin/subfinder
