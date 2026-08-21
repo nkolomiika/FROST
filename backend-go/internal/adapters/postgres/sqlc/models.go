@@ -882,6 +882,12 @@ type ProjectNoteComment struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ReconFarmConfig struct {
+	ProjectID int32              `json:"project_id"`
+	Config    []byte             `json:"config"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type RefreshToken struct {
 	ID        int32              `json:"id"`
 	UserID    int32              `json:"user_id"`

@@ -116,6 +116,9 @@ type Querier interface {
 	GetProjectByID(ctx context.Context, id int32) (Project, error)
 	GetProjectName(ctx context.Context, id int32) (string, error)
 	GetReactivationByHash(ctx context.Context, tokenHash string) (AccountReactivationToken, error)
+	// Контекст recon: пер-проектная конфигурация фермы. GetReconFarmConfig отдаёт
+	// сырой JSONB-блоб (Go доклеивает дефолты), Upsert — идемпотентная запись.
+	GetReconFarmConfig(ctx context.Context, projectID int32) ([]byte, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetRefreshTokenForUser(ctx context.Context, arg GetRefreshTokenForUserParams) (RefreshToken, error)
 	GetServiceForPort(ctx context.Context, arg GetServiceForPortParams) (Service, error)
@@ -319,6 +322,7 @@ type Querier interface {
 	UpdateVuln(ctx context.Context, arg UpdateVulnParams) (Vulnerability, error)
 	UpdateVulnComment(ctx context.Context, arg UpdateVulnCommentParams) error
 	UpsertJsFile(ctx context.Context, arg UpsertJsFileParams) (int32, error)
+	UpsertReconFarmConfig(ctx context.Context, arg UpsertReconFarmConfigParams) error
 	UsernameExists(ctx context.Context, username string) (bool, error)
 }
 

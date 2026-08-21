@@ -466,3 +466,20 @@ func jsFarmNames(fs []JSFileResult) []string {
 	}
 	return out
 }
+
+// ─────────────────────────── конфигурация фермы ───────────────────────────
+
+// GetFarmConfig возвращает конфиг фермы проекта (дефолты, слитые с сохранённым).
+func (s *Service) GetFarmConfig(ctx context.Context, projectID int32) (FarmConfig, error) {
+	return s.store.GetFarmConfig(ctx, projectID)
+}
+
+// SaveFarmConfig нормализует (зажимает диапазоны) и сохраняет конфиг фермы,
+// возвращая сохранённое значение.
+func (s *Service) SaveFarmConfig(ctx context.Context, projectID int32, cfg FarmConfig) (FarmConfig, error) {
+	cfg.Sanitize()
+	if err := s.store.SaveFarmConfig(ctx, projectID, cfg); err != nil {
+		return FarmConfig{}, err
+	}
+	return cfg, nil
+}

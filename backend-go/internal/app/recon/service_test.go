@@ -70,6 +70,10 @@ func (f *fakeStore) JSFileURLs(context.Context, int32, *int32) ([]string, error)
 	return nil, nil
 }
 func (f *fakeStore) InsertAudit(context.Context, AuditEntry) error { return nil }
+func (f *fakeStore) GetFarmConfig(context.Context, int32) (FarmConfig, error) {
+	return DefaultFarmConfig(), nil
+}
+func (f *fakeStore) SaveFarmConfig(context.Context, int32, FarmConfig) error { return nil }
 
 func testService(store Store) *Service {
 	return NewService(store, reconnet.Settings{FarmMaxTargets: 256, PortscanMaxTargets: 64}, Config{WorkerEnabled: true, MaxAttempts: 3}, nil)

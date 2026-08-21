@@ -724,6 +724,37 @@ func (r *Repo) JSFileURLs(ctx context.Context, projectID int32, hostID *int32) (
 	return r.q.ListJsFileURLsForProject(ctx, projectID)
 }
 
+// ─────────────────────────── конфигурация фермы ───────────────────────────
+
+// GetFarmConfig отдаёт DefaultFarmConfig, поверх которого наложен сохранённый
+// JSONB-блоб (отсутствующие/незнакомые поля остаются дефолтными). Нет строки —
+// чистые дефолты.
+func (r *Repo) GetFarmConfig(ctx context.Context, projectID int32) (recon.FarmConfig, error) {
+	cfg := recon.DefaultFarmConfig()
+	blob, err := r.q.GetReconFarmConfig(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return cfg, nil
+		}
+		return recon.FarmConfig{}, err
+	}
+	if len(blob) > 0 {
+		if err := json.Unmarshal(blob, &cfg); err != nil {
+			return recon.FarmConfig{}, err
+		}
+	}
+	return cfg, nil
+}
+
+// SaveFarmConfig идемпотентно апсертит конфиг проекта (JSONB-блоб).
+func (r *Repo) SaveFarmConfig(ctx context.Context, projectID int32, cfg recon.FarmConfig) error {
+	blob, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return r.q.UpsertReconFarmConfig(ctx, sqlc.UpsertReconFarmConfigParams{ProjectID: projectID, Config: blob})
+}
+
 // ─────────────────────────── аудит ───────────────────────────
 
 func (r *Repo) InsertAudit(ctx context.Context, e recon.AuditEntry) error {

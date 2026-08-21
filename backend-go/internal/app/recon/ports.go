@@ -45,6 +45,10 @@ type Store interface {
 	ListJsFiles(ctx context.Context, projectID int32) ([]JSFileView, error)
 	JSFileURLs(ctx context.Context, projectID int32, hostID *int32) ([]string, error)
 
+	// ─── конфигурация фермы (пер-проектный JSONB-блоб) ───
+	GetFarmConfig(ctx context.Context, projectID int32) (FarmConfig, error)
+	SaveFarmConfig(ctx context.Context, projectID int32, cfg FarmConfig) error
+
 	// ─── аудит ───
 	InsertAudit(ctx context.Context, e AuditEntry) error
 }

@@ -59,7 +59,38 @@ func (h *ReconHandler) Register(r chi.Router) {
 		// js-files (синхронные)
 		ar.With(pa).Get(base+"/js-files", h.listJSFiles)
 		ar.With(pa).Get(base+"/js-files/archive", h.downloadJSArchive)
+
+		// конфигурация фермы (пер-проектная)
+		ar.With(pa).Get(base+"/recon/farm-config", h.getFarmConfig)
+		ar.With(pa).Put(base+"/recon/farm-config", h.putFarmConfig)
 	})
+}
+
+// ─────────────────────────── farm-config ───────────────────────────
+
+func (h *ReconHandler) getFarmConfig(w http.ResponseWriter, r *http.Request) {
+	pid := projectFromContext(r.Context()).ID
+	cfg, err := h.svc.GetFarmConfig(r.Context(), pid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+func (h *ReconHandler) putFarmConfig(w http.ResponseWriter, r *http.Request) {
+	var cfg recon.FarmConfig
+	if err := decodeJSON(r, &cfg); err != nil {
+		writeError(w, err)
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	saved, err := h.svc.SaveFarmConfig(r.Context(), pid, cfg)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, saved)
 }
 
 // ─────────────────────────── общие помощники ───────────────────────────
