@@ -39,3 +39,6 @@ SELECT url FROM js_files WHERE project_id = $1 ORDER BY url;
 
 -- name: ListJsFileURLsForHost :many
 SELECT url FROM js_files WHERE project_id = $1 AND host_id = $2 ORDER BY url;
+
+-- name: DeleteJsFilesForHost :exec
+DELETE FROM js_files WHERE project_id = $1 AND host_id = $2;

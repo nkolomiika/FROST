@@ -784,3 +784,8 @@ func lower(s string) string {
 	}
 	return string(b)
 }
+
+// DeleteJSFilesForHost удаляет все JS-файлы хоста в проекте (секреты каскадят).
+func (r *Repo) DeleteJSFilesForHost(ctx context.Context, projectID, hostID int32) error {
+	return r.q.DeleteJsFilesForHost(ctx, sqlc.DeleteJsFilesForHostParams{ProjectID: projectID, HostID: hostID})
+}

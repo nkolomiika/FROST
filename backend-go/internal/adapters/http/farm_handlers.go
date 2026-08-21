@@ -59,6 +59,7 @@ func (h *ReconHandler) Register(r chi.Router) {
 		// js-files (синхронные)
 		ar.With(pa).Get(base+"/js-files", h.listJSFiles)
 		ar.With(pa).Get(base+"/js-files/archive", h.downloadJSArchive)
+		ar.With(pa).Delete(base+"/js-files/hosts/{host_id}", h.deleteJSForHost)
 
 		// конфигурация фермы (пер-проектная)
 		ar.With(pa).Get(base+"/recon/farm-config", h.getFarmConfig)
@@ -183,6 +184,20 @@ func (h *ReconHandler) listJSFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, jsFileResponses(files))
+}
+
+func (h *ReconHandler) deleteJSForHost(w http.ResponseWriter, r *http.Request) {
+	pid := projectFromContext(r.Context()).ID
+	hostID, err := pathInt32(r, "host_id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.svc.DeleteJSForHost(r.Context(), pid, hostID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *ReconHandler) downloadJSArchive(w http.ResponseWriter, r *http.Request) {

@@ -50,6 +50,7 @@ type Querier interface {
 	DeleteHost(ctx context.Context, arg DeleteHostParams) error
 	DeleteHostByID(ctx context.Context, id int32) error
 	DeleteHostIP(ctx context.Context, id int32) error
+	DeleteJsFilesForHost(ctx context.Context, arg DeleteJsFilesForHostParams) error
 	DeleteJsSecretsForFile(ctx context.Context, jsFileID int32) error
 	DeleteMember(ctx context.Context, arg DeleteMemberParams) error
 	DeleteNote(ctx context.Context, id int32) error

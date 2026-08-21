@@ -44,6 +44,7 @@ type Store interface {
 	// ─── js-файлы (эндпоинты списка/архива) ───
 	ListJsFiles(ctx context.Context, projectID int32) ([]JSFileView, error)
 	JSFileURLs(ctx context.Context, projectID int32, hostID *int32) ([]string, error)
+	DeleteJSFilesForHost(ctx context.Context, projectID, hostID int32) error
 
 	// ─── конфигурация фермы (пер-проектный JSONB-блоб) ───
 	GetFarmConfig(ctx context.Context, projectID int32) (FarmConfig, error)

@@ -159,3 +159,5 @@ func TestCapResult(t *testing.T) {
 		t.Errorf("hosts_created = %v, want 5 (counters untouched)", m["hosts_created"])
 	}
 }
+
+func (f *fakeStore) DeleteJSFilesForHost(context.Context, int32, int32) error { return nil }

@@ -62,6 +62,7 @@ import {
   getJsScanJob as apiGetJsScanJob,
   getJsFiles as apiGetJsFiles,
   downloadJsArchive as apiDownloadJsArchive,
+  deleteJsFilesForHost as apiDeleteJsFilesForHost,
   getReconFarmConfig as apiGetReconFarmConfig,
   saveReconFarmConfig as apiSaveReconFarmConfig,
   createEndpoint as apiCreateEndpoint,
@@ -1914,6 +1915,18 @@ export function FrostApp() {
       URL.revokeObjectURL(url);
     } catch (e) {
       pushToast(getApiErrorMessage(e, t("Couldn't download JS archive.")), "error");
+    }
+  };
+  const deleteJsHost = async (hostId: number | undefined, label: string) => {
+    const pid = state.openProjectId;
+    if (pid == null || hostId == null) return;
+    if (!window.confirm(`${t("Delete all JS findings for")} ${label}?`)) return;
+    try {
+      await apiDeleteJsFilesForHost(pid, hostId);
+      reloadJsFiles();
+      pushToast(t("JS findings deleted"), "success");
+    } catch (e) {
+      pushToast(getApiErrorMessage(e, t("Delete failed")), "error");
     }
   };
   /* The raw request is loaded from the endpoint itself — what was stored, not a
@@ -4851,6 +4864,7 @@ export function FrostApp() {
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                       {/* Re-downloads this host's .js into a zip (files aren't stored). */}
                       <Tip label={t("Download JS archive")}><div className="actbtn" onClick={(ev) => { ev.stopPropagation(); downloadJsArchive(g.hostId, g.host); }}><Icon name="download" size={15} /></div></Tip>
+                      <Tip label={t("Delete host JS")}><div className="actbtn del" onClick={(ev) => { ev.stopPropagation(); deleteJsHost(g.hostId, g.host); }}><Icon name="trash" size={15} /></div></Tip>
                     </div>
                   </div>
                   {exp && (

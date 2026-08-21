@@ -1134,3 +1134,8 @@ export async function getAuditLogs(
   });
   return data;
 }
+
+/** Удалить все JS-находки указанного хоста в проекте. */
+export async function deleteJsFilesForHost(projectId: number, hostId: number): Promise<void> {
+  await api.delete(`/projects/${projectId}/js-files/hosts/${hostId}`);
+}

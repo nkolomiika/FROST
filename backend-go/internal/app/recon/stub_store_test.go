@@ -141,3 +141,5 @@ type discard struct{}
 func (discard) Write(p []byte) (int, error) { return len(p), nil }
 
 func boolPtr(b bool) *bool { return &b }
+
+func (s *stubStore) DeleteJSFilesForHost(context.Context, int32, int32) error { return nil }

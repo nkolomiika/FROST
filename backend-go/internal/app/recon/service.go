@@ -483,3 +483,8 @@ func (s *Service) SaveFarmConfig(ctx context.Context, projectID int32, cfg FarmC
 	}
 	return cfg, nil
 }
+
+// DeleteJSForHost удаляет JS-находки указанного хоста в проекте.
+func (s *Service) DeleteJSForHost(ctx context.Context, projectID, hostID int32) error {
+	return s.store.DeleteJSFilesForHost(ctx, projectID, hostID)
+}

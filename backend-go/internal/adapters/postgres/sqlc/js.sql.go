@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteJsFilesForHost = `-- name: DeleteJsFilesForHost :exec
+DELETE FROM js_files WHERE project_id = $1 AND host_id = $2
+`
+
+type DeleteJsFilesForHostParams struct {
+	ProjectID int32 `json:"project_id"`
+	HostID    int32 `json:"host_id"`
+}
+
+func (q *Queries) DeleteJsFilesForHost(ctx context.Context, arg DeleteJsFilesForHostParams) error {
+	_, err := q.db.Exec(ctx, deleteJsFilesForHost, arg.ProjectID, arg.HostID)
+	return err
+}
+
 const deleteJsSecretsForFile = `-- name: DeleteJsSecretsForFile :exec
 DELETE FROM js_secrets WHERE js_file_id = $1
 `
