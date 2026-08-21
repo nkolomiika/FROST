@@ -141,7 +141,7 @@ html, body, #root {
 .frost .frostmd-input p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--fr-text-faint); float: left; height: 0; pointer-events: none; }
 
 /* ── brand wordmark: crystalline first letter F ── */
-.frost .fr-wm { font-family: "Chakra Petch", Inter, sans-serif; font-weight: 700; color: var(--fr-text); white-space: nowrap; }
+.frost .fr-wm { font-family: "Chakra Petch", Inter, sans-serif; font-weight: 800; color: var(--fr-text); white-space: nowrap; }
 .frost .fr-wm-f {
   background: linear-gradient(135deg, var(--fr-cyan), var(--fr-accent));
   -webkit-background-clip: text; background-clip: text;

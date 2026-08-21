@@ -5681,10 +5681,15 @@ export function FrostApp() {
     <div className="frost" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--fr-bg)", position: "relative" }}>
       {/* top app bar */}
       <header style={{ height: 58, flex: "none", display: "flex", alignItems: "center", gap: 14, padding: "0 22px", background: "var(--fr-surface)", borderBottom: "1px solid var(--fr-border-light)", zIndex: 30 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-          <FrostMark size={26} />
-          <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", margin: "0 2px" }} />
-          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1.6, color: "var(--fr-text-faint)", fontWeight: 600 }}>FINDINGS, RESEARCH &amp; OFFENSIVE SECURITY TESTING</div>
+        {/* Лого в зоне шириной со свёрнутый сайдбар (76px − 22px паддинга хедера),
+            чтобы вертикальный делитель встал ровно над правым краем свёрнутой
+            панели навигации — «палочки друг над другом». */}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div style={{ width: 54, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
+            <FrostMark size={30} />
+          </div>
+          <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", flex: "none" }} />
+          <div className="mono" style={{ marginLeft: 16, fontSize: 10.5, letterSpacing: 1.6, color: "var(--fr-text-faint)", fontWeight: 600 }}>FINDINGS, RESEARCH &amp; OFFENSIVE SECURITY TESTING</div>
         </div>
         <div style={{ flex: 1 }} />
         <div className="clk nav iconbtn" onClick={() => toggle("notifOpen")} style={{ width: 40, height: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
@@ -5742,7 +5747,7 @@ export function FrostApp() {
 
         {/* main column */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
-          <main style={{ flex: 1, overflow: "auto" }}>
+          <main style={{ flex: 1, overflow: "auto", paddingBottom: 48 }}>
             {isList && renderProjects()}
             {isDocs && (
               <Suspense fallback={<div className="route" style={{ padding: "40px 48px", color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading docs…")}</div>}>
@@ -5761,7 +5766,7 @@ export function FrostApp() {
           </main>
         </div>
       </div>
-      <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+      <footer style={{ position: "absolute", bottom: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap", pointerEvents: "none" }}>
         <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
       </footer>
 
