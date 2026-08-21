@@ -3520,9 +3520,9 @@ export function FrostApp() {
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
               <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--fr-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
-              <svg width={c.w} height="30" viewBox={`0 0 ${c.w} 30`} fill="none" style={{ flex: "none" }}>
+              <svg height="30" viewBox={`0 0 ${c.w} 30`} preserveAspectRatio="none" fill="none" style={{ flex: 1, minWidth: 0, width: "100%", marginLeft: 14 }}>
                 <polygon points={sparkArea(c.spark, c.w)} fill={c.stroke} fillOpacity={0.15} />
-                <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
               </svg>
             </div>
           </div>
@@ -4021,9 +4021,9 @@ export function FrostApp() {
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
               <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--fr-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
-              <svg width="111" height="30" viewBox="0 0 111 30" fill="none" style={{ flex: "none" }}>
+              <svg height="30" viewBox="0 0 111 30" preserveAspectRatio="none" fill="none" style={{ flex: 1, minWidth: 0, width: "100%", marginLeft: 14 }}>
                 <polygon points={sparkArea(c.spark, 111)} fill={c.stroke} fillOpacity={0.15} />
-                <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
               </svg>
             </div>
           </div>
