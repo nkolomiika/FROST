@@ -37,12 +37,16 @@ func MineJS(ctx context.Context, text string, cfg JSMineConfig) (secrets []Secre
 	// Эндпоинты — regex-эвристика всегда (полные пути, дружелюбны к дедупу).
 	endpoints = FindPaths(text)
 
+	// Встроенный regex-сканер работает ВСЕГДА (полные значения, redact=false) —
+	// он ловит app-специфичные секреты (JWT, generic api_key/token/password),
+	// которых нет в детекторах trufflehog. Инструменты (когда доступны) добавляют
+	// провайдерские verified-секреты сверху. Объединение = максимум покрытия.
+	secrets = scanSecrets(text, false)
+
 	jsReady := ready(cfg.Enabled, cfg.JsluiceBin)
 	thReady := ready(cfg.Enabled, cfg.TrufflehogBin)
-	// Секреты берём из инструментов (они точнее и отдают полное значение); regex —
-	// только когда инструментов нет, иначе плодятся redacted-дубли.
 	if !jsReady && !thReady {
-		return FindSecrets(text), endpoints
+		return dedupSecrets(secrets), endpoints
 	}
 
 	f, err := os.CreateTemp("", "frostjs-*.js")

@@ -76,8 +76,16 @@ func snippet(text string, start, end int) string {
 }
 
 // FindSecrets находит секреты с дедупом по (усечённому) redacted-значению (порт
-// find_secrets). Полный секрет не сохраняется.
+// find_secrets). Полный секрет не сохраняется — используется для совместимого
+// (redacted) вывода; ферма зовёт scanSecrets(text, false) ради полных значений.
 func FindSecrets(text string) []Secret {
+	return scanSecrets(text, true)
+}
+
+// scanSecrets — общий regex-сканер секретов. redact=true прячет середину значения
+// (публичный FindSecrets), redact=false отдаёт полное значение (JS-майнинг фермы,
+// где оператор должен видеть секрет целиком). Дедуп — по итоговому preview.
+func scanSecrets(text string, redact bool) []Secret {
 	seen := map[string]bool{}
 	var out []Secret
 	for _, spec := range secretSpecs {
@@ -88,7 +96,11 @@ func FindSecrets(text string) []Secret {
 			} else {
 				raw = text[loc[0]:loc[1]]
 			}
-			preview := truncate(Redact(raw), 255)
+			value := raw
+			if redact {
+				value = Redact(raw)
+			}
+			preview := truncate(value, 255)
 			if preview == "" || seen[preview] {
 				continue
 			}
