@@ -3520,7 +3520,7 @@ export function FrostApp() {
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
               <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--fr-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
-              <svg height="30" viewBox={`0 0 ${c.w} 30`} preserveAspectRatio="none" fill="none" style={{ flex: 1, minWidth: 0, width: "100%", marginLeft: 14 }}>
+              <svg height="30" viewBox={`0 0 ${c.w} 30`} preserveAspectRatio="none" fill="none" style={{ flex: 1, minWidth: 0, width: "100%", maxWidth: 100, marginLeft: 14 }}>
                 <polygon points={sparkArea(c.spark, c.w)} fill={c.stroke} fillOpacity={0.15} />
                 <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
               </svg>
@@ -3787,7 +3787,7 @@ export function FrostApp() {
               // view only counts as active when Recon itself is the open section.
               const on = sec === "hosts" && rv === it.v;
               return (
-                <div key={it.v} className={`reconrow clk${on ? " on" : ""}`} onClick={() => selRecon(it.v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 11px", borderRadius: 10, font: "600 13.5px Inter,sans-serif" }}>
+                <div key={it.v} className={`reconrow clk${on ? " on" : ""}`} onClick={() => selRecon(it.v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 11px", borderRadius: 10, marginBottom: 3, font: "600 13.5px Inter,sans-serif" }}>
                   <Icon name={it.icon} size={17} />
                   {t(it.label)}
                   <span className="mono" style={{ marginLeft: "auto", minWidth: 22, textAlign: "center", fontSize: 11, fontWeight: 700, color: on ? "var(--fr-accent)" : "var(--fr-text-3)", background: on ? "var(--fr-accent-soft)" : "var(--fr-hover)", border: `1px solid ${on ? "var(--fr-accent-muted)" : "var(--fr-border-light)"}`, borderRadius: 6, padding: "1px 6px" }}>{it.count}</span>
@@ -4021,7 +4021,7 @@ export function FrostApp() {
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
               <div className="mono" style={{ fontWeight: 800, fontSize: 26, color: "var(--fr-text)", lineHeight: 1, letterSpacing: "-1px" }}>{c.value}</div>
-              <svg height="30" viewBox="0 0 111 30" preserveAspectRatio="none" fill="none" style={{ flex: 1, minWidth: 0, width: "100%", marginLeft: 14 }}>
+              <svg height="30" viewBox="0 0 111 30" preserveAspectRatio="none" fill="none" style={{ flex: 1, minWidth: 0, width: "100%", maxWidth: 100, marginLeft: 14 }}>
                 <polygon points={sparkArea(c.spark, 111)} fill={c.stroke} fillOpacity={0.15} />
                 <polyline points={c.spark} stroke={c.stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
               </svg>
@@ -4887,20 +4887,24 @@ export function FrostApp() {
         {/* Панель фильтров: поиск по хосту и автору — слева (как в разделе
             «Эндпоинты»), пилюли статуса и критичности — справа, отодвинуты
             flex-распоркой. Счётчик уязвимостей переехал к заголовку секции. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap", rowGap: 10 }}>
-          {searchBox(t("Filter by host…"), state.vulnFilterHost, (v) => setState({ vulnFilterHost: v }), 190)}
-          {searchBox(t("Filter by author…"), state.vulnFilterAuthor, (v) => setState({ vulnFilterAuthor: v }), 190)}
-          <div style={{ flex: "1 1 auto" }} />
+        {/* Поиски сверху, затем статус и критичность — каждый на своей строке,
+            друг под другом. Метки выровнены по ширине, пилюли переносятся на
+            узких экранах и растягиваются в одну строку на широких. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+            {searchBox(t("Filter by host…"), state.vulnFilterHost, (v) => setState({ vulnFilterHost: v }), 190)}
+            {searchBox(t("Filter by author…"), state.vulnFilterAuthor, (v) => setState({ vulnFilterAuthor: v }), 190)}
+          </div>
           {/* Status / severity are multi-select: pills toggle, several can be held at
               once, and clearing the last one falls back to "All". Driven by the token
               lists so they cannot drift from the backend's vocabularies. */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
+            <span className="mono" style={{ minWidth: 64, fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
             {filterPill(t("All"), vfS.length === 0, () => setState({ vulnFilterStatuses: [] }))}
             {VSTATUS_ORDER.map((s) => filterPill(t(VSTATUS_LABEL[s]), vfS.includes(s), () => setState((st) => ({ vulnFilterStatuses: toggleIn(st.vulnFilterStatuses, s) }))))}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("SEVERITY")}</span>
+            <span className="mono" style={{ minWidth: 64, fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("SEVERITY")}</span>
             {filterPill(t("All"), vfSev.length === 0, () => setState({ vulnFilterSeverities: [] }))}
             {(["critical", "high", "medium", "low", "info"] as Severity[]).map((s) => filterPill(cap(s), vfSev.includes(s), () => setState((st) => ({ vulnFilterSeverities: toggleIn(st.vulnFilterSeverities, s) }))))}
           </div>
