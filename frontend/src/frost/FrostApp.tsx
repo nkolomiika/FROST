@@ -5755,11 +5755,11 @@ export function FrostApp() {
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
           </main>
-          <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
-            <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
-          </footer>
         </div>
       </div>
+      <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+        <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+      </footer>
 
       {/* ===== modals ===== */}
       {/* workspace user editor */}
