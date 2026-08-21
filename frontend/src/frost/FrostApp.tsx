@@ -5681,11 +5681,12 @@ export function FrostApp() {
     <div className="frost" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--fr-bg)", position: "relative" }}>
       {/* top app bar */}
       <header style={{ height: 58, flex: "none", display: "flex", alignItems: "center", gap: 14, padding: "0 22px", background: "var(--fr-surface)", borderBottom: "1px solid var(--fr-border-light)", zIndex: 30 }}>
-        {/* Лого в зоне шириной со свёрнутый сайдбар (76px − 22px паддинга хедера),
-            чтобы вертикальный делитель встал ровно над правым краем свёрнутой
-            панели навигации — «палочки друг над другом». */}
+        {/* Зона логотипа = прямоугольник от края экрана (x=0) до делителя (x=76,
+            правый край свёрнутого сайдбара). Отрицательный marginLeft гасит
+            паддинг хедера (22px), лого центрируется в этом прямоугольнике — ровно
+            над иконками свёрнутой панели, делитель над её краем. */}
         <div style={{ display: "flex", alignItems: "center" }}>
-          <div style={{ width: 54, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
+          <div style={{ marginLeft: -22, width: 76, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
             <FrostMark size={30} />
           </div>
           <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", flex: "none" }} />
@@ -5724,7 +5725,7 @@ export function FrostApp() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
               <span className="lbl"><FrostWordmark size={18} spacing={3} /></span>
             </div>
-            <div className="clk nav iconbtn" onClick={() => toggle("sidebarCollapsed")} style={{ width: 26, height: 26, flex: "none", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fr-text-faint)" }}>
+            <div className="clk nav iconbtn" onClick={() => toggle("sidebarCollapsed")} style={{ width: 40, height: 40, flex: "none", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fr-text-faint)" }}>
               <Icon name="chevrons-left" size={18} color="currentColor" sw={2.4} style={{ transform: state.sidebarCollapsed ? "rotate(180deg)" : "none", transition: "transform .26s ease" }} />
             </div>
           </div>
