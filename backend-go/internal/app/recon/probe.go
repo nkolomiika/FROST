@@ -176,7 +176,7 @@ func (s *Service) persistHosts(ctx context.Context, projectID, actorID int32, ta
 			Status: lowerStatus(status), Created: out.Created, Ports: portResults,
 		})
 	}
-	s.audit(ctx, actorID, "host_farm", detailsFrom(result, projectID, "hosts"))
+	s.audit(ctx, actorID, "host_farm", detailsFromItems(result, projectID, "hosts", hostFarmNames(result.Hosts)))
 	return result
 }
 
@@ -280,7 +280,7 @@ func (s *Service) persistIPs(ctx context.Context, projectID, actorID int32, targ
 			Created: out.HostCreated, AttachedToExistingHost: out.Attached, Ports: portResults,
 		})
 	}
-	s.audit(ctx, actorID, "ip_farm", detailsFrom(result, projectID, "ips"))
+	s.audit(ctx, actorID, "ip_farm", detailsFromItems(result, projectID, "ips", ipFarmNames(result.IPs)))
 	return result
 }
 
@@ -506,7 +506,7 @@ func (s *Service) persistJS(ctx context.Context, projectID, actorID int32, files
 			SecretCount: len(f.Secrets), EndpointCount: len(f.Endpoints),
 		})
 	}
-	s.audit(ctx, actorID, "js_farm", detailsFrom(result, projectID, "files"))
+	s.audit(ctx, actorID, "js_farm", detailsFromItems(result, projectID, "files", jsFarmNames(result.Files)))
 	return result, nil
 }
 

@@ -425,3 +425,44 @@ func detailsFrom(v any, projectID int32, drop ...string) []byte {
 	m["project_id"] = strconv.Itoa(int(projectID))
 	return mustJSON(m)
 }
+
+// detailsFromItems — как detailsFrom, но взамен выброшенного тяжёлого списка
+// (dropField) кладёт компактный список имён добавленных объектов в "items", чтобы
+// лента активности показывала, ЧТО именно добавила ферма. Список уже ограничен
+// CapResult (ReconResultMaxItems), так что размер деталей контролируем.
+func detailsFromItems(v any, projectID int32, dropField string, items []string) []byte {
+	m := map[string]any{}
+	_ = json.Unmarshal(mustJSON(v), &m)
+	delete(m, dropField)
+	m["project_id"] = strconv.Itoa(int(projectID))
+	m["items"] = items
+	return mustJSON(m)
+}
+
+func hostFarmNames(hs []HostResult) []string {
+	out := make([]string, 0, len(hs))
+	for _, h := range hs {
+		if h.Hostname != nil && *h.Hostname != "" {
+			out = append(out, *h.Hostname)
+		} else if h.IPAddress != nil && *h.IPAddress != "" {
+			out = append(out, *h.IPAddress)
+		}
+	}
+	return out
+}
+
+func ipFarmNames(is []IPResult) []string {
+	out := make([]string, 0, len(is))
+	for _, i := range is {
+		out = append(out, i.IPAddress)
+	}
+	return out
+}
+
+func jsFarmNames(fs []JSFileResult) []string {
+	out := make([]string, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, f.URL)
+	}
+	return out
+}

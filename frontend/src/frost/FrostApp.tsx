@@ -1763,6 +1763,12 @@ export function FrostApp() {
   const openReconExport = (scope: ExportScope) =>
     setState({ exportPageOpen: true, exportScope: scope, exportFormat: "list", exportText: exportLinesFor(scope).join("\n") });
   const closeReconExport = () => setState({ exportPageOpen: false, exportText: "" });
+  // Из ленты активности «показать все» у фарм-карточки открывает recon-экспорт
+  // соответствующего типа (переключая раздел на Recon).
+  const openFarmExport = (scope: ExportScope) => {
+    const reconView: ReconView = scope === "ips" ? "ips" : "hosts";
+    setState({ section: "hosts", reconView, reconMenuOpen: false, exportPageOpen: true, exportScope: scope, exportFormat: "list", exportText: exportLinesFor(scope).join("\n") });
+  };
   const doExport = async () => {
     const pid = state.openProjectId;
     if (pid == null) return;
@@ -5411,10 +5417,10 @@ export function FrostApp() {
                   {hidden > 0 && (
                     <div
                       className="clk"
-                      onClick={() => setState({ activityModalKey: g.key })}
+                      onClick={() => (g.farmScope ? openFarmExport(g.farmScope as ExportScope) : setState({ activityModalKey: g.key }))}
                       style={{ marginTop: 3, font: "700 11.5px Inter,sans-serif", color: "var(--fr-accent-muted)", cursor: "pointer" }}
                     >
-                      {t("Show more ·")} {hidden} {t("more")}
+                      {g.farmScope ? t("Open all in export →") : <>{t("Show more ·")} {hidden} {t("more")}</>}
                     </div>
                   )}
                 </div>

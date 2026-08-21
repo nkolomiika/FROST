@@ -42,7 +42,29 @@ export interface ActivityGroup {
   lines: ActivityLine[];
   /** Findings are standalone cards, so the card links to that one finding. */
   vulnId?: number | null;
+  /** Farm cards ("added N hosts"): recon-export scope to expand into, or null. */
+  farmScope?: string | null;
 }
+
+// Фарм-события несут список добавленных объектов в details.items — разворачиваем
+// его в строки ленты («admin added 8 hosts» + перечисление).
+const FARM_NOUN: Record<string, [string, string]> = {
+  host_farm: ["host", "hosts"],
+  ip_farm: ["IP address", "IP addresses"],
+  js_farm: ["JS file", "JS files"],
+  sub_farm: ["subdomain", "subdomains"],
+};
+// Куда ведёт «показать все» — scope recon-экспорта по типу (null → обычный модал).
+const FARM_SCOPE: Record<string, string | null> = {
+  host_farm: "hosts",
+  ip_farm: "ips",
+  js_farm: null,
+  sub_farm: null,
+};
+const farmItems = (a: ProjectActivityItem): string[] => {
+  const v = a.details?.items;
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+};
 
 /** Human noun per entity type, singular/plural. Ports are deliberately absent —
     they are excluded from the feed (see ACT_HIDDEN). */
@@ -66,7 +88,7 @@ const ACT_NOUN: Record<string, [string, string]> = {
 /** Entity types the feed never shows: ports are too noisy to be worth a row. */
 const ACT_HIDDEN = new Set(["port"]);
 /** Entity types that are always their own card, never merged with siblings. */
-const ACT_STANDALONE = new Set(["vulnerability", "project"]);
+const ACT_STANDALONE = new Set(["vulnerability", "project", "host_farm", "ip_farm", "js_farm", "sub_farm"]);
 
 const actDetail = (a: ProjectActivityItem, k: string): string => {
   const v = a.details?.[k];
@@ -140,6 +162,24 @@ export function groupActivity(items: ProjectActivityItem[], resolve: ActivityRes
     if (!bucket.length) return;
     const first = bucket[0];
     const type = first.entity_type || "event";
+    // Фарм-события — своя карточка со списком добавленных объектов из details.items.
+    const farmNoun = FARM_NOUN[type];
+    if (farmNoun) {
+      const items = farmItems(first);
+      groups.push({
+        key: `g${first.id}`,
+        actor: first.username || "System",
+        verb: "added",
+        subject: items.length === 1 ? farmNoun[0] : `${items.length} ${farmNoun[1]}`,
+        tone: ACT_TONE.add,
+        time: relTime(first.created_at),
+        lines: items.map((name, i) => ({ key: `${first.id}-${i}`, text: name })),
+        vulnId: null,
+        farmScope: FARM_SCOPE[type] ?? null,
+      });
+      bucket = [];
+      return;
+    }
     const tone =
       first.action === "CREATE" ? ACT_TONE.add
       : first.action === "DELETE" ? ACT_TONE.remove
