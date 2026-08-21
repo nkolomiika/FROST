@@ -4720,10 +4720,12 @@ export function FrostApp() {
         {f.secrets.map((sec, i) => {
           const c = SECRET_SEV[sec.severity] ?? SECRET_SEV.low;
           return (
-            <div key={i} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", alignItems: "center", gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <div key={i} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", alignItems: "start", gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
               <span className="mono" style={{ justifySelf: "start", fontSize: 10.5, fontWeight: 700, borderRadius: 5, padding: "2px 8px", background: c.bg, color: c.color }}>{sec.kind}</span>
               <span className="mono" style={{ fontSize: 12, color: "var(--fr-text-2)", wordBreak: "break-all" }}>{sec.match}</span>
-              <span className="mono" title={sec.snippet ?? ""} style={{ fontSize: 11.5, color: "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.snippet}</span>
+              {/* Полное значение секрета лежит внутри сниппета — показываем его
+                  целиком (перенос строк), а не обрезаем: это и есть находка. */}
+              <span className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-2)", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.55, userSelect: "text" }}>{sec.snippet}</span>
             </div>
           );
         })}
