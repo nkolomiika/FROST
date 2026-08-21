@@ -1215,6 +1215,17 @@ export function FrostApp() {
     }
   };
 
+  // Header "Run": auto-saves the current settings (so the run uses them), then
+  // starts the run. Save is no longer a separate button — running IS the save.
+  const runFarmWithSettings = async () => {
+    const pid = state.openProjectId;
+    if (pid == null || state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")) return;
+    if (state.farmCfg && JSON.stringify(state.farmCfg) !== JSON.stringify(state.farmCfgSaved)) {
+      await saveFarmConfig();
+    }
+    await startFarmRun(false);
+  };
+
   // Kill one running process (a single tool invocation) by its step id. The run
   // continues; the poll drops the step from the live panel.
   const killFarmStep = async (stepId: number) => {
@@ -4078,6 +4089,16 @@ export function FrostApp() {
               </div>
             )}
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
+              {sec === "hosts" && rv === "farm" && (
+                <button
+                  className="clk"
+                  onClick={runFarmWithSettings}
+                  disabled={state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")}
+                  style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+                >
+                  <Icon name="activity" size={16} color="var(--fr-on-accent)" sw={2.4} />{t("Run")}
+                </button>
+              )}
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
                 <>
                   <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
@@ -4294,7 +4315,8 @@ export function FrostApp() {
   /* One pill per port holds BOTH the port and its status in a single highlight.
      A down host shows "down" per port; an up host shows the probed HTTP code. */
   const portPills = (ports: Host["ports"], hostDown = false) => (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+    // Максимум 3 порта в строке — сетка из 3 колонок по контенту, дальше перенос.
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, max-content))", gap: 5, justifyContent: "start" }}>
       {portPillsOf(ports).map((p, i) => {
         const statusText = hostDown ? "down" : p.http != null ? String(p.http) : null;
         const statusColor = hostDown ? "var(--fr-danger)" : p.http != null ? httpStatusColor(p.http) : undefined;
@@ -4735,26 +4757,13 @@ export function FrostApp() {
 
     return (
       <div className="route">
-        {/* Sticky-feeling action bar at the top: state + Save. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          {runLocked && (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>
-              <Icon name="lock" size={13} color="var(--fr-text-faint)" />{t("Settings are locked while a run is in progress")}
-            </div>
-          )}
-          <div style={{ flex: 1 }} />
-          {dirty && !runLocked && (
-            <button className="clk" onClick={() => setState({ farmCfg: state.farmCfgSaved })} style={{ height: 40, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>{t("Discard")}</button>
-          )}
-          <button
-            className="clk"
-            onClick={saveFarmConfig}
-            disabled={!dirty || state.farmCfgSaving || runLocked}
-            style={{ height: 40, padding: "0 20px", border: "none", borderRadius: 11, background: !dirty || state.farmCfgSaving || runLocked ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !dirty || state.farmCfgSaving || runLocked ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
-          >
-            <Icon name="save" size={15} color="var(--fr-on-accent)" sw={2.4} />{state.farmCfgSaving ? t("Saving…") : t("Save settings")}
-          </button>
-        </div>
+        {/* Настройки авто-сохраняются при запуске (кнопка Run — в шапке раздела).
+            Здесь остаётся только подсказка про заморозку во время прогона. */}
+        {runLocked && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 16, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>
+            <Icon name="lock" size={13} color="var(--fr-text-faint)" />{t("Settings are locked while a run is in progress")}
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {/* Run — the headline action: one click runs the whole stack. */}
@@ -4789,45 +4798,33 @@ export function FrostApp() {
   const renderFarmRun = () => {
     const run = state.farmRunJob;
     const runInFlight = isFarmJobInFlight(run?.status ?? "");
-    const busy = runInFlight || state.farmRunStarting;
     const prog = run?.progress ?? null;
     const pct = Math.max(0, Math.min(100, prog?.percent ?? 0));
     const runResult = run?.result ?? null;
 
-    const runBtn = (label: string, primary: boolean, onClick: () => void) => (
-      <button
-        className="clk"
-        onClick={onClick}
-        disabled={busy}
-        style={{ height: 42, padding: "0 20px", border: primary ? "none" : "1px solid var(--fr-border)", borderRadius: 11, background: busy ? "var(--fr-accent-muted)" : primary ? "var(--fr-accent)" : "var(--fr-surface)", color: primary ? "var(--fr-on-accent)" : "var(--fr-text)", font: "700 13px Inter,sans-serif", cursor: busy ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
-      >
-        <Icon name="activity" size={15} color={primary ? "var(--fr-on-accent)" : "var(--fr-accent)"} sw={2.4} />{label}
-      </button>
-    );
-
     return (
       <div style={{ ...CARD, padding: "22px 24px" }}>
         {cardHeader("activity", t("Run the farm"), t("Runs subdomains, resolve, liveness and port scan across the project's root domains"))}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-          {runBtn(t("Run (defaults)"), true, () => startFarmRun(true))}
-          {runBtn(t("Run with my settings"), false, () => startFarmRun(false))}
-          {runInFlight && (
-            <button
-              className="clk"
-              onClick={stopFarmRun}
-              disabled={state.farmCancelling}
-              style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, opacity: state.farmCancelling ? 0.6 : 1 }}
-            >
-              <Icon name="close" size={15} color="var(--fr-danger)" sw={2.6} />{state.farmCancelling ? t("Stopping…") : t("Stop run")}
-            </button>
-          )}
-          {runInFlight && (
+        {/* Запуск — кнопкой Run в шапке раздела. Здесь остаётся Stop и индикатор
+            прогресса, когда прогон уже идёт. */}
+        {(runInFlight || state.farmRunStarting) && (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
+            {runInFlight && (
+              <button
+                className="clk"
+                onClick={stopFarmRun}
+                disabled={state.farmCancelling}
+                style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, opacity: state.farmCancelling ? 0.6 : 1 }}
+              >
+                <Icon name="close" size={15} color="var(--fr-danger)" sw={2.6} />{state.farmCancelling ? t("Stopping…") : t("Stop run")}
+              </button>
+            )}
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
               <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
               {t("Running")}…
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {run && (
           <div style={{ marginTop: 20 }}>
@@ -6236,12 +6233,14 @@ export function FrostApp() {
                 : renderNoAccessPage("The Members section is admin-only — this is where users are created and roles assigned."))}
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
+            {/* Копирайт — в общем потоке в самом низу main: скроллится вместе с
+                контентом и уходит за экран, а не залипает поверх. */}
+            <footer style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "24px 16px 8px", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+              <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+            </footer>
           </main>
         </div>
       </div>
-      <footer style={{ position: "absolute", bottom: 0, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap", pointerEvents: "none" }}>
-        <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
-      </footer>
 
       {/* ===== modals ===== */}
       {/* workspace user editor */}
