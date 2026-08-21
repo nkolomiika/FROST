@@ -5680,7 +5680,7 @@ export function FrostApp() {
         <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
           <FrostMark size={26} />
           <div style={{ width: 1, height: 22, background: "var(--fr-border-strong)", margin: "0 2px" }} />
-          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1.6, color: "var(--fr-text-faint)", fontWeight: 600 }}>FINDINGS · RESEARCH · OFFENSIVE · SECURITY · TESTING</div>
+          <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1.6, color: "var(--fr-text-faint)", fontWeight: 600 }}>FINDINGS, RESEARCH &amp; OFFENSIVE SECURITY TESTING</div>
         </div>
         <div style={{ flex: 1 }} />
         <div className="clk nav iconbtn" onClick={() => toggle("notifOpen")} style={{ width: 40, height: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>

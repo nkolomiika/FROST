@@ -94,7 +94,7 @@ export function FrostLogin() {
               <FrostMark size={40} />
               <FrostWordmark size={27} spacing={4} />
             </div>
-            <div className="mono" style={{ fontSize: 9.5, letterSpacing: 1.4, color: "var(--fr-text-faint)", fontWeight: 600 }}>FINDINGS · RESEARCH · OFFENSIVE · SECURITY · TESTING</div>
+            <div className="mono" style={{ fontSize: 9.5, letterSpacing: 1.4, color: "var(--fr-text-faint)", fontWeight: 600 }}>FINDINGS, RESEARCH &amp; OFFENSIVE SECURITY TESTING</div>
           </div>
 
           {stage === "credentials" ? (
@@ -278,7 +278,7 @@ export function FrostLogin() {
       </div>
 
       <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, background: "transparent", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
-        <FrostMark size={14} />
+        <FrostWordmark size={13} spacing={2} />
         <span>·</span>
         <span>Copyright © 2026. All rights reserved.</span>
       </footer>
