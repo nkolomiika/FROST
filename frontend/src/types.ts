@@ -527,6 +527,41 @@ export interface FarmRunJob {
   created_at: string;
 }
 
+/** Порт застейдженного хоста в отчёте фермы — плоская форма, без вложенных сервисов. */
+export interface StagedPort {
+  port: number;
+  proto: string;
+  state: string;
+  service: string | null;
+  version: string | null;
+  http_status: number | null;
+}
+
+/** Хост, застейдженный прогоном фермы: ждёт ручного импорта в проект. */
+export interface StagedHost {
+  id: number;
+  hostname: string;
+  ip: string | null;
+  alive: boolean;
+  source: string;
+  imported: boolean;
+  ports: StagedPort[];
+}
+
+/** Отчёт фермы: результаты прогона на ревью перед ручным импортом. */
+export interface FarmReport {
+  job_id: number;
+  status: string;
+  generated_at: string;
+  summary: {
+    hosts_total: number;
+    alive: number;
+    ports_total: number;
+    imported: number;
+  };
+  hosts: StagedHost[];
+}
+
 export interface Service {
   id: number;
   port_id: number;

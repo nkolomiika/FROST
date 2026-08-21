@@ -17,6 +17,7 @@ import type {
   JsFile,
   ReconFarmConfig,
   FarmRunJob,
+  FarmReport,
   ImportResult,
   OpenApiImportResult,
   Invitation,
@@ -778,6 +779,29 @@ export async function cancelFarmStep(projectId: number, jobId: number, stepId: n
 export async function cancelAllFarmRuns(projectId: number): Promise<number> {
   const { data } = await api.post<{ cancelled: number }>(`/projects/${projectId}/recon/farm/run/cancel-all`);
   return data.cancelled;
+}
+
+/** Отчёт фермы: застейдженные результаты на ревью. jobId опционален — без него
+ *  берётся последний прогон (или пустой отчёт, если прогонов ещё не было). */
+export async function getFarmReport(projectId: number, jobId?: number): Promise<FarmReport> {
+  const { data } = await api.get<FarmReport>(`/projects/${projectId}/recon/farm/report`, {
+    params: jobId != null ? { job_id: jobId } : undefined,
+  });
+  return data;
+}
+
+/** Импортирует выбранные застейдженные хосты в проект. Возвращает число импортированных. */
+export async function importFarmReport(projectId: number, hostIds: number[]): Promise<number> {
+  const { data } = await api.post<{ imported: number }>(`/projects/${projectId}/recon/farm/report/import`, { host_ids: hostIds });
+  return data.imported;
+}
+
+/** Очищает отчёт фермы (застейдженные результаты). Возвращает число удалённых. */
+export async function clearFarmReport(projectId: number, jobId?: number): Promise<number> {
+  const { data } = await api.delete<{ cleared: number }>(`/projects/${projectId}/recon/farm/report`, {
+    params: jobId != null ? { job_id: jobId } : undefined,
+  });
+  return data.cleared;
 }
 
 export async function getPorts(projectId: number, hostId: number): Promise<Port[]> {
