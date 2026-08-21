@@ -681,11 +681,16 @@ function pathFor(s: {
   openNoteId: number | null;
   openHostId: number | null;
   openIp: string | null;
+  exportPageOpen: boolean;
+  exportScope: ExportScope;
 }): string {
   if (s.view === "profile") return s.profileTab === "account" ? "/profile" : `/profile/${s.profileTab}`;
   if (s.view === "workspaceMembers") return "/members";
   if (s.view === "detail" && s.openProjectId != null) {
     const base = `/projects/${s.openProjectId}`;
+    // Экспорт-страница рекона — собственный маршрут, чтобы «Назад» из неё
+    // возвращал в тот же раздел рекона, а не в чужой.
+    if (s.section === "hosts" && s.exportPageOpen) return `${base}/export/${s.exportScope}`;
     if (s.section === "overview") return base;
     if (s.section === "hosts") {
       // An open host/IP card is the last path segment, so the card is deep-linkable
@@ -718,6 +723,7 @@ function navStateFromPath(path: string): Partial<FrostState> {
       openNoteId: null,
       openHostId: null,
       openIp: null,
+      exportPageOpen: false,
     };
     /** `/…/vulns/7` → 7; a missing or non-numeric segment → null. */
     const entityId = () => {
@@ -725,6 +731,13 @@ function navStateFromPath(path: string): Partial<FrostState> {
       return parts[3] != null && Number.isFinite(n) ? n : null;
     };
     if (!seg) return { ...base, section: "overview" };
+    // /projects/{id}/export/{scope} — экспорт-страница рекона со своим URL.
+    if (seg === "export") {
+      const scope = (parts[3] ?? "hosts") as ExportScope;
+      const reconView: ReconView =
+        scope === "ips" ? "ips" : scope === "endpoints" ? "endpoints" : scope.startsWith("js") ? "js" : "hosts";
+      return { ...base, section: "hosts", reconView, exportPageOpen: true, exportScope: scope };
+    }
     // /projects/{id}/hosts/{hostId} and /projects/{id}/ips/{ip} deep-link an open card.
     if (seg === "hosts") {
       const hid = Number(parts[3]);
@@ -1494,10 +1507,12 @@ export function FrostApp() {
       openNoteId: state.openNoteId,
       openHostId: state.openHostId,
       openIp: state.openIp,
+      exportPageOpen: state.exportPageOpen,
+      exportScope: state.exportScope,
     });
     if (p !== location.pathname) navigate(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, location.pathname]);
+  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, location.pathname]);
   /* Loaded as soon as the project opens, like every other collection — the tab's
      counter has to be right before the tab is ever visited. Entering the tab
      re-fetches, since the feed is a shared audit trail that others add to. */
