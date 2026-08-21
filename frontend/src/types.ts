@@ -439,11 +439,17 @@ export interface IpFarmJob {
 /** Пер-проектная конфигурация recon-фермы (recon-стек). Формат провода зеркалит
  *  Go-структуру FarmConfig (snake_case json-теги). */
 export interface ReconFarmConfig {
-  // Global
-  mode: "passive" | "active";
+  // Global — высокоуровневые ручки, единственное, что правит пользователь.
+  // "both" гоняет пассивный и активный сбор одновременно.
+  mode: "passive" | "active" | "both";
+  /** Размер словаря брута — FROST маппит на бандл-файл, пользователь файл не выбирает. */
+  wordlist_size: "small" | "medium" | "large";
   rate_limit: number;
   concurrency: number;
-  // Subdomains
+  port_scan_scope: "top1000" | "all";
+  crawl_depth: number;
+  // Subdomains — внутренние флаги инструментов (UI их не показывает, но провод
+  // их несёт, чтобы round-trip сохранял значения).
   subfinder: boolean;
   assetfinder: boolean;
   amass_passive: boolean;
@@ -471,6 +477,53 @@ export interface ReconFarmConfig {
   // Vulns
   nuclei: boolean;
   nuclei_severity: string;
+}
+
+/** Один инструмент, работающий прямо сейчас в полном прогоне фермы. */
+export interface FarmRunStep {
+  tool: string;
+  args: string;
+  target: string;
+  started_at: string;
+}
+
+/** Снимок прогресса полного прогона (host_farm_jobs.progress). */
+export interface FarmRunProgress {
+  percent: number;
+  stage: string;
+  steps: FarmRunStep[];
+  subs_found: number;
+  hosts_found: number;
+  ports_found: number;
+  done: boolean;
+  errors: string[];
+}
+
+/** Итог полного прогона фермы (job.result по завершении). */
+export interface FarmRunResult {
+  mode: string;
+  wordlist_size: string;
+  roots_scanned: number;
+  subdomains_found: number;
+  subdomains_new: number;
+  hosts_created: number;
+  hosts_online: number;
+  ports_found: number;
+  sources_used: string[];
+  errors: string[];
+}
+
+/** Задача полного прогона фермы (kind='farm_run') со статусом и прогрессом. */
+export interface FarmRunJob {
+  id: number;
+  project_id: number;
+  kind: string;
+  status: string;
+  targets_total: number | null;
+  progress: FarmRunProgress | null;
+  result: FarmRunResult | null;
+  error: string | null;
+  created_at: string;
 }
 
 export interface Service {

@@ -16,6 +16,7 @@ import type {
   JsFarmJob,
   JsFile,
   ReconFarmConfig,
+  FarmRunJob,
   ImportResult,
   OpenApiImportResult,
   Invitation,
@@ -745,6 +746,21 @@ export async function getReconFarmConfig(projectId: number): Promise<ReconFarmCo
 /** Сохраняет конфигурацию фермы; бэкенд зажимает диапазоны и возвращает итог. */
 export async function saveReconFarmConfig(projectId: number, cfg: ReconFarmConfig): Promise<ReconFarmConfig> {
   const { data } = await api.put<ReconFarmConfig>(`/projects/${projectId}/recon/farm-config`, cfg);
+  return data;
+}
+
+// ---- полный прогон фермы (один клик — весь стек) ----
+
+/** Запускает полный прогон фермы. useDefaults — гнать с дефолтами, иначе с
+ *  сохранённым конфигом проекта. Возвращает задачу с начальным прогрессом. */
+export async function startFarmRun(projectId: number, useDefaults: boolean): Promise<FarmRunJob> {
+  const { data } = await api.post<FarmRunJob>(`/projects/${projectId}/recon/farm/run`, { use_defaults: useDefaults });
+  return data;
+}
+
+/** Статус+прогресс прогона фермы (для живой панели). */
+export async function getFarmRun(projectId: number, jobId: number): Promise<FarmRunJob> {
+  const { data } = await api.get<FarmRunJob>(`/projects/${projectId}/recon/farm/run/${jobId}`);
   return data;
 }
 

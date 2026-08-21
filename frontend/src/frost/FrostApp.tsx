@@ -65,6 +65,8 @@ import {
   deleteJsFilesForHost as apiDeleteJsFilesForHost,
   getReconFarmConfig as apiGetReconFarmConfig,
   saveReconFarmConfig as apiSaveReconFarmConfig,
+  startFarmRun as apiStartFarmRun,
+  getFarmRun as apiGetFarmRun,
   createEndpoint as apiCreateEndpoint,
   getEndpoints as apiGetEndpoints,
   deleteEndpoint as apiDeleteEndpoint,
@@ -118,6 +120,7 @@ import type {
   JsFarmJob as ApiJsFarmJob,
   JsFile as ApiJsFile,
   ReconFarmConfig as ApiReconFarmConfig,
+  FarmRunJob as ApiFarmRunJob,
   Port as ApiPort,
   Service as ApiService,
   Vulnerability as ApiVulnerability,
@@ -310,6 +313,10 @@ interface FrostState {
   farmCfgSaved: ApiReconFarmConfig | null;
   farmCfgLoading: boolean;
   farmCfgSaving: boolean;
+  /** Полный прогон фермы: задача с живым прогрессом. Держится и после done,
+   *  чтобы показать сводку, пока пользователь не закроет панель. */
+  farmRunJob: ApiFarmRunJob | null;
+  farmRunStarting: boolean;
   /** Открытая карточка JS-файла (id) — как openHostId/openIp у хостов и адресов. */
   openJsFileId: number | null;
   jsTick: number;
@@ -523,6 +530,8 @@ const initialState: FrostState = {
   hostFilters: [],
   ipFilters: [],
   hostFarmJob: null,
+  farmRunJob: null,
+  farmRunStarting: false,
   apiMembers: null,
   membersTick: 0,
   apiVulns: null,
@@ -1167,6 +1176,21 @@ export function FrostApp() {
     }
   };
 
+  // Kick off a full farm run: `useDefaults` runs the built-in stack, otherwise
+  // the project's saved config. One run at a time — disabled while in flight.
+  const startFarmRun = async (useDefaults: boolean) => {
+    const pid = state.openProjectId;
+    if (pid == null || state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")) return;
+    setState({ farmRunStarting: true });
+    try {
+      const job = await apiStartFarmRun(pid, useDefaults);
+      setState({ farmRunJob: job, farmRunStarting: false });
+    } catch (e) {
+      setState({ farmRunStarting: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't start the farm run")), "error");
+    }
+  };
+
   /* Completion toast for a finished host/IP probe. Reused by the poll effect and
      by the submit handlers when the server closes the job immediately (nothing new
      to probe — every target was already added). Added = new targets probed this
@@ -1221,6 +1245,33 @@ export function FrostApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.hostFarmJob, state.openProjectId]);
+
+  // ================= farm run: poll stage/percent/active-steps =================
+  // Unlike the per-list farms, the run job stays in state after it finishes so
+  // the Farm page can show the done summary until the user starts another run.
+  useEffect(() => {
+    const job = state.farmRunJob;
+    const pid = state.openProjectId;
+    if (!job || pid == null || !isFarmJobInFlight(job.status)) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const next = await apiGetFarmRun(pid, job.id);
+        if (cancelled) return;
+        // New hosts/ports land per stage — refresh the lists in the background.
+        reloadHosts();
+        setStateRaw((s) => (s.farmRunJob && s.farmRunJob.id === next.id ? { ...s, farmRunJob: next } : s));
+        if (next.status === "failed") pushToast(next.error || t("Farm run failed"), "error");
+      } catch {
+        if (!cancelled) setStateRaw((s) => (s.farmRunJob ? { ...s, farmRunJob: { ...s.farmRunJob } } : s));
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.farmRunJob, state.openProjectId]);
 
   // ================= ip farm: poll the running resolve+probe job =================
   useEffect(() => {
@@ -3962,14 +4013,23 @@ export function FrostApp() {
           </div>
         ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, marginBottom: 22 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{sectionLabel}</h1>
-              {/* Recon total sits next to the section title; the toolbar below keeps
-                  search on the left and filters on the right. */}
-              {sec === "hosts" && !_hd && !_ipd && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{reconTotalLabel} <b className="mono" style={{ color: "var(--fr-text)" }}>{reconTotal}</b></span>
-              )}
-            </div>
+            {sec === "hosts" && rv === "farm" ? (
+              /* The Farm view is a workspace, not a list — it gets its own title
+                 and subtitle instead of the recon "Total hosts" pill. */
+              <div style={{ minWidth: 0 }}>
+                <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t("Farm")}</h1>
+                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", marginTop: 6 }}>{t("Recon automation — run every tool with one click")}</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{sectionLabel}</h1>
+                {/* Recon total sits next to the section title; the toolbar below keeps
+                    search on the left and filters on the right. */}
+                {sec === "hosts" && !_hd && !_ipd && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{reconTotalLabel} <b className="mono" style={{ color: "var(--fr-text)" }}>{reconTotal}</b></span>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
                 <>
@@ -4577,23 +4637,6 @@ export function FrostApp() {
     }
     const dirty = JSON.stringify(cfg) !== JSON.stringify(state.farmCfgSaved);
 
-    // A pill switch bound to one boolean field.
-    const sw = (key: BoolFarmKey) => {
-      const on = cfg[key];
-      return (
-        <div
-          className="clk"
-          role="switch"
-          aria-checked={on}
-          aria-label={key}
-          onClick={() => setFarmField(key, !on)}
-          style={{ width: 42, height: 24, flex: "none", borderRadius: 999, background: on ? "var(--fr-accent)" : "var(--fr-border)", position: "relative", transition: "background .15s", cursor: "pointer" }}
-        >
-          <div style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: "50%", background: "var(--fr-surface)", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.25)" }} />
-        </div>
-      );
-    };
-
     // A settings row: label + optional hint on the left, a control on the right.
     const row = (label: string, desc: string, control: ReactNode, last = false) => (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, padding: "13px 0", borderBottom: last ? "none" : "1px solid var(--fr-divider)" }}>
@@ -4605,7 +4648,17 @@ export function FrostApp() {
       </div>
     );
 
-    const toggleRow = (key: BoolFarmKey, label: string, desc: string, last = false) => row(label, desc, sw(key), last);
+    // A segmented control over a small set of string values (mode / size / scope).
+    const seg = <V extends string>(value: V, opts: readonly V[], onPick: (v: V) => void, labelFor?: (v: V) => string) => (
+      <div style={{ display: "inline-flex", border: "1px solid var(--fr-border)", borderRadius: 10, overflow: "hidden" }}>
+        {opts.map((o) => {
+          const on = value === o;
+          return (
+            <div key={o} className="clk" onClick={() => onPick(o)} style={{ padding: "8px 16px", font: "700 12.5px Inter,sans-serif", cursor: "pointer", background: on ? "var(--fr-accent)" : "var(--fr-surface)", color: on ? "var(--fr-on-accent)" : "var(--fr-text-2)" }}>{labelFor ? labelFor(o) : t(cap(o))}</div>
+          );
+        })}
+      </div>
+    );
 
     const numField = (key: NumFarmKey, min: number, max: number) => (
       <input
@@ -4652,89 +4705,114 @@ export function FrostApp() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* Global */}
-          {card("settings", t("Global"), t("Overall pace and mode of every farm run"),
+          {/* Run — the headline action: one click runs the whole stack. */}
+          {renderFarmRun()}
+
+          {/* Global — the only knobs the user touches; tools are chosen by FROST. */}
+          {card("settings", t("Run settings"), t("How the run behaves — FROST picks the tools and wordlists for you"),
             <>
-              {row(t("Mode"), t("Passive avoids sending traffic to the target; active probes it."), (
-                <div style={{ display: "inline-flex", border: "1px solid var(--fr-border)", borderRadius: 10, overflow: "hidden" }}>
-                  {(["passive", "active"] as const).map((m) => {
-                    const on = cfg.mode === m;
-                    return (
-                      <div key={m} className="clk" onClick={() => setFarmField("mode", m)} style={{ padding: "8px 16px", font: "700 12.5px Inter,sans-serif", cursor: "pointer", background: on ? "var(--fr-accent)" : "var(--fr-surface)", color: on ? "var(--fr-on-accent)" : "var(--fr-text-2)" }}>{t(cap(m))}</div>
-                    );
-                  })}
-                </div>
-              ))}
+              {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
+              {row(t("Wordlist size"), t("Bigger lists find more subdomains but take longer — FROST maps this to a bundled list."), seg(cfg.wordlist_size, ["small", "medium", "large"] as const, (s) => setFarmField("wordlist_size", s)))}
               {numRow("rate_limit", t("Rate limit"), t("Requests per second"), 1, 500)}
-              {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100, true)}
-            </>
-          )}
-
-          {/* Subdomains */}
-          {card("globe2", t("Subdomains"), t("Passive and active subdomain discovery sources"),
-            <>
-              {toggleRow("subfinder", "subfinder", t("Passive subdomain enumeration"))}
-              {toggleRow("assetfinder", "assetfinder", t("Passive subdomain enumeration"))}
-              {toggleRow("amass_passive", t("Amass (passive)"), t("Passive sources only, no active resolution"))}
-              {toggleRow("crtsh", "crt.sh", t("Certificate-transparency log search"))}
-              {toggleRow("ct_time_correlation", t("CT time correlation"), t("Correlate certificate issuance times to find related hosts"))}
-              {toggleRow("active_brute", t("Active brute-force"), t("DNS brute-force with a wordlist (sends traffic)"))}
-              {numRow("subs_max_results", t("Max results"), t("Cap on collected subdomains"), 1, 100000, true)}
-            </>
-          )}
-
-          {/* Liveness */}
-          {card("activity", t("Liveness"), t("Resolve and probe which hosts are alive"),
-            <>
-              {toggleRow("dnsx", "dnsx", t("DNS resolution of discovered names"))}
-              {toggleRow("httpx", "httpx", t("HTTP/HTTPS liveness probing"))}
-              {numRow("httpx_threads", t("httpx threads"), t("Concurrent probes"), 1, 1000, true)}
-            </>
-          )}
-
-          {/* JS mining */}
-          {card("doc", t("JS mining"), t("Extract secrets and endpoints from JavaScript"),
-            <>
-              {toggleRow("js_mine_enabled", t("Enable JS mining"), t("Download and scan JavaScript for secrets and paths"))}
-              {toggleRow("trufflehog_verified_only", t("Verified secrets only"), t("Report only secrets TruffleHog could verify"), true)}
-            </>
-          )}
-
-          {/* Crawl / URLs */}
-          {card("link", t("Crawl & URLs"), t("Crawl live hosts and harvest historical URLs"),
-            <>
-              {toggleRow("katana", "katana", t("Active crawler"))}
-              {toggleRow("gau", "gau", t("URLs from public archives"))}
-              {toggleRow("waybackurls", "waybackurls", t("URLs from the Wayback Machine"))}
-              {numRow("katana_depth", t("Katana depth"), t("Crawl depth"), 1, 10, true)}
-            </>
-          )}
-
-          {/* Parameters */}
-          {card("search", t("Parameters"), t("Discover request parameters on live endpoints"),
-            <>{toggleRow("param_discovery", t("Parameter discovery"), t("Find hidden query and body parameters"), true)}</>
-          )}
-
-          {/* Dir fuzz */}
-          {card("folder", t("Directory fuzzing"), t("Brute-force directories and files"),
-            <>
-              {toggleRow("dir_fuzz", t("Enable directory fuzzing"), t("Sends many requests to the target"))}
-              {row(t("Wordlist"), t("Path to the wordlist (blank = built-in default)"), (
-                <input className="finp mono" type="text" value={cfg.fuzz_wordlist} placeholder="/wordlists/…" onChange={(e) => setFarmField("fuzz_wordlist", e.target.value)} style={{ width: 260, font: "500 12.5px 'JetBrains Mono',monospace" }} />
-              ), true)}
-            </>
-          )}
-
-          {/* Vulns */}
-          {card("shield-check", t("Vulnerabilities"), t("Template-based vulnerability scanning"),
-            <>
-              {toggleRow("nuclei", "nuclei", t("Run nuclei templates against live hosts"))}
-              {row(t("Severity"), t("Comma-separated severities to include"), (
-                <input className="finp mono" type="text" value={cfg.nuclei_severity} placeholder="medium,high,critical" onChange={(e) => setFarmField("nuclei_severity", e.target.value)} style={{ width: 260, font: "500 12.5px 'JetBrains Mono',monospace" }} />
-              ), true)}
+              {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100)}
+              {row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))))}
+              {numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)}
             </>
           )}
         </div>
+      </div>
+    );
+  };
+
+  // The Farm run block: two launch buttons and, once a run is going, a live
+  // progress bar + a panel listing the tools running right now with their args.
+  const renderFarmRun = () => {
+    const run = state.farmRunJob;
+    const runInFlight = isFarmJobInFlight(run?.status ?? "");
+    const busy = runInFlight || state.farmRunStarting;
+    const prog = run?.progress ?? null;
+    const pct = Math.max(0, Math.min(100, prog?.percent ?? 0));
+    const runResult = run?.result ?? null;
+
+    const runBtn = (label: string, primary: boolean, onClick: () => void) => (
+      <button
+        className="clk"
+        onClick={onClick}
+        disabled={busy}
+        style={{ height: 42, padding: "0 20px", border: primary ? "none" : "1px solid var(--fr-border)", borderRadius: 11, background: busy ? "var(--fr-accent-muted)" : primary ? "var(--fr-accent)" : "var(--fr-surface)", color: primary ? "var(--fr-on-accent)" : "var(--fr-text)", font: "700 13px Inter,sans-serif", cursor: busy ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+      >
+        <Icon name="activity" size={15} color={primary ? "var(--fr-on-accent)" : "var(--fr-accent)"} sw={2.4} />{label}
+      </button>
+    );
+
+    return (
+      <div style={{ ...CARD, padding: "22px 24px" }}>
+        {cardHeader("activity", t("Run the farm"), t("Runs subdomains, resolve, liveness and port scan across the project's root domains"))}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
+          {runBtn(t("Run (defaults)"), true, () => startFarmRun(true))}
+          {runBtn(t("Run with my settings"), false, () => startFarmRun(false))}
+          {runInFlight && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
+              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+              {t("Running")}…
+            </span>
+          )}
+        </div>
+
+        {run && (
+          <div style={{ marginTop: 20 }}>
+            {/* Progress bar + stage/percent. */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+              <div style={{ font: "700 12.5px Inter,sans-serif", color: "var(--fr-text-2)", textTransform: "capitalize" }}>
+                {prog?.done || run.status === "done" ? t("Done") : prog?.stage ? t(cap(prog.stage)) : t(cap(run.status))}
+              </div>
+              <div className="mono" style={{ fontSize: 12.5, color: "var(--fr-text-3)" }}>{pct}%</div>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: "var(--fr-border)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${pct}%`, background: run.status === "failed" ? "var(--fr-danger)" : "var(--fr-accent)", transition: "width .4s ease" }} />
+            </div>
+
+            {/* Running counters. */}
+            {prog && (
+              <div style={{ display: "flex", gap: 18, marginTop: 14, flexWrap: "wrap" }}>
+                {([[t("Subdomains"), prog.subs_found], [t("Hosts"), prog.hosts_found], [t("Ports"), prog.ports_found]] as const).map(([label, n]) => (
+                  <div key={label} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: "var(--fr-text)" }}>{n}</span>
+                    <span style={{ fontSize: 11.5, color: "var(--fr-text-faint)", textTransform: "uppercase", letterSpacing: ".5px" }}>{label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Live panel: the tools running right now, with their exact args. */}
+            {runInFlight && prog && prog.steps.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase", marginBottom: 8 }}>{t("Running now")}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {prog.steps.map((step, i) => (
+                    <div key={`${step.tool}-${step.target}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, background: "var(--fr-surface)", border: "1px solid var(--fr-divider)" }}>
+                      <span className="frost-spin" style={{ width: 11, height: 11, flex: "none", borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+                      <span className="mono" style={{ fontSize: 12, color: "var(--fr-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{step.args || step.tool}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Done summary. */}
+            {run.status === "done" && runResult && (
+              <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "var(--fr-success-soft, var(--fr-surface))", border: "1px solid var(--fr-divider)", fontSize: 12.5, color: "var(--fr-text-2)" }}>
+                {t("Run complete")} — {runResult.subdomains_found} {t("subdomains")}, {runResult.hosts_created} {t("new hosts")}, {runResult.ports_found} {t("ports")}.
+                {runResult.errors.length > 0 && <span style={{ color: "var(--fr-text-faint)" }}> {runResult.errors.length} {t("warnings")}.</span>}
+              </div>
+            )}
+            {run.status === "failed" && (
+              <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "var(--fr-danger-soft, var(--fr-surface))", border: "1px solid var(--fr-divider)", fontSize: 12.5, color: "var(--fr-danger)" }}>
+                {run.error || t("The farm run failed.")}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
