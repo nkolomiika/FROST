@@ -538,3 +538,33 @@ func (s *Service) GetFarmRun(ctx context.Context, projectID, jobID int32) (JobVi
 	}
 	return view, nil
 }
+
+// CancelFarmRun сигналит отмену ВСЕГО прогона (cancel_requested). Валидирует, что
+// задача — farm_run этого проекта (404 иначе); поллер воркера подхватит сигнал и
+// оборвёт прогон. Идемпотентно: повторный вызов на уже завершённой задаче безвреден.
+func (s *Service) CancelFarmRun(ctx context.Context, projectID, jobID int32) error {
+	if _, err := s.GetFarmRun(ctx, projectID, jobID); err != nil {
+		return err
+	}
+	return s.store.RequestFarmCancel(ctx, projectID, jobID)
+}
+
+// CancelFarmStep сигналит отмену ОДНОГО шага прогона по его id (добавляет в
+// cancel_steps). Валидирует принадлежность задачи проекту (404 иначе).
+func (s *Service) CancelFarmStep(ctx context.Context, projectID, jobID, stepID int32) error {
+	if _, err := s.GetFarmRun(ctx, projectID, jobID); err != nil {
+		return err
+	}
+	if err := s.store.RequestFarmStepCancel(ctx, projectID, jobID, stepID); err == ErrNoRows {
+		return apperr.NotFound("Задача прогона фермы не найдена")
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+// CancelAllFarmRuns сигналит отмену ВСЕХ активных (pending|running) прогонов
+// проекта; возвращает число затронутых задач.
+func (s *Service) CancelAllFarmRuns(ctx context.Context, projectID int32) (int64, error) {
+	return s.store.RequestFarmCancelAllActive(ctx, projectID)
+}

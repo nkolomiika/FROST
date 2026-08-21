@@ -1,6 +1,13 @@
 // Command recon-worker — воркер рекон-фермы (DB-поллер таблицы host_farm_jobs).
 // Порт worker/recon_worker.py, но БЕЗ RabbitMQ: host_farm_jobs — durable-очередь.
-// Каждый тик: реклейм застрявших → выборка pending → атомарный claim → прогон.
+//
+// Две НЕЗАВИСИМЫЕ дорожки-горутины поверх одного пула:
+//   - «обычная» (regularPollInterval): все kind, кроме farm_run — держит
+//     add-hosts/add-ips/port-scan отзывчивыми;
+//   - «фермовая» (farmPollInterval): только farm_run, долгие прогоны.
+//
+// Так длинный прогон фермы (минуты) НЕ блокирует обычные задачи. Обе разделяют ctx
+// и останавливаются на SIGINT/SIGTERM.
 package main
 
 import (
@@ -8,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,9 +24,13 @@ import (
 	"github.com/nkolomiika/frost/internal/app/recon"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
 	"github.com/nkolomiika/frost/internal/platform/postgres"
+	"log/slog"
 )
 
-const pollInterval = 5 * time.Second
+const (
+	regularPollInterval = 5 * time.Second
+	farmPollInterval    = 5 * time.Second
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -51,17 +63,31 @@ func run() error {
 
 	svc := recon.NewService(reconrepo.New(pool), recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
 
-	logger.Info("recon-worker запущен", "poll", pollInterval.String())
-	ticker := time.NewTicker(pollInterval)
+	logger.Info("recon-worker запущен", "regular_poll", regularPollInterval.String(), "farm_poll", farmPollInterval.String())
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go runLane(ctx, &wg, logger, "regular", regularPollInterval, svc.ProcessPendingRegular)
+	go runLane(ctx, &wg, logger, "farm", farmPollInterval, svc.ProcessPendingFarm)
+	wg.Wait()
+
+	logger.Info("recon-worker остановлен")
+	return nil
+}
+
+// runLane крутит одну дорожку воркера: на каждом тике зовёт process, пока не придёт
+// ctx.Done(). Дорожки независимы — падение одной итерации логируется, не роняя лейн.
+func runLane(ctx context.Context, wg *sync.WaitGroup, logger *slog.Logger, name string, interval time.Duration, process func(context.Context) error) {
+	defer wg.Done()
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
-		if err := svc.ProcessPending(ctx); err != nil {
-			logger.Warn("process pending", "err", err)
+		if err := process(ctx); err != nil {
+			logger.Warn("process pending", "lane", name, "err", err)
 		}
 		select {
 		case <-ctx.Done():
-			logger.Info("recon-worker остановлен")
-			return nil
+			return
 		case <-ticker.C:
 		}
 	}

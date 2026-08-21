@@ -56,8 +56,8 @@ func TestProgressTracker_SnapshotAndConcurrentSteps(t *testing.T) {
 	tr.update(func(p *RunProgress) { p.Stage = "subdomains"; p.Percent = 5 })
 
 	// Два одновременных шага (пассив + актив) видны вместе.
-	a := tr.addStep(RunStep{Tool: "subfinder", Args: "subfinder -d x -silent", Target: "x"})
-	b := tr.addStep(RunStep{Tool: "dnsx", Args: "dnsx -d x -w wl", Target: "x"})
+	a := tr.addStep(RunStep{Tool: "subfinder", Args: "subfinder -d x -silent", Target: "x"}, nil)
+	b := tr.addStep(RunStep{Tool: "dnsx", Args: "dnsx -d x -w wl", Target: "x"}, nil)
 	mu.Lock()
 	snap := last
 	mu.Unlock()

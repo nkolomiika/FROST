@@ -25,14 +25,35 @@ type stubStore struct {
 	reclaimN      int64
 
 	// захваты
-	captured     *NewJob
-	jsFiles      []JSFileInput
-	auditCount   int
-	callOrder    []string
-	pendingIDs   []int32
-	claimByID    map[int32]*JobClaim
-	doneResults  map[int32][]byte
-	lastProgress []byte
+	captured       *NewJob
+	jsFiles        []JSFileInput
+	auditCount     int
+	callOrder      []string
+	pendingIDs     []int32
+	pendingFarmIDs []int32
+	claimByID      map[int32]*JobClaim
+	doneResults    map[int32][]byte
+	lastProgress   []byte
+
+	// захваты фильтров дорожек воркера
+	reclaimExclKind string
+	reclaimForKind  string
+	reclaimForStale int32
+	selectExclKind  string
+	selectForKind   string
+
+	// цели/хосты проекта (для runFarm end-to-end)
+	allHostnames []string
+	scanTargets  []string
+
+	// отмена прогона фермы
+	cancelState      func(jobID int32) (bool, []int32) // снимок для поллера
+	jobForProject    func(projectID, jobID int32, kind string) (JobView, error)
+	cancelledResults map[int32][]byte
+	farmCancelReqs   []int32 // jobID'ы с RequestFarmCancel
+	farmStepReqs     [][2]int32
+	cancelAllN       int64
+	cancelAllCalled  int
 }
 
 func (s *stubStore) note(m string) { s.callOrder = append(s.callOrder, m) }
@@ -93,13 +114,26 @@ func (s *stubStore) PersistJSFile(_ context.Context, in JSFileInput) error {
 	return nil
 }
 
-func (s *stubStore) ReclaimStale(context.Context, int32, int32) (int64, error) {
+func (s *stubStore) ReclaimStaleExcludingKind(_ context.Context, _ int32, _ int32, kind string) (int64, error) {
 	s.note("reclaim")
+	s.reclaimExclKind = kind
 	return s.reclaimN, nil
 }
-func (s *stubStore) SelectPendingJobIDs(context.Context, int32, int32) ([]int32, error) {
+func (s *stubStore) ReclaimStaleForKind(_ context.Context, staleSeconds int32, _ int32, kind string) (int64, error) {
+	s.note("reclaim-farm")
+	s.reclaimForKind = kind
+	s.reclaimForStale = staleSeconds
+	return s.reclaimN, nil
+}
+func (s *stubStore) SelectPendingJobIDsExcludingKind(_ context.Context, _ int32, _ int32, kind string) ([]int32, error) {
 	s.note("select")
+	s.selectExclKind = kind
 	return s.pendingIDs, nil
+}
+func (s *stubStore) SelectPendingJobIDsForKind(_ context.Context, _ int32, _ int32, kind string) ([]int32, error) {
+	s.note("select-farm")
+	s.selectForKind = kind
+	return s.pendingFarmIDs, nil
 }
 func (s *stubStore) ClaimJobRunning(_ context.Context, id int32) (*JobClaim, error) {
 	return s.claimByID[id], nil
@@ -116,6 +150,48 @@ func (s *stubStore) MarkJobDone(_ context.Context, id int32, result []byte) erro
 	return nil
 }
 func (s *stubStore) MarkJobFailed(context.Context, int32, string, *string) error { return nil }
+
+func (s *stubStore) MarkJobCancelled(_ context.Context, id int32, result []byte) error {
+	if s.cancelledResults == nil {
+		s.cancelledResults = map[int32][]byte{}
+	}
+	s.cancelledResults[id] = result
+	return nil
+}
+
+func (s *stubStore) ProjectAllHostnames(context.Context, int32) ([]string, error) {
+	return s.allHostnames, nil
+}
+func (s *stubStore) ProjectScanTargets(context.Context, int32) ([]string, error) {
+	return s.scanTargets, nil
+}
+
+func (s *stubStore) GetJobForProject(_ context.Context, projectID, jobID int32, kind string) (JobView, error) {
+	if s.jobForProject != nil {
+		return s.jobForProject(projectID, jobID, kind)
+	}
+	return JobView{ID: jobID, ProjectID: projectID, Kind: kind, Status: "running"}, nil
+}
+
+func (s *stubStore) RequestFarmCancel(_ context.Context, _ int32, jobID int32) error {
+	s.farmCancelReqs = append(s.farmCancelReqs, jobID)
+	return nil
+}
+func (s *stubStore) RequestFarmStepCancel(_ context.Context, _ int32, jobID, stepID int32) error {
+	s.farmStepReqs = append(s.farmStepReqs, [2]int32{jobID, stepID})
+	return nil
+}
+func (s *stubStore) RequestFarmCancelAllActive(context.Context, int32) (int64, error) {
+	s.cancelAllCalled++
+	return s.cancelAllN, nil
+}
+func (s *stubStore) GetFarmCancelState(_ context.Context, jobID int32) (bool, []int32, error) {
+	if s.cancelState != nil {
+		cr, steps := s.cancelState(jobID)
+		return cr, steps, nil
+	}
+	return false, nil, nil
+}
 
 func (s *stubStore) InsertAudit(context.Context, AuditEntry) error {
 	s.auditCount++

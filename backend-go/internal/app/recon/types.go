@@ -37,14 +37,20 @@ const (
 const (
 	jobPending = "pending"
 	jobDone    = "done"
+	// jobCancelled — прогон остановлен по запросу пользователя. Это НЕ провал:
+	// result хранит частичный итог, error пуст.
+	jobCancelled = "cancelled"
 )
 
 // Config — тюнинг оркестрации (не сетевой): воркер, попытки, кап result.
+// FarmStaleSeconds — отдельное (большое) окно реклейма для farm_run: полный прогон
+// идёт минутами, поэтому обычный StaleSeconds к нему не применяем.
 type Config struct {
-	WorkerEnabled  bool
-	MaxAttempts    int32
-	StaleSeconds   int32
-	ResultMaxItems int
+	WorkerEnabled    bool
+	MaxAttempts      int32
+	StaleSeconds     int32
+	FarmStaleSeconds int32
+	ResultMaxItems   int
 }
 
 // ─────────────────────────── result-структуры (JSON job.result) ───────────────────────────
@@ -207,7 +213,10 @@ func newReverseFarmResult() *ReverseFarmResult { return &ReverseFarmResult{Error
 // RunStep — один инструмент, работающий ПРЯМО СЕЙЧАС: чем (Tool), с какими
 // аргументами (Args, готовая строка команды) и по какой цели (Target). Живая
 // панель во фронте показывает их списком; пассивные и активные шаги видны вместе.
+// ID — стабильный целочисленный идентификатор шага (= seq трекера); фронт шлёт
+// его в per-step cancel (.../steps/{step_id}/cancel).
 type RunStep struct {
+	ID        int       `json:"id"`
 	Tool      string    `json:"tool"`
 	Args      string    `json:"args"`
 	Target    string    `json:"target"`

@@ -84,6 +84,11 @@ type Querier interface {
 	GetCommentNotificationContext(ctx context.Context, id int32) (GetCommentNotificationContextRow, error)
 	GetCredential(ctx context.Context, arg GetCredentialParams) (GetCredentialRow, error)
 	GetEndpointForHost(ctx context.Context, arg GetEndpointForHostParams) (Endpoint, error)
+	// Снимок управляющих колонок отмены для поллера воркера.
+	GetFarmCancelState(ctx context.Context, id int32) (GetFarmCancelStateRow, error)
+	// Читает текущий cancel_steps под блокировкой строки (read-modify-write отмены
+	// одного шага). Фильтр по проекту и kind — чужую задачу не трогаем.
+	GetFarmCancelStepsForUpdate(ctx context.Context, arg GetFarmCancelStepsForUpdateParams) ([]byte, error)
 	GetFileByID(ctx context.Context, id int32) (File, error)
 	GetFileForVuln(ctx context.Context, arg GetFileForVulnParams) (File, error)
 	GetFolderByID(ctx context.Context, id int32) (ProjectFolder, error)
@@ -272,7 +277,18 @@ type Querier interface {
 	// ─────────── project stats ───────────
 	ProjectStatsAdmin(ctx context.Context) ([]ProjectStatsAdminRow, error)
 	ProjectStatsForMember(ctx context.Context, userID int32) ([]ProjectStatsForMemberRow, error)
-	ReclaimStaleReconJobs(ctx context.Context, arg ReclaimStaleReconJobsParams) (int64, error)
+	// Реклейм обычной дорожки: НЕ трогает farm_run (его прогон легитимно длинный,
+	// иначе его переигрывали бы как «застрявший» → двойной прогон).
+	ReclaimStaleReconJobsExcludingKind(ctx context.Context, arg ReclaimStaleReconJobsExcludingKindParams) (int64, error)
+	// Реклейм фермовой дорожки: только farm_run и с БОЛЬШИМ окном stale_seconds
+	// (прогон идёт минутами), чтобы живой прогон не считался застрявшим.
+	ReclaimStaleReconJobsForKind(ctx context.Context, arg ReclaimStaleReconJobsForKindParams) (int64, error)
+	// Сигнал отмены ВСЕГО прогона: cancel_requested=true. Только для farm_run задачи
+	// этого проекта (иначе строка не совпадёт и апдейт — no-op).
+	RequestFarmCancel(ctx context.Context, arg RequestFarmCancelParams) error
+	// Сигнал отмены ВСЕХ активных (pending|running) farm_run задач проекта. Возвращает
+	// число затронутых строк.
+	RequestFarmCancelAllActive(ctx context.Context, projectID int32) (int64, error)
 	ResetUserPasswordTemp(ctx context.Context, arg ResetUserPasswordTempParams) error
 	// ─────────── comment mentions ───────────
 	ResolveCommentMentionUsers(ctx context.Context, arg ResolveCommentMentionUsersParams) ([]ResolveCommentMentionUsersRow, error)
@@ -284,13 +300,26 @@ type Querier interface {
 	// ─────────── existing-target keys (create_job) ───────────
 	SelectExistingHostnames(ctx context.Context, arg SelectExistingHostnamesParams) ([]pgtype.Text, error)
 	SelectExistingOriginIPAddresses(ctx context.Context, arg SelectExistingOriginIPAddressesParams) ([]string, error)
-	SelectPendingReconJobs(ctx context.Context, arg SelectPendingReconJobsParams) ([]int32, error)
+	// Воркер гоняет ДВЕ независимые дорожки: «обычная» (все kind, кроме farm_run —
+	// держит add-hosts/add-ips/port-scan отзывчивыми) и «фермовая» (только farm_run,
+	// долгие прогоны). Отсюда — выборка/реклейм с фильтром по kind, чтобы дорожки не
+	// мешали друг другу: длинный farm_run не блокирует обычные задачи, а реклейм
+	// обычной дорожки НИКОГДА не трогает бегущий farm_run (и наоборот).
+	// Pending обычной дорожки: всё, КРОМЕ переданного kind (= 'farm_run').
+	SelectPendingReconJobsExcludingKind(ctx context.Context, arg SelectPendingReconJobsExcludingKindParams) ([]int32, error)
+	// Pending фермовой дорожки: только переданный kind (= 'farm_run').
+	SelectPendingReconJobsForKind(ctx context.Context, arg SelectPendingReconJobsForKindParams) ([]int32, error)
 	ServiceAssetInProject(ctx context.Context, arg ServiceAssetInProjectParams) (bool, error)
+	// Записывает новый массив id шагов к отмене (маршалится в Go после дедупа).
+	SetFarmCancelSteps(ctx context.Context, arg SetFarmCancelStepsParams) error
 	// ─────────── host_ip_addresses (ensure_ips) ───────────
 	SetHostIPCloudflare(ctx context.Context, arg SetHostIPCloudflareParams) error
 	SetHostIPHostnames(ctx context.Context, arg SetHostIPHostnamesParams) error
 	SetHostPrimaryIP(ctx context.Context, arg SetHostPrimaryIPParams) error
 	SetHostStatus(ctx context.Context, arg SetHostStatusParams) error
+	// Помечает прогон отменённым (НЕ провал): status='cancelled', частичный result,
+	// finished_at=now(). Ошибочные поля чистятся — отмена не является ошибкой.
+	SetJobCancelled(ctx context.Context, arg SetJobCancelledParams) error
 	SetJobDone(ctx context.Context, arg SetJobDoneParams) error
 	SetJobFailed(ctx context.Context, arg SetJobFailedParams) error
 	// Обновляет JSON-снимок прогресса полного прогона фермы (kind='farm_run') по мере

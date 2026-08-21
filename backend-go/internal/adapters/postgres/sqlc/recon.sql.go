@@ -15,7 +15,7 @@ const claimReconJobRunning = `-- name: ClaimReconJobRunning :one
 UPDATE host_farm_jobs
 SET status = 'running', attempts = attempts + 1, updated_at = now()
 WHERE id = $1 AND status NOT IN ('running', 'done')
-RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress
+RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress, cancel_requested, cancel_steps
 `
 
 // Атомарно берёт задачу в работу (status='running', attempts++) при статусе, не
@@ -41,6 +41,8 @@ func (q *Queries) ClaimReconJobRunning(ctx context.Context, id int32) (HostFarmJ
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Progress,
+		&i.CancelRequested,
+		&i.CancelSteps,
 	)
 	return i, err
 }
@@ -67,6 +69,43 @@ DELETE FROM services WHERE port_id = $1
 func (q *Queries) DeleteServicesForPort(ctx context.Context, portID int32) error {
 	_, err := q.db.Exec(ctx, deleteServicesForPort, portID)
 	return err
+}
+
+const getFarmCancelState = `-- name: GetFarmCancelState :one
+SELECT cancel_requested, cancel_steps FROM host_farm_jobs WHERE id = $1
+`
+
+type GetFarmCancelStateRow struct {
+	CancelRequested bool   `json:"cancel_requested"`
+	CancelSteps     []byte `json:"cancel_steps"`
+}
+
+// Снимок управляющих колонок отмены для поллера воркера.
+func (q *Queries) GetFarmCancelState(ctx context.Context, id int32) (GetFarmCancelStateRow, error) {
+	row := q.db.QueryRow(ctx, getFarmCancelState, id)
+	var i GetFarmCancelStateRow
+	err := row.Scan(&i.CancelRequested, &i.CancelSteps)
+	return i, err
+}
+
+const getFarmCancelStepsForUpdate = `-- name: GetFarmCancelStepsForUpdate :one
+SELECT cancel_steps FROM host_farm_jobs
+WHERE id = $1 AND project_id = $2 AND kind = 'farm_run'
+FOR UPDATE
+`
+
+type GetFarmCancelStepsForUpdateParams struct {
+	ID        int32 `json:"id"`
+	ProjectID int32 `json:"project_id"`
+}
+
+// Читает текущий cancel_steps под блокировкой строки (read-modify-write отмены
+// одного шага). Фильтр по проекту и kind — чужую задачу не трогаем.
+func (q *Queries) GetFarmCancelStepsForUpdate(ctx context.Context, arg GetFarmCancelStepsForUpdateParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getFarmCancelStepsForUpdate, arg.ID, arg.ProjectID)
+	var cancel_steps []byte
+	err := row.Scan(&cancel_steps)
+	return cancel_steps, err
 }
 
 const getHostByHostname = `-- name: GetHostByHostname :one
@@ -126,7 +165,7 @@ func (q *Queries) GetHostByIPLiteral(ctx context.Context, arg GetHostByIPLiteral
 }
 
 const getHostFarmJob = `-- name: GetHostFarmJob :one
-SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress FROM host_farm_jobs WHERE id = $1
+SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress, cancel_requested, cancel_steps FROM host_farm_jobs WHERE id = $1
 `
 
 func (q *Queries) GetHostFarmJob(ctx context.Context, id int32) (HostFarmJob, error) {
@@ -150,12 +189,14 @@ func (q *Queries) GetHostFarmJob(ctx context.Context, id int32) (HostFarmJob, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Progress,
+		&i.CancelRequested,
+		&i.CancelSteps,
 	)
 	return i, err
 }
 
 const getHostFarmJobForProject = `-- name: GetHostFarmJobForProject :one
-SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress FROM host_farm_jobs
+SELECT id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress, cancel_requested, cancel_steps FROM host_farm_jobs
 WHERE id = $1 AND project_id = $2 AND kind = $3
 `
 
@@ -186,6 +227,8 @@ func (q *Queries) GetHostFarmJobForProject(ctx context.Context, arg GetHostFarmJ
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Progress,
+		&i.CancelRequested,
+		&i.CancelSteps,
 	)
 	return i, err
 }
@@ -255,7 +298,7 @@ const insertHostFarmJob = `-- name: InsertHostFarmJob :one
 
 INSERT INTO host_farm_jobs (project_id, created_by, kind, status, targets_total, raw, skipped_targets, result, progress, finished_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress
+RETURNING id, project_id, created_by, kind, status, targets_total, result, error, raw, attempts, published_at, last_error, finished_at, skipped_targets, created_at, updated_at, progress, cancel_requested, cancel_steps
 `
 
 type InsertHostFarmJobParams struct {
@@ -309,6 +352,8 @@ func (q *Queries) InsertHostFarmJob(ctx context.Context, arg InsertHostFarmJobPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Progress,
+		&i.CancelRequested,
+		&i.CancelSteps,
 	)
 	return i, err
 }
@@ -478,20 +523,82 @@ func (q *Queries) ListProjectScanTargets(ctx context.Context, projectID int32) (
 	return items, nil
 }
 
-const reclaimStaleReconJobs = `-- name: ReclaimStaleReconJobs :execrows
+const reclaimStaleReconJobsExcludingKind = `-- name: ReclaimStaleReconJobsExcludingKind :execrows
 UPDATE host_farm_jobs SET status = 'pending', updated_at = now()
 WHERE status IN ('queued', 'running')
-  AND updated_at < now() - ($1::int * interval '1 second')
-  AND attempts < $2
+  AND kind <> $1
+  AND updated_at < now() - ($2::int * interval '1 second')
+  AND attempts < $3
 `
 
-type ReclaimStaleReconJobsParams struct {
-	StaleSeconds int32 `json:"stale_seconds"`
-	MaxAttempts  int32 `json:"max_attempts"`
+type ReclaimStaleReconJobsExcludingKindParams struct {
+	Kind         string `json:"kind"`
+	StaleSeconds int32  `json:"stale_seconds"`
+	MaxAttempts  int32  `json:"max_attempts"`
 }
 
-func (q *Queries) ReclaimStaleReconJobs(ctx context.Context, arg ReclaimStaleReconJobsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, reclaimStaleReconJobs, arg.StaleSeconds, arg.MaxAttempts)
+// Реклейм обычной дорожки: НЕ трогает farm_run (его прогон легитимно длинный,
+// иначе его переигрывали бы как «застрявший» → двойной прогон).
+func (q *Queries) ReclaimStaleReconJobsExcludingKind(ctx context.Context, arg ReclaimStaleReconJobsExcludingKindParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reclaimStaleReconJobsExcludingKind, arg.Kind, arg.StaleSeconds, arg.MaxAttempts)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const reclaimStaleReconJobsForKind = `-- name: ReclaimStaleReconJobsForKind :execrows
+UPDATE host_farm_jobs SET status = 'pending', updated_at = now()
+WHERE status IN ('queued', 'running')
+  AND kind = $1
+  AND updated_at < now() - ($2::int * interval '1 second')
+  AND attempts < $3
+`
+
+type ReclaimStaleReconJobsForKindParams struct {
+	Kind         string `json:"kind"`
+	StaleSeconds int32  `json:"stale_seconds"`
+	MaxAttempts  int32  `json:"max_attempts"`
+}
+
+// Реклейм фермовой дорожки: только farm_run и с БОЛЬШИМ окном stale_seconds
+// (прогон идёт минутами), чтобы живой прогон не считался застрявшим.
+func (q *Queries) ReclaimStaleReconJobsForKind(ctx context.Context, arg ReclaimStaleReconJobsForKindParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reclaimStaleReconJobsForKind, arg.Kind, arg.StaleSeconds, arg.MaxAttempts)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const requestFarmCancel = `-- name: RequestFarmCancel :exec
+UPDATE host_farm_jobs
+SET cancel_requested = true, updated_at = now()
+WHERE id = $1 AND project_id = $2 AND kind = 'farm_run'
+`
+
+type RequestFarmCancelParams struct {
+	ID        int32 `json:"id"`
+	ProjectID int32 `json:"project_id"`
+}
+
+// Сигнал отмены ВСЕГО прогона: cancel_requested=true. Только для farm_run задачи
+// этого проекта (иначе строка не совпадёт и апдейт — no-op).
+func (q *Queries) RequestFarmCancel(ctx context.Context, arg RequestFarmCancelParams) error {
+	_, err := q.db.Exec(ctx, requestFarmCancel, arg.ID, arg.ProjectID)
+	return err
+}
+
+const requestFarmCancelAllActive = `-- name: RequestFarmCancelAllActive :execrows
+UPDATE host_farm_jobs
+SET cancel_requested = true, updated_at = now()
+WHERE project_id = $1 AND kind = 'farm_run' AND status IN ('pending', 'running')
+`
+
+// Сигнал отмены ВСЕХ активных (pending|running) farm_run задач проекта. Возвращает
+// число затронутых строк.
+func (q *Queries) RequestFarmCancelAllActive(ctx context.Context, projectID int32) (int64, error) {
+	result, err := q.db.Exec(ctx, requestFarmCancelAllActive, projectID)
 	if err != nil {
 		return 0, err
 	}
@@ -592,20 +699,29 @@ func (q *Queries) SelectExistingOriginIPAddresses(ctx context.Context, arg Selec
 	return items, nil
 }
 
-const selectPendingReconJobs = `-- name: SelectPendingReconJobs :many
+const selectPendingReconJobsExcludingKind = `-- name: SelectPendingReconJobsExcludingKind :many
+
 SELECT id FROM host_farm_jobs
-WHERE status = 'pending' OR (status = 'failed' AND attempts < $1)
+WHERE (status = 'pending' OR (status = 'failed' AND attempts < $1))
+  AND kind <> $2
 ORDER BY created_at ASC
-LIMIT $2
+LIMIT $3
 `
 
-type SelectPendingReconJobsParams struct {
-	MaxAttempts int32 `json:"max_attempts"`
-	Lim         int32 `json:"lim"`
+type SelectPendingReconJobsExcludingKindParams struct {
+	MaxAttempts int32  `json:"max_attempts"`
+	Kind        string `json:"kind"`
+	Lim         int32  `json:"lim"`
 }
 
-func (q *Queries) SelectPendingReconJobs(ctx context.Context, arg SelectPendingReconJobsParams) ([]int32, error) {
-	rows, err := q.db.Query(ctx, selectPendingReconJobs, arg.MaxAttempts, arg.Lim)
+// Воркер гоняет ДВЕ независимые дорожки: «обычная» (все kind, кроме farm_run —
+// держит add-hosts/add-ips/port-scan отзывчивыми) и «фермовая» (только farm_run,
+// долгие прогоны). Отсюда — выборка/реклейм с фильтром по kind, чтобы дорожки не
+// мешали друг другу: длинный farm_run не блокирует обычные задачи, а реклейм
+// обычной дорожки НИКОГДА не трогает бегущий farm_run (и наоборот).
+// Pending обычной дорожки: всё, КРОМЕ переданного kind (= 'farm_run').
+func (q *Queries) SelectPendingReconJobsExcludingKind(ctx context.Context, arg SelectPendingReconJobsExcludingKindParams) ([]int32, error) {
+	rows, err := q.db.Query(ctx, selectPendingReconJobsExcludingKind, arg.MaxAttempts, arg.Kind, arg.Lim)
 	if err != nil {
 		return nil, err
 	}
@@ -622,6 +738,56 @@ func (q *Queries) SelectPendingReconJobs(ctx context.Context, arg SelectPendingR
 		return nil, err
 	}
 	return items, nil
+}
+
+const selectPendingReconJobsForKind = `-- name: SelectPendingReconJobsForKind :many
+SELECT id FROM host_farm_jobs
+WHERE (status = 'pending' OR (status = 'failed' AND attempts < $1))
+  AND kind = $2
+ORDER BY created_at ASC
+LIMIT $3
+`
+
+type SelectPendingReconJobsForKindParams struct {
+	MaxAttempts int32  `json:"max_attempts"`
+	Kind        string `json:"kind"`
+	Lim         int32  `json:"lim"`
+}
+
+// Pending фермовой дорожки: только переданный kind (= 'farm_run').
+func (q *Queries) SelectPendingReconJobsForKind(ctx context.Context, arg SelectPendingReconJobsForKindParams) ([]int32, error) {
+	rows, err := q.db.Query(ctx, selectPendingReconJobsForKind, arg.MaxAttempts, arg.Kind, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int32{}
+	for rows.Next() {
+		var id int32
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setFarmCancelSteps = `-- name: SetFarmCancelSteps :exec
+UPDATE host_farm_jobs SET cancel_steps = $2, updated_at = now() WHERE id = $1
+`
+
+type SetFarmCancelStepsParams struct {
+	ID          int32  `json:"id"`
+	CancelSteps []byte `json:"cancel_steps"`
+}
+
+// Записывает новый массив id шагов к отмене (маршалится в Go после дедупа).
+func (q *Queries) SetFarmCancelSteps(ctx context.Context, arg SetFarmCancelStepsParams) error {
+	_, err := q.db.Exec(ctx, setFarmCancelSteps, arg.ID, arg.CancelSteps)
+	return err
 }
 
 const setHostIPCloudflare = `-- name: SetHostIPCloudflare :exec
@@ -665,6 +831,24 @@ type SetHostStatusParams struct {
 
 func (q *Queries) SetHostStatus(ctx context.Context, arg SetHostStatusParams) error {
 	_, err := q.db.Exec(ctx, setHostStatus, arg.ID, arg.Status)
+	return err
+}
+
+const setJobCancelled = `-- name: SetJobCancelled :exec
+UPDATE host_farm_jobs
+SET status = 'cancelled', result = $2, error = NULL, last_error = NULL, finished_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+type SetJobCancelledParams struct {
+	ID     int32  `json:"id"`
+	Result []byte `json:"result"`
+}
+
+// Помечает прогон отменённым (НЕ провал): status='cancelled', частичный result,
+// finished_at=now(). Ошибочные поля чистятся — отмена не является ошибкой.
+func (q *Queries) SetJobCancelled(ctx context.Context, arg SetJobCancelledParams) error {
+	_, err := q.db.Exec(ctx, setJobCancelled, arg.ID, arg.Result)
 	return err
 }
 

@@ -31,14 +31,31 @@ func (f *fakeStore) ExistingHostnames(_ context.Context, _ int32, names []string
 func (f *fakeStore) GetJobForProject(context.Context, int32, int32, string) (JobView, error) {
 	return JobView{}, ErrNoRows
 }
-func (f *fakeStore) ClaimJobRunning(context.Context, int32) (*JobClaim, error)   { return nil, nil }
-func (f *fakeStore) UpdateJobProgress(context.Context, int32, []byte) error      { return nil }
-func (f *fakeStore) MarkJobDone(context.Context, int32, []byte) error            { return nil }
-func (f *fakeStore) MarkJobFailed(context.Context, int32, string, *string) error { return nil }
-func (f *fakeStore) SelectPendingJobIDs(context.Context, int32, int32) ([]int32, error) {
+func (f *fakeStore) ClaimJobRunning(context.Context, int32) (*JobClaim, error)        { return nil, nil }
+func (f *fakeStore) UpdateJobProgress(context.Context, int32, []byte) error           { return nil }
+func (f *fakeStore) MarkJobDone(context.Context, int32, []byte) error                 { return nil }
+func (f *fakeStore) MarkJobFailed(context.Context, int32, string, *string) error      { return nil }
+func (f *fakeStore) MarkJobCancelled(context.Context, int32, []byte) error            { return nil }
+func (f *fakeStore) RequestFarmCancel(context.Context, int32, int32) error            { return nil }
+func (f *fakeStore) RequestFarmStepCancel(context.Context, int32, int32, int32) error { return nil }
+func (f *fakeStore) RequestFarmCancelAllActive(context.Context, int32) (int64, error) {
+	return 0, nil
+}
+func (f *fakeStore) GetFarmCancelState(context.Context, int32) (bool, []int32, error) {
+	return false, nil, nil
+}
+func (f *fakeStore) SelectPendingJobIDsExcludingKind(context.Context, int32, int32, string) ([]int32, error) {
 	return nil, nil
 }
-func (f *fakeStore) ReclaimStale(context.Context, int32, int32) (int64, error) { return 0, nil }
+func (f *fakeStore) SelectPendingJobIDsForKind(context.Context, int32, int32, string) ([]int32, error) {
+	return nil, nil
+}
+func (f *fakeStore) ReclaimStaleExcludingKind(context.Context, int32, int32, string) (int64, error) {
+	return 0, nil
+}
+func (f *fakeStore) ReclaimStaleForKind(context.Context, int32, int32, string) (int64, error) {
+	return 0, nil
+}
 func (f *fakeStore) ExistingHostIPLiterals(context.Context, int32, []string) ([]string, error) {
 	return nil, nil
 }

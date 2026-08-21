@@ -19,8 +19,29 @@ type Store interface {
 	UpdateJobProgress(ctx context.Context, id int32, progress []byte) error
 	MarkJobDone(ctx context.Context, id int32, result []byte) error
 	MarkJobFailed(ctx context.Context, id int32, lastErr string, terminalErr *string) error
-	SelectPendingJobIDs(ctx context.Context, maxAttempts, limit int32) ([]int32, error)
-	ReclaimStale(ctx context.Context, staleSeconds, maxAttempts int32) (int64, error)
+	// MarkJobCancelled — прогон остановлен по запросу (status='cancelled',
+	// finished_at=now(), частичный result). Отмена ≠ провал.
+	MarkJobCancelled(ctx context.Context, id int32, result []byte) error
+	// Выборка/реклейм с фильтром по kind — воркер гоняет две независимые дорожки
+	// (обычная = все kind кроме farm_run; фермовая = только farm_run), чтобы долгий
+	// прогон фермы не блокировал add-hosts/add-ips/port-scan.
+	SelectPendingJobIDsExcludingKind(ctx context.Context, maxAttempts, limit int32, kind string) ([]int32, error)
+	SelectPendingJobIDsForKind(ctx context.Context, maxAttempts, limit int32, kind string) ([]int32, error)
+	ReclaimStaleExcludingKind(ctx context.Context, staleSeconds, maxAttempts int32, kind string) (int64, error)
+	ReclaimStaleForKind(ctx context.Context, staleSeconds, maxAttempts int32, kind string) (int64, error)
+
+	// ─── сигналы отмены прогона фермы (пишет HTTP, читает поллер воркера) ───
+	// RequestFarmCancel — отмена всего прогона (cancel_requested=true) для farm_run
+	// задачи проекта.
+	RequestFarmCancel(ctx context.Context, projectID, jobID int32) error
+	// RequestFarmStepCancel — добавляет id шага в cancel_steps (дедуп, создаёт
+	// массив при null) для farm_run задачи проекта.
+	RequestFarmStepCancel(ctx context.Context, projectID, jobID, stepID int32) error
+	// RequestFarmCancelAllActive — отмена всех активных (pending|running) farm_run
+	// задач проекта; возвращает число затронутых.
+	RequestFarmCancelAllActive(ctx context.Context, projectID int32) (int64, error)
+	// GetFarmCancelState — снимок управляющих колонок отмены (для поллера).
+	GetFarmCancelState(ctx context.Context, jobID int32) (cancelRequested bool, cancelSteps []int32, err error)
 
 	// ─── create_job: уже добавленные цели + заготовки + снятие скрытия ───
 	ExistingHostnames(ctx context.Context, projectID int32, names []string) ([]string, error)

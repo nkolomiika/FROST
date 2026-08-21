@@ -18,7 +18,7 @@ import (
 
 // Service-level DB test of the recon job lifecycle. Uses a PRIVATE IP target,
 // which netguard blocks (FARM_ALLOW_PRIVATE_TARGETS=false) — no outbound network:
-// create job (pending) -> ProcessPending -> terminal 'done' (host persisted, status unknown).
+// create job (pending) -> ProcessPendingRegular -> terminal 'done' (host persisted, status unknown).
 func TestE2EReconJobLifecycle(t *testing.T) {
 	dsn := os.Getenv("FROST_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -66,7 +66,7 @@ func TestE2EReconJobLifecycle(t *testing.T) {
 	}
 
 	// drive the worker synchronously
-	if err := svc.ProcessPending(ctx); err != nil {
+	if err := svc.ProcessPendingRegular(ctx); err != nil {
 		t.Fatalf("process pending: %v", err)
 	}
 
