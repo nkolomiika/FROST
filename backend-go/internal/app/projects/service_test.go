@@ -11,16 +11,17 @@ import (
 
 // fakeStore — in-memory реализация Store для проверки чистой логики сервиса.
 type fakeStore struct {
-	project       *Project
-	folders       map[int32]*Folder
-	folderOrder   []int32
-	projects      map[int32]*Project
-	notes         map[int32]*Note
-	memberIDs     []int32
-	usersByName   map[string]UserBrief
-	notifications []Notification
-	audits        []AuditEntry
-	updated       *ProjectUpdate
+	project         *Project
+	folders         map[int32]*Folder
+	folderOrder     []int32
+	projects        map[int32]*Project
+	notes           map[int32]*Note
+	memberIDs       []int32
+	insertedMembers [][2]int32 // (projectID, userID) переданные в InsertMember
+	usersByName     map[string]UserBrief
+	notifications   []Notification
+	audits          []AuditEntry
+	updated         *ProjectUpdate
 
 	// ── data-driven поля для расширенных тестов ──
 	listParams       *ProjectListParams // захват параметров ListProjects
@@ -204,7 +205,9 @@ func (f *fakeStore) ListProjects(_ context.Context, p ProjectListParams) ([]Proj
 	f.listParams = &p
 	return f.listResult, f.listTotal, nil
 }
-func (f *fakeStore) InsertProject(context.Context, NewProject) (*Project, error) { return nil, nil }
+func (f *fakeStore) InsertProject(_ context.Context, in NewProject) (*Project, error) {
+	return &Project{ID: 100, Name: in.Name, Status: in.Status, CreatedBy: in.CreatedBy}, nil
+}
 func (f *fakeStore) DeleteProject(_ context.Context, id int32) error {
 	f.deletedProjectID = &id
 	return nil
@@ -226,7 +229,8 @@ func (f *fakeStore) ListMembers(context.Context, int32) ([]MemberDetail, error) 
 func (f *fakeStore) GetMember(context.Context, int32, int32) (int32, bool, error) {
 	return 0, f.memberExists, nil
 }
-func (f *fakeStore) InsertMember(context.Context, int32, int32) (int32, time.Time, error) {
+func (f *fakeStore) InsertMember(_ context.Context, projectID, userID int32) (int32, time.Time, error) {
+	f.insertedMembers = append(f.insertedMembers, [2]int32{projectID, userID})
 	return f.insertedMemberID, time.Time{}, nil
 }
 func (f *fakeStore) DeleteMember(context.Context, int32, int32) error         { return nil }

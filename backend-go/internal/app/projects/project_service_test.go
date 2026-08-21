@@ -293,3 +293,23 @@ func TestAddMemberDoesNotNotifyYourself(t *testing.T) {
 		t.Fatalf("notifications = %d, want 0 (добавил себя — уведомлять некого)", len(f.notifications))
 	}
 }
+
+// Регресс/фикс: создатель проекта автоматически добавляется в участники, иначе
+// он не виден в списке участников (доступ у него есть и так, но записи нет).
+func TestCreateProjectAddsCreatorAsMember(t *testing.T) {
+	f := newFakeStore()
+	svc := NewService(f, noopCipher{}, fixedNow)
+	proj, err := svc.CreateProject(context.Background(), NewProject{Name: "Recon Q3"}, 7, "1.2.3.4")
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	found := false
+	for _, m := range f.insertedMembers {
+		if m == [2]int32{proj.ID, 7} {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("creator (actor 7) not added as member of project %d; inserted=%v", proj.ID, f.insertedMembers)
+	}
+}

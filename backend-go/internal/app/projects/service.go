@@ -171,6 +171,12 @@ func (s *Service) CreateProject(ctx context.Context, in NewProject, actorID int3
 	if err != nil {
 		return nil, err
 	}
+	// Создатель автоматически становится участником проекта: доступ у него есть и
+	// так (проверка created_by/админа), но без записи в project_members он не
+	// отображается в списке участников. Роль берётся из его users.project_role.
+	if _, _, err := s.store.InsertMember(ctx, project.ID, actorID); err != nil {
+		return nil, err
+	}
 	s.audit(ctx, AuditEntry{UserID: &actorID, Action: "CREATE", EntityType: "project", EntityID: &project.ID, IPAddress: ip})
 	// TODO(phase2): ws broadcast projects index (created)
 	return project, nil
