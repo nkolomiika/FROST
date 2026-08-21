@@ -2901,7 +2901,9 @@ export function FrostApp() {
   const aggHostTimes = (rows: ApiProjectRow[]) => rows.flatMap((r) => state.aggTimes?.[r.id]?.hosts ?? []);
   const aggOpenVulnTimes = (rows: ApiProjectRow[]) => rows.flatMap((r) => state.aggTimes?.[r.id]?.openVulns ?? []);
 
-  const navBg = (id: NavId) => (state.nav === id ? "var(--fr-accent-soft)" : "transparent");
+  // Невыбранным пунктам НЕ задаём inline-фон (undefined), иначе он перебивает
+  // CSS `.nav:hover` и подсветка при наведении не появляется.
+  const navBg = (id: NavId) => (state.nav === id ? "var(--fr-accent-soft)" : undefined);
   const navColor = (id: NavId) => (state.nav === id ? "var(--fr-accent)" : "var(--fr-text-2)");
 
   const isList = state.view === "list" && state.nav === "projects";
@@ -3765,16 +3767,17 @@ export function FrostApp() {
 
   const renderDetail = () => (
     <div className="route" style={{ padding: "0 0 36px", width: "100%" }}>
+      {/* Backdrop ПОД баром вкладок (zIndex ниже), не над ним: клик по пустому
+          месту закрывает меню Recon, но вкладки остаются наводимыми и
+          кликабельными поверх него даже при открытом списке. */}
+      {state.reconMenuOpen && <div onClick={() => setState({ reconMenuOpen: false })} style={{ position: "fixed", inset: 0, zIndex: 20 }} />}
       {/* tabs */}
-      <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "0 48px", borderBottom: "1px solid var(--fr-border-light)", background: "var(--fr-surface)", overflow: "visible" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "0 48px", borderBottom: "1px solid var(--fr-border-light)", background: "var(--fr-surface)", overflow: "visible", position: "relative", zIndex: 30 }}>
         {tabItem(t("Overview"), "layout", so, () => setSection("overview"))}
         <div style={{ position: "relative", display: "flex" }}>
           {/* Recon открывает меню, а не раздел напрямую, но выделяется как
               обычная вкладка — той же синей линией снизу, что и соседние. */}
-          {tabItem(t("Recon"), "server", sh, toggleReconMenu, undefined, <Icon name="chevron-down" size={14} sw={2.2} />)}
-          {/* Full-screen backdrop: a click anywhere outside the popup dismisses it
-              (Esc is handled by the global keydown listener). */}
-          {state.reconMenuOpen && <div onClick={() => setState({ reconMenuOpen: false })} style={{ position: "fixed", inset: 0, zIndex: 40 }} />}
+          {tabItem(t("Recon"), "server", sh, toggleReconMenu, undefined, <Icon name="chevron-down" size={14} sw={2.2} style={{ transform: state.reconMenuOpen ? "rotate(180deg)" : "none", transition: "transform .2s ease" }} />)}
           <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 8, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("RECON")}</div>
             {([
@@ -4887,10 +4890,10 @@ export function FrostApp() {
         {/* Панель фильтров: поиск по хосту и автору — слева (как в разделе
             «Эндпоинты»), пилюли статуса и критичности — справа, отодвинуты
             flex-распоркой. Счётчик уязвимостей переехал к заголовку секции. */}
-        {/* Поиски сверху, затем статус и критичность — каждый на своей строке,
-            друг под другом. Метки выровнены по ширине, пилюли переносятся на
-            узких экранах и растягиваются в одну строку на широких. */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+        {/* Поиски слева; статус и критичность — справа, друг под другом. На узких
+            экранах правый блок переносится под поиски, оставаясь выровненным по
+            правому краю. */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
             {searchBox(t("Filter by host…"), state.vulnFilterHost, (v) => setState({ vulnFilterHost: v }), 190)}
             {searchBox(t("Filter by author…"), state.vulnFilterAuthor, (v) => setState({ vulnFilterAuthor: v }), 190)}
@@ -4898,15 +4901,17 @@ export function FrostApp() {
           {/* Status / severity are multi-select: pills toggle, several can be held at
               once, and clearing the last one falls back to "All". Driven by the token
               lists so they cannot drift from the backend's vocabularies. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span className="mono" style={{ minWidth: 64, fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
-            {filterPill(t("All"), vfS.length === 0, () => setState({ vulnFilterStatuses: [] }))}
-            {VSTATUS_ORDER.map((s) => filterPill(t(VSTATUS_LABEL[s]), vfS.includes(s), () => setState((st) => ({ vulnFilterStatuses: toggleIn(st.vulnFilterStatuses, s) }))))}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span className="mono" style={{ minWidth: 64, fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("SEVERITY")}</span>
-            {filterPill(t("All"), vfSev.length === 0, () => setState({ vulnFilterSeverities: [] }))}
-            {(["critical", "high", "medium", "low", "info"] as Severity[]).map((s) => filterPill(cap(s), vfSev.includes(s), () => setState((st) => ({ vulnFilterSeverities: toggleIn(st.vulnFilterSeverities, s) }))))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", marginLeft: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
+              {filterPill(t("All"), vfS.length === 0, () => setState({ vulnFilterStatuses: [] }))}
+              {VSTATUS_ORDER.map((s) => filterPill(t(VSTATUS_LABEL[s]), vfS.includes(s), () => setState((st) => ({ vulnFilterStatuses: toggleIn(st.vulnFilterStatuses, s) }))))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("SEVERITY")}</span>
+              {filterPill(t("All"), vfSev.length === 0, () => setState({ vulnFilterSeverities: [] }))}
+              {(["critical", "high", "medium", "low", "info"] as Severity[]).map((s) => filterPill(cap(s), vfSev.includes(s), () => setState((st) => ({ vulnFilterSeverities: toggleIn(st.vulnFilterSeverities, s) }))))}
+            </div>
           </div>
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
@@ -5721,7 +5726,7 @@ export function FrostApp() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* sidebar */}
         <aside className={`sb ${state.sidebarCollapsed ? "collapsed" : ""}`} style={{ width: sideW, flex: "none", background: "var(--fr-surface)", borderRight: "1px solid var(--fr-border-light)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div className="sbhead" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 14px 18px 18px" }}>
+          <div className="sbhead" style={{ display: "flex", alignItems: "center", justifyContent: state.sidebarCollapsed ? "center" : "space-between", padding: state.sidebarCollapsed ? "20px 12px 18px 12px" : "20px 14px 18px 18px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
               <span className="lbl"><FrostWordmark size={18} spacing={3} /></span>
             </div>
