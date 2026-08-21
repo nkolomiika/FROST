@@ -68,6 +68,11 @@ func (h *ReconHandler) Register(r chi.Router) {
 		// полный прогон фермы (один клик — весь стек)
 		ar.With(pa).Post(base+"/recon/farm/run", h.startFarmRun)
 		ar.With(pa).Get(base+"/recon/farm/run/{job_id}", h.getFarmRun)
+
+		// отмена прогона фермы (весь прогон / один шаг / все активные)
+		ar.With(pa).Post(base+"/recon/farm/run/cancel-all", h.cancelAllFarmRuns)
+		ar.With(pa).Post(base+"/recon/farm/run/{job_id}/cancel", h.cancelFarmRun)
+		ar.With(pa).Post(base+"/recon/farm/run/{job_id}/steps/{step_id}/cancel", h.cancelFarmStep)
 	})
 }
 
@@ -150,6 +155,62 @@ func (h *ReconHandler) getFarmRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, farmRunResp(view))
+}
+
+// cancelFarmRun отменяет ВЕСЬ прогон (все его процессы). Только лид/админ.
+func (h *ReconHandler) cancelFarmRun(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	jobID, err := pathInt32(r, "job_id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.svc.CancelFarmRun(r.Context(), pid, jobID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// cancelFarmStep отменяет ОДИН выполняющийся шаг прогона по его id. Только лид/админ.
+func (h *ReconHandler) cancelFarmStep(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	jobID, err := pathInt32(r, "job_id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	stepID, err := pathInt32(r, "step_id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.svc.CancelFarmStep(r.Context(), pid, jobID, stepID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// cancelAllFarmRuns отменяет ВСЕ активные (pending|running) прогоны проекта.
+// Возвращает {"cancelled": <count>}. Только лид/админ.
+func (h *ReconHandler) cancelAllFarmRuns(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	n, err := h.svc.CancelAllFarmRuns(r.Context(), pid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]int64{"cancelled": n})
 }
 
 // ─────────────────────────── общие помощники ───────────────────────────

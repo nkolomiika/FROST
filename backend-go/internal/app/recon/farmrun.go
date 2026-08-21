@@ -3,14 +3,25 @@ package recon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	reconnet "github.com/nkolomiika/frost/internal/adapters/recon"
 	"golang.org/x/sync/errgroup"
 )
+
+// errFarmCancelled — сентинел: runFarm вернул его → прогон остановлен по запросу
+// пользователя (cancel_requested). RunReconJob по нему помечает задачу cancelled
+// (не failed). Отмена ≠ провал.
+var errFarmCancelled = errors.New("farm run cancelled")
+
+// farmCancelPollInterval — период опроса управляющих колонок отмены. Переменная
+// (не const) — тесты снижают её, чтобы не ждать реальные 2с.
+var farmCancelPollInterval = 2 * time.Second
 
 // Полный прогон фермы (kind='farm_run'): один клик гоняет весь стек над корневыми
 // доменами проекта. Пассивный сбор (subfinder/crt.sh) и активный брут (dnsx по
@@ -67,12 +78,13 @@ type progressTracker struct {
 	mu      sync.Mutex
 	p       RunProgress
 	steps   map[int]RunStep
+	cancels map[int]context.CancelFunc // id → отмена контекста шага (per-step cancel)
 	seq     int
 	persist func([]byte)
 }
 
 func newProgressTracker(persist func([]byte)) *progressTracker {
-	return &progressTracker{steps: map[int]RunStep{}, persist: persist, p: RunProgress{Steps: []RunStep{}, Errors: []string{}}}
+	return &progressTracker{steps: map[int]RunStep{}, cancels: map[int]context.CancelFunc{}, persist: persist, p: RunProgress{Steps: []RunStep{}, Errors: []string{}}}
 }
 
 // snapshotLocked пересобирает Steps и persist'ит копию (вызывать под mu).
@@ -99,14 +111,19 @@ func (t *progressTracker) update(fn func(*RunProgress)) {
 	t.snapshotLocked()
 }
 
-// addStep регистрирует активный шаг (инструмент+аргументы+цель) и возвращает id
-// для последующего removeStep.
-func (t *progressTracker) addStep(step RunStep) int {
+// addStep регистрирует активный шаг (инструмент+аргументы+цель), проставляет ему
+// стабильный id (= seq) и запоминает cancel его контекста для per-step отмены.
+// Возвращает id (тот же, что уходит во фронт в RunStep.ID) для removeStep/отмены.
+func (t *progressTracker) addStep(step RunStep, cancel context.CancelFunc) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.seq++
 	id := t.seq
+	step.ID = id
 	t.steps[id] = step
+	if cancel != nil {
+		t.cancels[id] = cancel
+	}
 	t.snapshotLocked()
 	return id
 }
@@ -115,33 +132,82 @@ func (t *progressTracker) removeStep(id int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.steps, id)
+	delete(t.cancels, id)
 	t.snapshotLocked()
+}
+
+// cancelStep рвёт контекст шага по id (если он ещё в полёте). Идемпотентно:
+// снятый/неизвестный id — no-op.
+func (t *progressTracker) cancelStep(id int) {
+	t.mu.Lock()
+	fn := t.cancels[id]
+	t.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
 }
 
 // ─────────────────────────── оркестрация ───────────────────────────
 
 // runFarm — прогон задачи kind='farm_run'. claim.Raw хранит JSON FarmConfig, с
 // которым запущен прогон; claim.ID нужен для обновления прогресса.
-func (s *Service) runFarm(ctx context.Context, claim *JobClaim) (*FarmRunResult, error) {
+//
+// Отмена. API и recon-worker — разные процессы, общаются через Postgres, поэтому
+// отмена сигналится в БД: cancel_requested (весь прогон) / cancel_steps (один шаг).
+// Внутри крутится поллер (~2с), который читает эти колонки и рвёт нужные контексты:
+// корневой (весь прогон, → errFarmCancelled) или контекст конкретного шага
+// (per-step, → мягкая пометка, прогон продолжается).
+func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunResult, error) {
 	cfg := parseRunConfig(claim.Raw)
 	cfg.Sanitize()
 	rs := s.runSettings(cfg)
 	runSvc := *s // производный сервис с настройками прогона (store/log общие)
 	runSvc.settings = rs
 
+	// Корневой контекст прогона — отменяемый: cancel() рвёт все шаги разом.
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	result := newFarmRunResult()
 	result.Mode = cfg.Mode
 	result.WordlistSize = cfg.WordlistSize
 
+	// Персист прогресса идёт через parentCtx: даже после cancel() корневого ctx
+	// финальный снимок "cancelled" должен записаться.
 	prog := newProgressTracker(func(blob []byte) {
-		if err := s.store.UpdateJobProgress(ctx, claim.ID, blob); err != nil {
+		if err := s.store.UpdateJobProgress(parentCtx, claim.ID, blob); err != nil {
 			s.log.Warn("farm run progress persist", "id", claim.ID, "err", err)
 		}
 	})
+
+	// ── поллер отмены: читает cancel_requested/cancel_steps раз в ~2с ──
+	var wasCancelled atomic.Bool
+	pollDone := make(chan struct{})
+	var pollWG sync.WaitGroup
+	pollWG.Add(1)
+	go s.cancelPoller(ctx, claim.ID, prog, &wasCancelled, cancel, pollDone, &pollWG)
+	defer func() { close(pollDone); pollWG.Wait() }()
+
+	// finalizeCancelled — общий выход по отмене всего прогона: частичный result +
+	// финальный снимок stage="cancelled", и сентинел errFarmCancelled наверх.
+	finalizeCancelled := func() (*FarmRunResult, error) {
+		result.Errors = append(result.Errors, "Прогон отменён пользователем")
+		prog.update(func(p *RunProgress) {
+			p.Stage = "cancelled"
+			p.Done = true
+			p.PortsFound = result.PortsFound
+			p.Errors = result.Errors
+		})
+		return result, errFarmCancelled
+	}
+
 	prog.update(func(p *RunProgress) { p.Stage = "subdomains"; p.Percent = pctSubdomains })
 
 	roots, err := s.subsRoots(ctx, claim.ProjectID, "")
 	if err != nil {
+		if wasCancelled.Load() {
+			return finalizeCancelled()
+		}
 		return nil, err
 	}
 	if len(roots) == 0 {
@@ -157,6 +223,9 @@ func (s *Service) runFarm(ctx context.Context, claim *JobClaim) (*FarmRunResult,
 	result.SubdomainsFound = len(capped)
 	result.SourcesUsed = sortedSet(mapFromSlice(sources))
 	result.Errors = append(result.Errors, subErrs...)
+	if wasCancelled.Load() {
+		return finalizeCancelled()
+	}
 	prog.update(func(p *RunProgress) { p.SubsFound = len(capped); p.Stage = "resolve"; p.Percent = pctResolve })
 
 	// ── стадия 2: резолв + liveness (dnsx resolve → httpx-pd) с персистом хостов ──
@@ -167,18 +236,35 @@ func (s *Service) runFarm(ctx context.Context, claim *JobClaim) (*FarmRunResult,
 		newSubs = newSubs[:rs.FarmMaxTargets]
 	}
 	if len(newSubs) > 0 {
-		resolveID := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx -resp -silent (resolve)", Target: "новые поддомены", StartedAt: time.Now()})
-		httpxID := prog.addStep(RunStep{Tool: "httpx-pd", Args: "httpx-pd -json -td -cdn (liveness)", Target: "resolved", StartedAt: time.Now()})
-		hostRes, herr := runSvc.probeHosts(ctx, claim.ProjectID, claim.CreatedBy, strings.Join(newSubs, "\n"), nil, true)
+		// dnsx-резолв и httpx-liveness — единый вызов probeHosts, но во фронте это
+		// два видимых шага; оба вешаем на один stepCtx, чтобы cancel любого из них
+		// оборвал этот вызов.
+		stepCtx, stepCancel := context.WithCancel(ctx)
+		resolveID := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx -resp -silent (resolve)", Target: "новые поддомены", StartedAt: time.Now()}, stepCancel)
+		httpxID := prog.addStep(RunStep{Tool: "httpx-pd", Args: "httpx-pd -json -td -cdn (liveness)", Target: "resolved", StartedAt: time.Now()}, stepCancel)
+		hostRes, herr := runSvc.probeHosts(stepCtx, claim.ProjectID, claim.CreatedBy, strings.Join(newSubs, "\n"), nil, true)
 		prog.removeStep(resolveID)
 		prog.removeStep(httpxID)
+		stepCancel()
 		if herr != nil {
-			return nil, herr
+			if wasCancelled.Load() {
+				return finalizeCancelled()
+			}
+			if stepCtx.Err() != nil {
+				// per-step cancel: шаг оборван, но прогон НЕ валим — мягкая пометка.
+				result.Errors = append(result.Errors, "процесс отменён: dnsx/httpx-pd новые поддомены")
+			} else {
+				return nil, herr
+			}
+		} else {
+			result.HostsCreated = hostRes.HostsCreated
+			result.HostsOnline = hostRes.HostsOnline
+			result.Errors = append(result.Errors, hostRes.Errors...)
+			prog.update(func(p *RunProgress) { p.HostsFound = hostRes.HostsCreated + hostRes.HostsUpdated })
 		}
-		result.HostsCreated = hostRes.HostsCreated
-		result.HostsOnline = hostRes.HostsOnline
-		result.Errors = append(result.Errors, hostRes.Errors...)
-		prog.update(func(p *RunProgress) { p.HostsFound = hostRes.HostsCreated + hostRes.HostsUpdated })
+	}
+	if wasCancelled.Load() {
+		return finalizeCancelled()
 	}
 	prog.update(func(p *RunProgress) { p.Stage = "ports"; p.Percent = pctPorts })
 
@@ -198,16 +284,29 @@ func (s *Service) runFarm(ctx context.Context, claim *JobClaim) (*FarmRunResult,
 		if rs.PortscanTopPorts == 0 {
 			nmapArgs = "nmap -Pn --open -p-"
 		}
-		portID := prog.addStep(RunStep{Tool: "nmap", Args: nmapArgs, Target: "цели проекта", StartedAt: time.Now()})
-		portRes, perr := runSvc.probePorts(ctx, claim.ProjectID, claim.CreatedBy, strings.Join(scanKeys, "\n"), nil)
+		stepCtx, stepCancel := context.WithCancel(ctx)
+		portID := prog.addStep(RunStep{Tool: "nmap", Args: nmapArgs, Target: "цели проекта", StartedAt: time.Now()}, stepCancel)
+		portRes, perr := runSvc.probePorts(stepCtx, claim.ProjectID, claim.CreatedBy, strings.Join(scanKeys, "\n"), nil)
 		prog.removeStep(portID)
+		stepCancel()
 		if perr != nil {
-			// Скан портов не критичен для прогона: фиксируем как ошибку, но завершаем.
-			result.Errors = append(result.Errors, reconnet.ErrLabel(perr))
+			switch {
+			case wasCancelled.Load():
+				return finalizeCancelled()
+			case stepCtx.Err() != nil:
+				// per-step cancel скана портов — мягкая пометка, прогон завершаем.
+				result.Errors = append(result.Errors, "процесс отменён: nmap цели проекта")
+			default:
+				// Скан портов не критичен для прогона: фиксируем ошибку, но завершаем.
+				result.Errors = append(result.Errors, reconnet.ErrLabel(perr))
+			}
 		} else {
 			result.PortsFound = portRes.PortsFound
 			result.Errors = append(result.Errors, portRes.Errors...)
 		}
+	}
+	if wasCancelled.Load() {
+		return finalizeCancelled()
 	}
 
 	prog.update(func(p *RunProgress) {
@@ -218,6 +317,43 @@ func (s *Service) runFarm(ctx context.Context, claim *JobClaim) (*FarmRunResult,
 		p.Errors = result.Errors
 	})
 	return result, nil
+}
+
+// cancelPoller опрашивает БД (~раз в 2с) на предмет сигналов отмены прогона и
+// применяет их к живым контекстам: cancel_requested → рвём корневой ctx всего
+// прогона (wasCancelled=true), каждый новый id из cancel_steps → рвём контекст
+// того шага (однократно, actioned-множество против повторов). Останавливается по
+// ctx (корневой отменён) либо по pollDone (runFarm завершился).
+func (s *Service) cancelPoller(ctx context.Context, jobID int32, prog *progressTracker, wasCancelled *atomic.Bool, cancel context.CancelFunc, pollDone <-chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+	ticker := time.NewTicker(farmCancelPollInterval)
+	defer ticker.Stop()
+	actioned := map[int32]bool{}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-pollDone:
+			return
+		case <-ticker.C:
+			cr, steps, err := s.store.GetFarmCancelState(ctx, jobID)
+			if err != nil {
+				continue
+			}
+			if cr {
+				wasCancelled.Store(true)
+				cancel()
+				return
+			}
+			for _, sid := range steps {
+				if actioned[sid] {
+					continue
+				}
+				actioned[sid] = true
+				prog.cancelStep(int(sid))
+			}
+		}
+	}
 }
 
 // runSubdomains гоняет пассивный сбор и активный брут по корням ОДНОВРЕМЕННО в
@@ -258,9 +394,12 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 		root := root
 		if passive {
 			eg.Go(func() error {
-				id := prog.addStep(RunStep{Tool: "subfinder", Args: "subfinder -d " + root + " -silent", Target: root, StartedAt: time.Now()})
+				// Свой контекст шага: per-step cancel рвёт только его, не весь прогон.
+				stepCtx, stepCancel := context.WithCancel(ctx)
+				defer stepCancel()
+				id := prog.addStep(RunStep{Tool: "subfinder", Args: "subfinder -d " + root + " -silent", Target: root, StartedAt: time.Now()}, stepCancel)
 				defer prog.removeStep(id)
-				got, used, e := collector(ctx, []string{root})
+				got, used, e := collector(stepCtx, []string{root})
 				mu.Lock()
 				for k := range got {
 					subs[k] = true
@@ -269,15 +408,21 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 					usedSet[u] = true
 				}
 				errs = append(errs, e...)
+				// per-step cancel (шаг оборван, но корневой ctx жив) → мягкая пометка.
+				if stepCtx.Err() != nil && ctx.Err() == nil {
+					errs = append(errs, "процесс отменён: subfinder "+root)
+				}
 				mu.Unlock()
 				return nil
 			})
 		}
 		if active {
 			eg.Go(func() error {
-				id := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx " + strings.Join(reconnet.DNSXBruteArgs(root, brute), " "), Target: root, StartedAt: time.Now()})
+				stepCtx, stepCancel := context.WithCancel(ctx)
+				defer stepCancel()
+				id := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx " + strings.Join(reconnet.DNSXBruteArgs(root, brute), " "), Target: root, StartedAt: time.Now()}, stepCancel)
 				defer prog.removeStep(id)
-				got, e := reconnet.DNSXBrute(ctx, root, brute, rs)
+				got, e := reconnet.DNSXBrute(stepCtx, root, brute, rs)
 				mu.Lock()
 				for _, sub := range got {
 					subs[sub] = true
@@ -287,6 +432,9 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 				}
 				if e != "" {
 					errs = append(errs, e)
+				}
+				if stepCtx.Err() != nil && ctx.Err() == nil {
+					errs = append(errs, "процесс отменён: dnsx "+root)
 				}
 				mu.Unlock()
 				return nil

@@ -92,10 +92,11 @@ type Config struct {
 	FarmHostResolveIPsEnabled    bool    `env:"FARM_HOST_RESOLVE_IPS_ENABLED" envDefault:"true"`
 	FarmReverseDNSTimeoutSeconds float64 `env:"FARM_REVERSE_DNS_TIMEOUT_SECONDS" envDefault:"3.0"`
 
-	ReconWorkerEnabled   bool `env:"RECON_WORKER_ENABLED" envDefault:"true"`
-	ReconMaxAttempts     int  `env:"RECON_MAX_ATTEMPTS" envDefault:"3"`
-	ReconStaleJobSeconds int  `env:"RECON_STALE_JOB_SECONDS" envDefault:"1800"`
-	ReconResultMaxItems  int  `env:"RECON_RESULT_MAX_ITEMS" envDefault:"200"`
+	ReconWorkerEnabled       bool `env:"RECON_WORKER_ENABLED" envDefault:"true"`
+	ReconMaxAttempts         int  `env:"RECON_MAX_ATTEMPTS" envDefault:"3"`
+	ReconStaleJobSeconds     int  `env:"RECON_STALE_JOB_SECONDS" envDefault:"1800"`
+	ReconFarmStaleJobSeconds int  `env:"RECON_FARM_STALE_JOB_SECONDS" envDefault:"7200"`
+	ReconResultMaxItems      int  `env:"RECON_RESULT_MAX_ITEMS" envDefault:"200"`
 
 	// --- Ферма JS ---
 	JSFarmMaxFilesPerHost        int     `env:"JS_FARM_MAX_FILES_PER_HOST" envDefault:"50"`

@@ -60,9 +60,10 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 // ConfigFromConfig собирает оркестрационный тюнинг из config.Config.
 func ConfigFromConfig(c *config.Config) Config {
 	return Config{
-		WorkerEnabled:  c.ReconWorkerEnabled,
-		MaxAttempts:    int32(c.ReconMaxAttempts),
-		StaleSeconds:   int32(c.ReconStaleJobSeconds),
-		ResultMaxItems: c.ReconResultMaxItems,
+		WorkerEnabled:    c.ReconWorkerEnabled,
+		MaxAttempts:      int32(c.ReconMaxAttempts),
+		StaleSeconds:     int32(c.ReconStaleJobSeconds),
+		FarmStaleSeconds: int32(c.ReconFarmStaleJobSeconds),
+		ResultMaxItems:   c.ReconResultMaxItems,
 	}
 }

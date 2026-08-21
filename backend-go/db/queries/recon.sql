@@ -45,15 +45,79 @@ UPDATE host_farm_jobs SET status = 'queued', published_at = now(), last_error = 
 -- продвижения стадий. Тоже сбрасывает updated_at, чтобы reclaim не забрал живую задачу.
 UPDATE host_farm_jobs SET progress = $2, updated_at = now() WHERE id = $1;
 
--- name: SelectPendingReconJobs :many
+-- name: SetJobCancelled :exec
+-- Помечает прогон отменённым (НЕ провал): status='cancelled', частичный result,
+-- finished_at=now(). Ошибочные поля чистятся — отмена не является ошибкой.
+UPDATE host_farm_jobs
+SET status = 'cancelled', result = $2, error = NULL, last_error = NULL, finished_at = now(), updated_at = now()
+WHERE id = $1;
+
+-- name: RequestFarmCancel :exec
+-- Сигнал отмены ВСЕГО прогона: cancel_requested=true. Только для farm_run задачи
+-- этого проекта (иначе строка не совпадёт и апдейт — no-op).
+UPDATE host_farm_jobs
+SET cancel_requested = true, updated_at = now()
+WHERE id = sqlc.arg('id') AND project_id = sqlc.arg('project_id') AND kind = 'farm_run';
+
+-- name: RequestFarmCancelAllActive :execrows
+-- Сигнал отмены ВСЕХ активных (pending|running) farm_run задач проекта. Возвращает
+-- число затронутых строк.
+UPDATE host_farm_jobs
+SET cancel_requested = true, updated_at = now()
+WHERE project_id = sqlc.arg('project_id') AND kind = 'farm_run' AND status IN ('pending', 'running');
+
+-- name: GetFarmCancelStepsForUpdate :one
+-- Читает текущий cancel_steps под блокировкой строки (read-modify-write отмены
+-- одного шага). Фильтр по проекту и kind — чужую задачу не трогаем.
+SELECT cancel_steps FROM host_farm_jobs
+WHERE id = sqlc.arg('id') AND project_id = sqlc.arg('project_id') AND kind = 'farm_run'
+FOR UPDATE;
+
+-- name: SetFarmCancelSteps :exec
+-- Записывает новый массив id шагов к отмене (маршалится в Go после дедупа).
+UPDATE host_farm_jobs SET cancel_steps = $2, updated_at = now() WHERE id = $1;
+
+-- name: GetFarmCancelState :one
+-- Снимок управляющих колонок отмены для поллера воркера.
+SELECT cancel_requested, cancel_steps FROM host_farm_jobs WHERE id = $1;
+
+-- Воркер гоняет ДВЕ независимые дорожки: «обычная» (все kind, кроме farm_run —
+-- держит add-hosts/add-ips/port-scan отзывчивыми) и «фермовая» (только farm_run,
+-- долгие прогоны). Отсюда — выборка/реклейм с фильтром по kind, чтобы дорожки не
+-- мешали друг другу: длинный farm_run не блокирует обычные задачи, а реклейм
+-- обычной дорожки НИКОГДА не трогает бегущий farm_run (и наоборот).
+
+-- name: SelectPendingReconJobsExcludingKind :many
+-- Pending обычной дорожки: всё, КРОМЕ переданного kind (= 'farm_run').
 SELECT id FROM host_farm_jobs
-WHERE status = 'pending' OR (status = 'failed' AND attempts < sqlc.arg('max_attempts'))
+WHERE (status = 'pending' OR (status = 'failed' AND attempts < sqlc.arg('max_attempts')))
+  AND kind <> sqlc.arg('kind')
 ORDER BY created_at ASC
 LIMIT sqlc.arg('lim');
 
--- name: ReclaimStaleReconJobs :execrows
+-- name: SelectPendingReconJobsForKind :many
+-- Pending фермовой дорожки: только переданный kind (= 'farm_run').
+SELECT id FROM host_farm_jobs
+WHERE (status = 'pending' OR (status = 'failed' AND attempts < sqlc.arg('max_attempts')))
+  AND kind = sqlc.arg('kind')
+ORDER BY created_at ASC
+LIMIT sqlc.arg('lim');
+
+-- name: ReclaimStaleReconJobsExcludingKind :execrows
+-- Реклейм обычной дорожки: НЕ трогает farm_run (его прогон легитимно длинный,
+-- иначе его переигрывали бы как «застрявший» → двойной прогон).
 UPDATE host_farm_jobs SET status = 'pending', updated_at = now()
 WHERE status IN ('queued', 'running')
+  AND kind <> sqlc.arg('kind')
+  AND updated_at < now() - (sqlc.arg('stale_seconds')::int * interval '1 second')
+  AND attempts < sqlc.arg('max_attempts');
+
+-- name: ReclaimStaleReconJobsForKind :execrows
+-- Реклейм фермовой дорожки: только farm_run и с БОЛЬШИМ окном stale_seconds
+-- (прогон идёт минутами), чтобы живой прогон не считался застрявшим.
+UPDATE host_farm_jobs SET status = 'pending', updated_at = now()
+WHERE status IN ('queued', 'running')
+  AND kind = sqlc.arg('kind')
   AND updated_at < now() - (sqlc.arg('stale_seconds')::int * interval '1 second')
   AND attempts < sqlc.arg('max_attempts');
 

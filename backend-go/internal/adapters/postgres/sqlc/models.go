@@ -682,23 +682,25 @@ type Host struct {
 }
 
 type HostFarmJob struct {
-	ID             int32              `json:"id"`
-	ProjectID      int32              `json:"project_id"`
-	CreatedBy      int32              `json:"created_by"`
-	Kind           string             `json:"kind"`
-	Status         string             `json:"status"`
-	TargetsTotal   pgtype.Int4        `json:"targets_total"`
-	Result         []byte             `json:"result"`
-	Error          pgtype.Text        `json:"error"`
-	Raw            pgtype.Text        `json:"raw"`
-	Attempts       int32              `json:"attempts"`
-	PublishedAt    pgtype.Timestamptz `json:"published_at"`
-	LastError      pgtype.Text        `json:"last_error"`
-	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
-	SkippedTargets []byte             `json:"skipped_targets"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	Progress       []byte             `json:"progress"`
+	ID              int32              `json:"id"`
+	ProjectID       int32              `json:"project_id"`
+	CreatedBy       int32              `json:"created_by"`
+	Kind            string             `json:"kind"`
+	Status          string             `json:"status"`
+	TargetsTotal    pgtype.Int4        `json:"targets_total"`
+	Result          []byte             `json:"result"`
+	Error           pgtype.Text        `json:"error"`
+	Raw             pgtype.Text        `json:"raw"`
+	Attempts        int32              `json:"attempts"`
+	PublishedAt     pgtype.Timestamptz `json:"published_at"`
+	LastError       pgtype.Text        `json:"last_error"`
+	FinishedAt      pgtype.Timestamptz `json:"finished_at"`
+	SkippedTargets  []byte             `json:"skipped_targets"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Progress        []byte             `json:"progress"`
+	CancelRequested bool               `json:"cancel_requested"`
+	CancelSteps     []byte             `json:"cancel_steps"`
 }
 
 type HostIpAddress struct {

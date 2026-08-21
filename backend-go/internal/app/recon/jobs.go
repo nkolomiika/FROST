@@ -3,6 +3,7 @@ package recon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	reconnet "github.com/nkolomiika/frost/internal/adapters/recon"
 	"github.com/nkolomiika/frost/internal/apperr"
@@ -64,6 +65,14 @@ func (s *Service) RunReconJob(ctx context.Context, id int32) error {
 		return s.store.MarkJobFailed(ctx, id, msg, &msg)
 	}
 
+	// Отмена прогона фермы (cancel_requested) — это НЕ провал: фиксируем частичный
+	// result и статус 'cancelled', не наращивая последующие попытки/ретраи.
+	if errors.Is(perr, errFarmCancelled) {
+		capped := capResult(mustJSON(result), s.cfg.ResultMaxItems)
+		s.log.Info("recon farm run cancelled", "id", id)
+		return s.store.MarkJobCancelled(ctx, id, capped)
+	}
+
 	if perr != nil {
 		msg := truncate2000(perr.Error())
 		var terminal *string
@@ -78,13 +87,23 @@ func (s *Service) RunReconJob(ctx context.Context, id int32) error {
 	return s.store.MarkJobDone(ctx, id, capped)
 }
 
-// ProcessPending — тик воркера (порт relay+consumer через DB-поллинг, как mailer).
-// Реклейм застрявших ДО выборки pending (переигранные попадут в ту же выборку).
-func (s *Service) ProcessPending(ctx context.Context) error {
-	if _, err := s.store.ReclaimStale(ctx, s.cfg.StaleSeconds, s.cfg.MaxAttempts); err != nil {
-		s.log.Warn("reclaim stale recon jobs", "err", err)
+// Воркер разнесён на ДВЕ независимые дорожки, чтобы долгий полный прогон фермы
+// (kind='farm_run', минуты) не держал обычные задачи (add-hosts/add-ips/port-scan),
+// от которых зависит основное приложение:
+//   - ProcessPendingRegular — все kind, КРОМЕ farm_run;
+//   - ProcessPendingFarm    — только farm_run.
+// Каждая крутится своим тикером в cmd/recon-worker. Реклейм тоже пофильтрован по
+// kind: обычная дорожка НИКОГДА не переигрывает бегущий farm_run (иначе долгий
+// прогон посчитался бы застрявшим → двойной прогон), а фермовая использует БОЛЬШОЕ
+// окно stale, ведь прогон легитимно длинный.
+
+// ProcessPendingRegular — тик обычной дорожки: реклейм застрявших (кроме farm_run)
+// ДО выборки pending, затем прогон каждой обычной задачи.
+func (s *Service) ProcessPendingRegular(ctx context.Context) error {
+	if _, err := s.store.ReclaimStaleExcludingKind(ctx, s.cfg.StaleSeconds, s.cfg.MaxAttempts, KindFarmRun); err != nil {
+		s.log.Warn("reclaim stale recon jobs (regular)", "err", err)
 	}
-	ids, err := s.store.SelectPendingJobIDs(ctx, s.cfg.MaxAttempts, 50)
+	ids, err := s.store.SelectPendingJobIDsExcludingKind(ctx, s.cfg.MaxAttempts, 50, KindFarmRun)
 	if err != nil {
 		return err
 	}
@@ -94,6 +113,33 @@ func (s *Service) ProcessPending(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// ProcessPendingFarm — тик фермовой дорожки: реклейм застрявших farm_run с большим
+// окном stale (farmStaleSeconds), затем прогон каждого pending farm_run.
+func (s *Service) ProcessPendingFarm(ctx context.Context) error {
+	if _, err := s.store.ReclaimStaleForKind(ctx, s.farmStaleSeconds(), s.cfg.MaxAttempts, KindFarmRun); err != nil {
+		s.log.Warn("reclaim stale recon jobs (farm)", "err", err)
+	}
+	ids, err := s.store.SelectPendingJobIDsForKind(ctx, s.cfg.MaxAttempts, 50, KindFarmRun)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := s.RunReconJob(ctx, id); err != nil {
+			s.log.Warn("recon farm job run", "id", id, "err", err)
+		}
+	}
+	return nil
+}
+
+// farmStaleSeconds — окно реклейма для farm_run. Берём FarmStaleSeconds (по умолчанию
+// сильно больше обычного), с фолбэком на обычное StaleSeconds, если не задано.
+func (s *Service) farmStaleSeconds() int32 {
+	if s.cfg.FarmStaleSeconds > 0 {
+		return s.cfg.FarmStaleSeconds
+	}
+	return s.cfg.StaleSeconds
 }
 
 // ListJsFiles — JS-файлы проекта с находками (порт assets.list_js_files).

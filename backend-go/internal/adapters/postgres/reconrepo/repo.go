@@ -161,12 +161,75 @@ func (r *Repo) MarkJobFailed(ctx context.Context, id int32, lastErr string, term
 	})
 }
 
-func (r *Repo) SelectPendingJobIDs(ctx context.Context, maxAttempts, limit int32) ([]int32, error) {
-	return r.q.SelectPendingReconJobs(ctx, sqlc.SelectPendingReconJobsParams{MaxAttempts: maxAttempts, Lim: limit})
+func (r *Repo) MarkJobCancelled(ctx context.Context, id int32, result []byte) error {
+	return r.q.SetJobCancelled(ctx, sqlc.SetJobCancelledParams{ID: id, Result: result})
 }
 
-func (r *Repo) ReclaimStale(ctx context.Context, staleSeconds, maxAttempts int32) (int64, error) {
-	return r.q.ReclaimStaleReconJobs(ctx, sqlc.ReclaimStaleReconJobsParams{StaleSeconds: staleSeconds, MaxAttempts: maxAttempts})
+// ─────────────────────────── сигналы отмены прогона ───────────────────────────
+
+func (r *Repo) RequestFarmCancel(ctx context.Context, projectID, jobID int32) error {
+	return r.q.RequestFarmCancel(ctx, sqlc.RequestFarmCancelParams{ID: jobID, ProjectID: projectID})
+}
+
+// RequestFarmStepCancel — read-modify-write cancel_steps под блокировкой строки:
+// читаем текущий массив (FOR UPDATE), добавляем stepID с дедупом, пишем обратно.
+func (r *Repo) RequestFarmStepCancel(ctx context.Context, projectID, jobID, stepID int32) error {
+	return r.tx(ctx, func(q *sqlc.Queries) error {
+		raw, err := q.GetFarmCancelStepsForUpdate(ctx, sqlc.GetFarmCancelStepsForUpdateParams{ID: jobID, ProjectID: projectID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return recon.ErrNoRows // не farm_run задача этого проекта
+		}
+		if err != nil {
+			return err
+		}
+		var ids []int32
+		if len(raw) > 0 {
+			_ = json.Unmarshal(raw, &ids)
+		}
+		for _, id := range ids {
+			if id == stepID {
+				return nil // уже помечен — no-op
+			}
+		}
+		ids = append(ids, stepID)
+		blob, err := json.Marshal(ids)
+		if err != nil {
+			return err
+		}
+		return q.SetFarmCancelSteps(ctx, sqlc.SetFarmCancelStepsParams{ID: jobID, CancelSteps: blob})
+	})
+}
+
+func (r *Repo) RequestFarmCancelAllActive(ctx context.Context, projectID int32) (int64, error) {
+	return r.q.RequestFarmCancelAllActive(ctx, projectID)
+}
+
+func (r *Repo) GetFarmCancelState(ctx context.Context, jobID int32) (bool, []int32, error) {
+	row, err := r.q.GetFarmCancelState(ctx, jobID)
+	if err != nil {
+		return false, nil, err
+	}
+	var steps []int32
+	if len(row.CancelSteps) > 0 {
+		_ = json.Unmarshal(row.CancelSteps, &steps)
+	}
+	return row.CancelRequested, steps, nil
+}
+
+func (r *Repo) SelectPendingJobIDsExcludingKind(ctx context.Context, maxAttempts, limit int32, kind string) ([]int32, error) {
+	return r.q.SelectPendingReconJobsExcludingKind(ctx, sqlc.SelectPendingReconJobsExcludingKindParams{MaxAttempts: maxAttempts, Lim: limit, Kind: kind})
+}
+
+func (r *Repo) SelectPendingJobIDsForKind(ctx context.Context, maxAttempts, limit int32, kind string) ([]int32, error) {
+	return r.q.SelectPendingReconJobsForKind(ctx, sqlc.SelectPendingReconJobsForKindParams{MaxAttempts: maxAttempts, Lim: limit, Kind: kind})
+}
+
+func (r *Repo) ReclaimStaleExcludingKind(ctx context.Context, staleSeconds, maxAttempts int32, kind string) (int64, error) {
+	return r.q.ReclaimStaleReconJobsExcludingKind(ctx, sqlc.ReclaimStaleReconJobsExcludingKindParams{StaleSeconds: staleSeconds, MaxAttempts: maxAttempts, Kind: kind})
+}
+
+func (r *Repo) ReclaimStaleForKind(ctx context.Context, staleSeconds, maxAttempts int32, kind string) (int64, error) {
+	return r.q.ReclaimStaleReconJobsForKind(ctx, sqlc.ReclaimStaleReconJobsForKindParams{StaleSeconds: staleSeconds, MaxAttempts: maxAttempts, Kind: kind})
 }
 
 // ─────────────────────────── create_job helpers ───────────────────────────
