@@ -38,16 +38,25 @@ COPY --from=subfinder /usr/local/bin/subfinder /usr/local/bin/subfinder
 COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd
 # Тир-словари поддоменов (n0kovo_subdomains) для активного брута dnsx в полном
 # прогоне фермы. Три тира → small|medium|large (см. WordlistPath в Go). Каталог
-# переопределяется env RECON_WORDLIST_DIR (дефолт — этот). Скачивание
-# устойчивое: -fSL, при отсутствии файла стадия брута деградирует, не падает.
-RUN apk add --no-cache --virtual .wl-fetch wget \
-    && mkdir -p /usr/local/share/frost-wordlists \
-    && wget -qO /usr/local/share/frost-wordlists/n0kovo_subdomains_small.txt \
-        https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_small.txt \
-    && wget -qO /usr/local/share/frost-wordlists/n0kovo_subdomains_medium.txt \
-        https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_medium.txt \
-    && wget -qO /usr/local/share/frost-wordlists/n0kovo_subdomains_huge.txt \
-        https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_huge.txt \
-    && apk del .wl-fetch
+# переопределяется env RECON_WORDLIST_DIR (дефолт — этот).
+#
+# Скачивание НЕ фатально для сборки: сеть buildkit на сервере флапает (из-за этого
+# инструменты берём COPY-ом из образов). Каждый тир тянем с ретраями; при провале
+# удаляем частичный файл и идём дальше — Go-стадия брута деградирует молча
+# (WordlistExists → skip). `apk del` в конце всегда, образ остаётся валидным.
+RUN apk add --no-cache --virtual .wl-fetch wget; \
+    mkdir -p /usr/local/share/frost-wordlists; \
+    for tier in small medium huge; do \
+      f="/usr/local/share/frost-wordlists/n0kovo_subdomains_${tier}.txt"; \
+      if wget -q --tries=3 --timeout=45 -O "$f" \
+        "https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_${tier}.txt" \
+        && [ -s "$f" ]; then \
+        echo "wordlist ${tier}: ok ($(wc -c < "$f") bytes)"; \
+      else \
+        echo "WARN: wordlist ${tier} download failed — active brute will self-skip this tier"; \
+        rm -f "$f"; \
+      fi; \
+    done; \
+    apk del .wl-fetch
 USER app
 ENTRYPOINT ["/usr/local/bin/app"]

@@ -46,12 +46,13 @@ func WordlistPath(size string) string {
 	return filepath.Join(WordlistDir(), wordlistFileForSize(size))
 }
 
-// WordlistExists — файл тира реально присутствует и читаем (не каталог). Активный
-// брут при отсутствии словаря должен деградировать молча, а не падать.
+// WordlistExists — файл тира реально присутствует, читаем (не каталог) и НЕ пуст.
+// Проверка размера важна: частичная/оборванная загрузка в образе может оставить
+// 0-байтный файл — брут по нему бессмысленен, лучше молча деградировать.
 func WordlistExists(path string) bool {
 	if path == "" {
 		return false
 	}
 	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
+	return err == nil && !info.IsDir() && info.Size() > 0
 }

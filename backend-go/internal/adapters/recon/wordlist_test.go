@@ -52,6 +52,13 @@ func TestWordlistExists(t *testing.T) {
 	if !WordlistExists(f) {
 		t.Error("written file should exist")
 	}
+	empty := filepath.Join(dir, "empty.txt")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if WordlistExists(empty) {
+		t.Error("0-byte file (partial download) should not count as a wordlist")
+	}
 }
 
 func TestDNSXBruteArgs(t *testing.T) {
