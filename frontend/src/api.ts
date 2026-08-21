@@ -15,6 +15,7 @@ import type {
   IpFarmJob,
   JsFarmJob,
   JsFile,
+  ReconFarmConfig,
   ImportResult,
   OpenApiImportResult,
   Invitation,
@@ -731,6 +732,20 @@ export async function downloadJsArchive(projectId: number, hostId?: number): Pro
     responseType: "blob",
   });
   return data as Blob;
+}
+
+// ---- recon farm config: пер-проектная конфигурация recon-стека ----
+
+/** Текущая конфигурация фермы проекта (бэкенд доклеивает дефолты). */
+export async function getReconFarmConfig(projectId: number): Promise<ReconFarmConfig> {
+  const { data } = await api.get<ReconFarmConfig>(`/projects/${projectId}/recon/farm-config`);
+  return data;
+}
+
+/** Сохраняет конфигурацию фермы; бэкенд зажимает диапазоны и возвращает итог. */
+export async function saveReconFarmConfig(projectId: number, cfg: ReconFarmConfig): Promise<ReconFarmConfig> {
+  const { data } = await api.put<ReconFarmConfig>(`/projects/${projectId}/recon/farm-config`, cfg);
+  return data;
 }
 
 export async function getPorts(projectId: number, hostId: number): Promise<Port[]> {

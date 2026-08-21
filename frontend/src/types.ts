@@ -436,6 +436,43 @@ export interface IpFarmJob {
   created_at: string;
 }
 
+/** Пер-проектная конфигурация recon-фермы (recon-стек). Формат провода зеркалит
+ *  Go-структуру FarmConfig (snake_case json-теги). */
+export interface ReconFarmConfig {
+  // Global
+  mode: "passive" | "active";
+  rate_limit: number;
+  concurrency: number;
+  // Subdomains
+  subfinder: boolean;
+  assetfinder: boolean;
+  amass_passive: boolean;
+  crtsh: boolean;
+  ct_time_correlation: boolean;
+  active_brute: boolean;
+  subs_max_results: number;
+  // Liveness
+  dnsx: boolean;
+  httpx: boolean;
+  httpx_threads: number;
+  // JS mining
+  js_mine_enabled: boolean;
+  trufflehog_verified_only: boolean;
+  // Crawl / URLs
+  katana: boolean;
+  gau: boolean;
+  waybackurls: boolean;
+  katana_depth: number;
+  // Parameters
+  param_discovery: boolean;
+  // Dir fuzz
+  dir_fuzz: boolean;
+  fuzz_wordlist: string;
+  // Vulns
+  nuclei: boolean;
+  nuclei_severity: string;
+}
+
 export interface Service {
   id: number;
   port_id: number;

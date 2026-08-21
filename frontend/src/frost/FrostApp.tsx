@@ -62,6 +62,8 @@ import {
   getJsScanJob as apiGetJsScanJob,
   getJsFiles as apiGetJsFiles,
   downloadJsArchive as apiDownloadJsArchive,
+  getReconFarmConfig as apiGetReconFarmConfig,
+  saveReconFarmConfig as apiSaveReconFarmConfig,
   createEndpoint as apiCreateEndpoint,
   getEndpoints as apiGetEndpoints,
   deleteEndpoint as apiDeleteEndpoint,
@@ -114,6 +116,7 @@ import type {
   IpFarmJob as ApiIpFarmJob,
   JsFarmJob as ApiJsFarmJob,
   JsFile as ApiJsFile,
+  ReconFarmConfig as ApiReconFarmConfig,
   Port as ApiPort,
   Service as ApiService,
   Vulnerability as ApiVulnerability,
@@ -196,7 +199,12 @@ const getApiErrorMessage = (error: unknown, fallback: string): string =>
 type NavId = "projects" | "tasks" | "mine" | "docs" | "members";
 type ViewId = "list" | "detail" | "profile" | "workspaceMembers";
 type SectionId = "overview" | "hosts" | "vulns" | "notes" | "creds" | "members" | "activity";
-type ReconView = "hosts" | "ips" | "endpoints" | "js";
+type ReconView = "hosts" | "ips" | "endpoints" | "js" | "farm";
+
+// Keys of the farm config split by value type, so the settings form's toggle and
+// number helpers stay type-safe against ApiReconFarmConfig.
+type BoolFarmKey = { [K in keyof ApiReconFarmConfig]: ApiReconFarmConfig[K] extends boolean ? K : never }[keyof ApiReconFarmConfig];
+type NumFarmKey = { [K in keyof ApiReconFarmConfig]: ApiReconFarmConfig[K] extends number ? K : never }[keyof ApiReconFarmConfig];
 type ProfileTab = "account" | "security" | "api" | "customizing";
 /** Word report templates the backend can generate (POST /projects/{id}/reports/{kind}). */
 type ReportKind = "szi" | "pp";
@@ -295,6 +303,12 @@ interface FrostState {
   jsFarmJob: ApiJsFarmJob | null;
   /** Project JS files (backend-loaded). `null` = not loaded yet. */
   apiJsFiles: ApiJsFile[] | null;
+  /** Farm settings: working copy being edited, last saved snapshot (dirty diff),
+   *  and load/save flags. `null` = not loaded yet. */
+  farmCfg: ApiReconFarmConfig | null;
+  farmCfgSaved: ApiReconFarmConfig | null;
+  farmCfgLoading: boolean;
+  farmCfgSaving: boolean;
   /** Открытая карточка JS-файла (id) — как openHostId/openIp у хостов и адресов. */
   openJsFileId: number | null;
   jsTick: number;
@@ -491,6 +505,10 @@ const initialState: FrostState = {
   ipFarmJob: null,
   jsFarmJob: null,
   apiJsFiles: null,
+  farmCfg: null,
+  farmCfgSaved: null,
+  farmCfgLoading: false,
+  farmCfgSaving: false,
   openJsFileId: null,
   jsTick: 0,
   jsQuery: "",
@@ -1099,6 +1117,54 @@ export function FrostApp() {
       cancelled = true;
     };
   }, [state.openProjectId, state.jsTick]);
+
+  // ================= Farm config: loaded when the Farm settings view opens =================
+  useEffect(() => {
+    const pid = state.openProjectId;
+    if (pid == null || state.section !== "hosts" || state.reconView !== "farm") return;
+    // Уже загружено для этого проекта — не перегружаем (правки не теряются).
+    if (state.farmCfg !== null || state.farmCfgLoading) return;
+    let cancelled = false;
+    setStateRaw((s) => ({ ...s, farmCfgLoading: true }));
+    void (async () => {
+      try {
+        const cfg = await apiGetReconFarmConfig(pid);
+        if (!cancelled) setStateRaw((s) => ({ ...s, farmCfg: cfg, farmCfgSaved: cfg, farmCfgLoading: false }));
+      } catch (e) {
+        if (!cancelled) {
+          setStateRaw((s) => ({ ...s, farmCfgLoading: false }));
+          pushToast(getApiErrorMessage(e, t("Couldn't load farm settings")), "error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.openProjectId, state.section, state.reconView]);
+
+  // Reset the loaded config when the project changes, so the next open reloads it.
+  useEffect(() => {
+    setStateRaw((s) => ({ ...s, farmCfg: null, farmCfgSaved: null }));
+  }, [state.openProjectId]);
+
+  // Patch one field of the working farm-config copy.
+  const setFarmField = <K extends keyof ApiReconFarmConfig>(key: K, value: ApiReconFarmConfig[K]) =>
+    setStateRaw((s) => (s.farmCfg ? { ...s, farmCfg: { ...s.farmCfg, [key]: value } } : s));
+
+  const saveFarmConfig = async () => {
+    const pid = state.openProjectId;
+    if (pid == null || state.farmCfg == null || state.farmCfgSaving) return;
+    setState({ farmCfgSaving: true });
+    try {
+      const saved = await apiSaveReconFarmConfig(pid, state.farmCfg);
+      setState({ farmCfg: saved, farmCfgSaved: saved, farmCfgSaving: false });
+      pushToast(t("Farm settings saved"), "success");
+    } catch (e) {
+      setState({ farmCfgSaving: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't save farm settings")), "error");
+    }
+  };
 
   /* Completion toast for a finished host/IP probe. Reused by the poll effect and
      by the submit handlers when the server closes the job immediately (nothing new
@@ -3811,10 +3877,12 @@ export function FrostApp() {
           <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 8, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("RECON")}</div>
             {([
-              { v: "hosts" as const, icon: "server" as const, label: "Hosts", count: hosts.length },
-              { v: "ips" as const, icon: "card" as const, label: "IPs", count: ipsRows.length },
-              { v: "endpoints" as const, icon: "link" as const, label: "Endpoints", count: endpointTotal },
-              { v: "js" as const, icon: "doc" as const, label: "JS", count: jsFiles.length },
+              { v: "hosts" as const, icon: "server" as const, label: "Hosts", count: hosts.length as number | null },
+              { v: "ips" as const, icon: "card" as const, label: "IPs", count: ipsRows.length as number | null },
+              { v: "endpoints" as const, icon: "link" as const, label: "Endpoints", count: endpointTotal as number | null },
+              { v: "js" as const, icon: "doc" as const, label: "JS", count: jsFiles.length as number | null },
+              // Farm settings — no count badge, just the per-project recon config.
+              { v: "farm" as const, icon: "settings" as const, label: "Farm", count: null },
             ]).map((it) => {
               // Nothing is highlighted while another section is open: the recon
               // view only counts as active when Recon itself is the open section.
@@ -3823,7 +3891,9 @@ export function FrostApp() {
                 <div key={it.v} className={`reconrow clk${on ? " on" : ""}`} onClick={() => selRecon(it.v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 11px", borderRadius: 10, marginBottom: 3, font: "600 13.5px Inter,sans-serif" }}>
                   <Icon name={it.icon} size={17} />
                   {t(it.label)}
-                  <span className="mono" style={{ marginLeft: "auto", minWidth: 22, textAlign: "center", fontSize: 11, fontWeight: 700, color: on ? "var(--fr-accent)" : "var(--fr-text-3)", background: on ? "var(--fr-accent-soft)" : "var(--fr-hover)", border: `1px solid ${on ? "var(--fr-accent-muted)" : "var(--fr-border-light)"}`, borderRadius: 6, padding: "1px 6px" }}>{it.count}</span>
+                  {it.count != null && (
+                    <span className="mono" style={{ marginLeft: "auto", minWidth: 22, textAlign: "center", fontSize: 11, fontWeight: 700, color: on ? "var(--fr-accent)" : "var(--fr-text-3)", background: on ? "var(--fr-accent-soft)" : "var(--fr-hover)", border: `1px solid ${on ? "var(--fr-accent-muted)" : "var(--fr-border-light)"}`, borderRadius: 6, padding: "1px 6px" }}>{it.count}</span>
+                  )}
                 </div>
               );
             })}
@@ -4481,8 +4551,184 @@ export function FrostApp() {
     );
   };
 
+  // Farm settings page: the per-project recon-stack config, grouped into cards of
+  // toggles and number/text inputs, edited in local state and saved in one call.
+  const renderFarmConfig = () => {
+    const cfg = state.farmCfg;
+    if (state.farmCfgLoading || cfg === null) {
+      return (
+        <div className="route">
+          <div style={{ ...CARD, padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading farm settings…")}</div>
+        </div>
+      );
+    }
+    const dirty = JSON.stringify(cfg) !== JSON.stringify(state.farmCfgSaved);
+
+    // A pill switch bound to one boolean field.
+    const sw = (key: BoolFarmKey) => {
+      const on = cfg[key];
+      return (
+        <div
+          className="clk"
+          role="switch"
+          aria-checked={on}
+          aria-label={key}
+          onClick={() => setFarmField(key, !on)}
+          style={{ width: 42, height: 24, flex: "none", borderRadius: 999, background: on ? "var(--fr-accent)" : "var(--fr-border)", position: "relative", transition: "background .15s", cursor: "pointer" }}
+        >
+          <div style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: "50%", background: "var(--fr-surface)", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.25)" }} />
+        </div>
+      );
+    };
+
+    // A settings row: label + optional hint on the left, a control on the right.
+    const row = (label: string, desc: string, control: ReactNode, last = false) => (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, padding: "13px 0", borderBottom: last ? "none" : "1px solid var(--fr-divider)" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ font: "600 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{label}</div>
+          {desc && <div style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, lineHeight: 1.4 }}>{desc}</div>}
+        </div>
+        <div style={{ flex: "none" }}>{control}</div>
+      </div>
+    );
+
+    const toggleRow = (key: BoolFarmKey, label: string, desc: string, last = false) => row(label, desc, sw(key), last);
+
+    const numField = (key: NumFarmKey, min: number, max: number) => (
+      <input
+        className="finp mono"
+        type="number"
+        min={min}
+        max={max}
+        value={cfg[key]}
+        onChange={(e) => setFarmField(key, e.target.value === "" ? min : Math.trunc(Number(e.target.value)))}
+        onBlur={(e) => setFarmField(key, Math.min(max, Math.max(min, Math.trunc(Number(e.target.value) || min))))}
+        style={{ width: 120, textAlign: "right", font: "600 13px 'JetBrains Mono',monospace" }}
+      />
+    );
+
+    const numRow = (key: NumFarmKey, label: string, desc: string, min: number, max: number, last = false) =>
+      row(label, `${desc} (${min}–${max})`, numField(key, min, max), last);
+
+    const card = (icon: Parameters<typeof Icon>[0]["name"], title: string, sub: string, children: ReactNode) => (
+      <div style={{ ...CARD, padding: "22px 24px" }}>
+        {cardHeader(icon, title, sub)}
+        <div>{children}</div>
+      </div>
+    );
+
+    return (
+      <div className="route">
+        {/* Sticky-feeling action bar at the top: state + Save. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <div style={{ font: "600 12.5px Inter,sans-serif", color: dirty ? "var(--fr-accent)" : "var(--fr-text-faint)" }}>
+            {dirty ? t("Unsaved changes") : t("All changes saved")}
+          </div>
+          <div style={{ flex: 1 }} />
+          {dirty && (
+            <button className="clk" onClick={() => setState({ farmCfg: state.farmCfgSaved })} style={{ height: 40, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>{t("Discard")}</button>
+          )}
+          <button
+            className="clk"
+            onClick={saveFarmConfig}
+            disabled={!dirty || state.farmCfgSaving}
+            style={{ height: 40, padding: "0 20px", border: "none", borderRadius: 11, background: !dirty || state.farmCfgSaving ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !dirty || state.farmCfgSaving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+          >
+            <Icon name="save" size={15} color="var(--fr-on-accent)" sw={2.4} />{state.farmCfgSaving ? t("Saving…") : t("Save settings")}
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Global */}
+          {card("settings", t("Global"), t("Overall pace and mode of every farm run"),
+            <>
+              {row(t("Mode"), t("Passive avoids sending traffic to the target; active probes it."), (
+                <div style={{ display: "inline-flex", border: "1px solid var(--fr-border)", borderRadius: 10, overflow: "hidden" }}>
+                  {(["passive", "active"] as const).map((m) => {
+                    const on = cfg.mode === m;
+                    return (
+                      <div key={m} className="clk" onClick={() => setFarmField("mode", m)} style={{ padding: "8px 16px", font: "700 12.5px Inter,sans-serif", cursor: "pointer", background: on ? "var(--fr-accent)" : "var(--fr-surface)", color: on ? "var(--fr-on-accent)" : "var(--fr-text-2)" }}>{t(cap(m))}</div>
+                    );
+                  })}
+                </div>
+              ))}
+              {numRow("rate_limit", t("Rate limit"), t("Requests per second"), 1, 500)}
+              {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100, true)}
+            </>
+          )}
+
+          {/* Subdomains */}
+          {card("globe2", t("Subdomains"), t("Passive and active subdomain discovery sources"),
+            <>
+              {toggleRow("subfinder", "subfinder", t("Passive subdomain enumeration"))}
+              {toggleRow("assetfinder", "assetfinder", t("Passive subdomain enumeration"))}
+              {toggleRow("amass_passive", t("Amass (passive)"), t("Passive sources only, no active resolution"))}
+              {toggleRow("crtsh", "crt.sh", t("Certificate-transparency log search"))}
+              {toggleRow("ct_time_correlation", t("CT time correlation"), t("Correlate certificate issuance times to find related hosts"))}
+              {toggleRow("active_brute", t("Active brute-force"), t("DNS brute-force with a wordlist (sends traffic)"))}
+              {numRow("subs_max_results", t("Max results"), t("Cap on collected subdomains"), 1, 100000, true)}
+            </>
+          )}
+
+          {/* Liveness */}
+          {card("activity", t("Liveness"), t("Resolve and probe which hosts are alive"),
+            <>
+              {toggleRow("dnsx", "dnsx", t("DNS resolution of discovered names"))}
+              {toggleRow("httpx", "httpx", t("HTTP/HTTPS liveness probing"))}
+              {numRow("httpx_threads", t("httpx threads"), t("Concurrent probes"), 1, 1000, true)}
+            </>
+          )}
+
+          {/* JS mining */}
+          {card("doc", t("JS mining"), t("Extract secrets and endpoints from JavaScript"),
+            <>
+              {toggleRow("js_mine_enabled", t("Enable JS mining"), t("Download and scan JavaScript for secrets and paths"))}
+              {toggleRow("trufflehog_verified_only", t("Verified secrets only"), t("Report only secrets TruffleHog could verify"), true)}
+            </>
+          )}
+
+          {/* Crawl / URLs */}
+          {card("link", t("Crawl & URLs"), t("Crawl live hosts and harvest historical URLs"),
+            <>
+              {toggleRow("katana", "katana", t("Active crawler"))}
+              {toggleRow("gau", "gau", t("URLs from public archives"))}
+              {toggleRow("waybackurls", "waybackurls", t("URLs from the Wayback Machine"))}
+              {numRow("katana_depth", t("Katana depth"), t("Crawl depth"), 1, 10, true)}
+            </>
+          )}
+
+          {/* Parameters */}
+          {card("search", t("Parameters"), t("Discover request parameters on live endpoints"),
+            <>{toggleRow("param_discovery", t("Parameter discovery"), t("Find hidden query and body parameters"), true)}</>
+          )}
+
+          {/* Dir fuzz */}
+          {card("folder", t("Directory fuzzing"), t("Brute-force directories and files"),
+            <>
+              {toggleRow("dir_fuzz", t("Enable directory fuzzing"), t("Sends many requests to the target"))}
+              {row(t("Wordlist"), t("Path to the wordlist (blank = built-in default)"), (
+                <input className="finp mono" type="text" value={cfg.fuzz_wordlist} placeholder="/wordlists/…" onChange={(e) => setFarmField("fuzz_wordlist", e.target.value)} style={{ width: 260, font: "500 12.5px 'JetBrains Mono',monospace" }} />
+              ), true)}
+            </>
+          )}
+
+          {/* Vulns */}
+          {card("shield-check", t("Vulnerabilities"), t("Template-based vulnerability scanning"),
+            <>
+              {toggleRow("nuclei", "nuclei", t("Run nuclei templates against live hosts"))}
+              {row(t("Severity"), t("Comma-separated severities to include"), (
+                <input className="finp mono" type="text" value={cfg.nuclei_severity} placeholder="medium,high,critical" onChange={(e) => setFarmField("nuclei_severity", e.target.value)} style={{ width: 260, font: "500 12.5px 'JetBrains Mono',monospace" }} />
+              ), true)}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderRecon = () => {
     if (state.exportPageOpen) return renderExport();
+    if (rv === "farm") return renderFarmConfig();
     if (rv === "js" && state.jsScanSetupOpen) return renderJsScanSetup();
     if (rv === "ips") {
       if (state.ipImportOpen) return renderIpImport();
