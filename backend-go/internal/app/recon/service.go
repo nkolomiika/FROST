@@ -25,6 +25,10 @@ type Service struct {
 	collector    reconnet.SubCollector
 	scanner      reconnet.PortScanner
 	resolverSeam reconnet.ForwardResolver
+	// farmScanner — прогрессивный nmap-сервис-скан фермы (сид для тестов; nil → реальный).
+	farmScanner reconnet.NmapServiceScanner
+	// dryProber — dry-пробив стейджинга фермы (сид для тестов; nil → реальная цепочка).
+	dryProber func(ctx context.Context, raw string) ([]dryHost, []string)
 }
 
 // NewService собирает сервис рекона.

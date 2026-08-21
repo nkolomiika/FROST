@@ -63,6 +63,20 @@ type Store interface {
 	ProjectScanTargets(ctx context.Context, projectID int32) ([]string, error)
 	ProjectOriginHostMap(ctx context.Context, projectID int32) (map[string]int32, error)
 
+	// ─── стейджинг полного прогона фермы (карантин, не проект) ───
+	// InsertStagedHosts вставляет staged-строки прогона (по строке на открытый хост).
+	InsertStagedHosts(ctx context.Context, hosts []StagedHostInput) error
+	// ListStagedHosts — все staged-строки одного прогона (для отчёта).
+	ListStagedHosts(ctx context.Context, projectID, jobID int32) ([]StagedHost, error)
+	// ListStagedHostsByIDs — выбранные staged-строки проекта по id (для импорта).
+	ListStagedHostsByIDs(ctx context.Context, projectID int32, ids []int32) ([]StagedHost, error)
+	// LatestFarmRunJobID — id последнего прогона фермы проекта (отчёт без job_id).
+	LatestFarmRunJobID(ctx context.Context, projectID int32) (int32, bool, error)
+	// MarkStagedImported помечает выбранные staged-строки импортированными.
+	MarkStagedImported(ctx context.Context, projectID int32, ids []int32) error
+	// ClearStagedHosts удаляет staged-строки одного прогона; возвращает число удалённых.
+	ClearStagedHosts(ctx context.Context, projectID, jobID int32) (int64, error)
+
 	// ─── js-файлы (эндпоинты списка/архива) ───
 	ListJsFiles(ctx context.Context, projectID int32) ([]JSFileView, error)
 	JSFileURLs(ctx context.Context, projectID int32, hostID *int32) ([]string, error)

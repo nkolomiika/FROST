@@ -255,6 +255,62 @@ func newFarmRunResult() *FarmRunResult {
 	return &FarmRunResult{SourcesUsed: []string{}, Errors: []string{}}
 }
 
+// ─────────────────────────── стейджинг прогона фермы ───────────────────────────
+// Полный прогон (farm_run) НЕ пишет находки в проект — он складывает их сюда, в
+// «карантин» (recon_farm_staged_hosts). Пользователь смотрит отчёт и импортирует
+// выбранное вручную. JSON-теги фиксируют форму провода отчёта (GET .../farm/report).
+
+// StagedPort — один порт staged-хоста. service/version заполняет nmap -sV,
+// http_status — httpx-liveness. Все три nullable (null, а не пусто).
+type StagedPort struct {
+	Port       int     `json:"port"`
+	Proto      string  `json:"proto"`
+	State      string  `json:"state"`
+	Service    *string `json:"service"`
+	Version    *string `json:"version"`
+	HTTPStatus *int    `json:"http_status"`
+}
+
+// StagedHost — одна staged-строка отчёта прогона: что открыл прогон по хосту.
+type StagedHost struct {
+	ID       int32        `json:"id"`
+	Hostname string       `json:"hostname"`
+	IP       *string      `json:"ip"`
+	Alive    bool         `json:"alive"`
+	Source   string       `json:"source"`
+	Imported bool         `json:"imported"`
+	Ports    []StagedPort `json:"ports"`
+}
+
+// StagedHostInput — вход вставки одной staged-строки (прогон кладёт по строке
+// на каждый открытый хост).
+type StagedHostInput struct {
+	ProjectID int32
+	JobID     int32
+	Hostname  string
+	IP        *string
+	Alive     bool
+	Source    string
+	Ports     []StagedPort
+}
+
+// FarmReportSummary — агрегаты отчёта прогона.
+type FarmReportSummary struct {
+	HostsTotal int `json:"hosts_total"`
+	Alive      int `json:"alive"`
+	PortsTotal int `json:"ports_total"`
+	Imported   int `json:"imported"`
+}
+
+// FarmReport — отчёт стейджинга прогона фермы (GET .../recon/farm/report).
+type FarmReport struct {
+	JobID       int32             `json:"job_id"`
+	Status      string            `json:"status"`
+	GeneratedAt time.Time         `json:"generated_at"`
+	Summary     FarmReportSummary `json:"summary"`
+	Hosts       []StagedHost      `json:"hosts"`
+}
+
 // ─────────────────────────── job-структуры ───────────────────────────
 
 // NewJob — данные для вставки задачи (create_job).

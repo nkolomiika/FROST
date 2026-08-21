@@ -891,6 +891,19 @@ type ReconFarmConfig struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ReconFarmStagedHost struct {
+	ID        int32              `json:"id"`
+	ProjectID int32              `json:"project_id"`
+	JobID     int32              `json:"job_id"`
+	Hostname  string             `json:"hostname"`
+	Ip        pgtype.Text        `json:"ip"`
+	Alive     bool               `json:"alive"`
+	Source    pgtype.Text        `json:"source"`
+	Ports     []byte             `json:"ports"`
+	Imported  bool               `json:"imported"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type RefreshToken struct {
 	ID        int32              `json:"id"`
 	UserID    int32              `json:"user_id"`

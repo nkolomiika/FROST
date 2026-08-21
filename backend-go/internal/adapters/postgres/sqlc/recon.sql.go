@@ -47,6 +47,25 @@ func (q *Queries) ClaimReconJobRunning(ctx context.Context, id int32) (HostFarmJ
 	return i, err
 }
 
+const clearStagedHosts = `-- name: ClearStagedHosts :execrows
+DELETE FROM recon_farm_staged_hosts
+WHERE project_id = $1 AND job_id = $2
+`
+
+type ClearStagedHostsParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+// Удаляет staged-строки одного прогона; возвращает число удалённых.
+func (q *Queries) ClearStagedHosts(ctx context.Context, arg ClearStagedHostsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearStagedHosts, arg.ProjectID, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteHiddenIPs = `-- name: DeleteHiddenIPs :exec
 DELETE FROM project_hidden_ips
 WHERE project_id = $1 AND ip_address = ANY($2::text[])
@@ -358,6 +377,54 @@ func (q *Queries) InsertHostFarmJob(ctx context.Context, arg InsertHostFarmJobPa
 	return i, err
 }
 
+const insertStagedHost = `-- name: InsertStagedHost :exec
+
+INSERT INTO recon_farm_staged_hosts (project_id, job_id, hostname, ip, alive, source, ports)
+VALUES ($1, $2, $3, $4,
+        $5, $6, $7)
+`
+
+type InsertStagedHostParams struct {
+	ProjectID int32       `json:"project_id"`
+	JobID     int32       `json:"job_id"`
+	Hostname  string      `json:"hostname"`
+	Ip        pgtype.Text `json:"ip"`
+	Alive     bool        `json:"alive"`
+	Source    pgtype.Text `json:"source"`
+	Ports     []byte      `json:"ports"`
+}
+
+// ─────────── стейджинг полного прогона фермы (recon_farm_staged_hosts) ───────────
+// Полный прогон (kind='farm_run') НЕ пишет в проект: находки складываются сюда, а
+// пользователь импортирует выбранное вручную. ports — JSONB-массив портов.
+func (q *Queries) InsertStagedHost(ctx context.Context, arg InsertStagedHostParams) error {
+	_, err := q.db.Exec(ctx, insertStagedHost,
+		arg.ProjectID,
+		arg.JobID,
+		arg.Hostname,
+		arg.Ip,
+		arg.Alive,
+		arg.Source,
+		arg.Ports,
+	)
+	return err
+}
+
+const latestFarmRunJobID = `-- name: LatestFarmRunJobID :one
+SELECT id FROM host_farm_jobs
+WHERE project_id = $1 AND kind = 'farm_run'
+ORDER BY id DESC
+LIMIT 1
+`
+
+// id последнего прогона фермы проекта (для отчёта без явного job_id).
+func (q *Queries) LatestFarmRunJobID(ctx context.Context, projectID int32) (int32, error) {
+	row := q.db.QueryRow(ctx, latestFarmRunJobID, projectID)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
 const listProjectAllHostnames = `-- name: ListProjectAllHostnames :many
 SELECT hostname FROM hosts WHERE project_id = $1 AND hostname IS NOT NULL
 `
@@ -521,6 +588,111 @@ func (q *Queries) ListProjectScanTargets(ctx context.Context, projectID int32) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const listStagedHosts = `-- name: ListStagedHosts :many
+SELECT id, project_id, job_id, hostname, ip, alive, source, ports, imported, created_at
+FROM recon_farm_staged_hosts
+WHERE project_id = $1 AND job_id = $2
+ORDER BY id
+`
+
+type ListStagedHostsParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+// Все staged-строки одного прогона (для отчёта), по возрастанию id.
+func (q *Queries) ListStagedHosts(ctx context.Context, arg ListStagedHostsParams) ([]ReconFarmStagedHost, error) {
+	rows, err := q.db.Query(ctx, listStagedHosts, arg.ProjectID, arg.JobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedHost{}
+	for rows.Next() {
+		var i ReconFarmStagedHost
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Hostname,
+			&i.Ip,
+			&i.Alive,
+			&i.Source,
+			&i.Ports,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStagedHostsByIDs = `-- name: ListStagedHostsByIDs :many
+SELECT id, project_id, job_id, hostname, ip, alive, source, ports, imported, created_at
+FROM recon_farm_staged_hosts
+WHERE project_id = $1 AND id = ANY($2::int[])
+ORDER BY id
+`
+
+type ListStagedHostsByIDsParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Выбранные staged-строки проекта по id (для импорта). Скоуп проекта обязателен —
+// чужие строки не импортируем.
+func (q *Queries) ListStagedHostsByIDs(ctx context.Context, arg ListStagedHostsByIDsParams) ([]ReconFarmStagedHost, error) {
+	rows, err := q.db.Query(ctx, listStagedHostsByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedHost{}
+	for rows.Next() {
+		var i ReconFarmStagedHost
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Hostname,
+			&i.Ip,
+			&i.Alive,
+			&i.Source,
+			&i.Ports,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markStagedImported = `-- name: MarkStagedImported :exec
+UPDATE recon_farm_staged_hosts SET imported = true
+WHERE project_id = $1 AND id = ANY($2::int[])
+`
+
+type MarkStagedImportedParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Помечает выбранные staged-строки импортированными (идемпотентно).
+func (q *Queries) MarkStagedImported(ctx context.Context, arg MarkStagedImportedParams) error {
+	_, err := q.db.Exec(ctx, markStagedImported, arg.ProjectID, arg.Ids)
+	return err
 }
 
 const reclaimStaleReconJobsExcludingKind = `-- name: ReclaimStaleReconJobsExcludingKind :execrows

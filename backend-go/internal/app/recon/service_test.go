@@ -91,7 +91,21 @@ func (f *fakeStore) InsertAudit(context.Context, AuditEntry) error { return nil 
 func (f *fakeStore) GetFarmConfig(context.Context, int32) (FarmConfig, error) {
 	return DefaultFarmConfig(), nil
 }
-func (f *fakeStore) SaveFarmConfig(context.Context, int32, FarmConfig) error { return nil }
+func (f *fakeStore) SaveFarmConfig(context.Context, int32, FarmConfig) error    { return nil }
+func (f *fakeStore) InsertStagedHosts(context.Context, []StagedHostInput) error { return nil }
+func (f *fakeStore) ListStagedHosts(context.Context, int32, int32) ([]StagedHost, error) {
+	return nil, nil
+}
+func (f *fakeStore) ListStagedHostsByIDs(context.Context, int32, []int32) ([]StagedHost, error) {
+	return nil, nil
+}
+func (f *fakeStore) LatestFarmRunJobID(context.Context, int32) (int32, bool, error) {
+	return 0, false, nil
+}
+func (f *fakeStore) MarkStagedImported(context.Context, int32, []int32) error { return nil }
+func (f *fakeStore) ClearStagedHosts(context.Context, int32, int32) (int64, error) {
+	return 0, nil
+}
 
 func testService(store Store) *Service {
 	return NewService(store, reconnet.Settings{FarmMaxTargets: 256, PortscanMaxTargets: 64}, Config{WorkerEnabled: true, MaxAttempts: 3}, nil)

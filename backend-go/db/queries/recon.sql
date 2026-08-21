@@ -204,3 +204,44 @@ WHERE project_id = $1 AND origin = 'host' AND hostname IS NOT NULL;
 
 -- name: ListProjectHostIDNames :many
 SELECT id, hostname FROM hosts WHERE project_id = $1;
+
+-- ─────────── стейджинг полного прогона фермы (recon_farm_staged_hosts) ───────────
+-- Полный прогон (kind='farm_run') НЕ пишет в проект: находки складываются сюда, а
+-- пользователь импортирует выбранное вручную. ports — JSONB-массив портов.
+
+-- name: InsertStagedHost :exec
+INSERT INTO recon_farm_staged_hosts (project_id, job_id, hostname, ip, alive, source, ports)
+VALUES (sqlc.arg('project_id'), sqlc.arg('job_id'), sqlc.arg('hostname'), sqlc.arg('ip'),
+        sqlc.arg('alive'), sqlc.arg('source'), sqlc.arg('ports'));
+
+-- name: ListStagedHosts :many
+-- Все staged-строки одного прогона (для отчёта), по возрастанию id.
+SELECT id, project_id, job_id, hostname, ip, alive, source, ports, imported, created_at
+FROM recon_farm_staged_hosts
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id')
+ORDER BY id;
+
+-- name: ListStagedHostsByIDs :many
+-- Выбранные staged-строки проекта по id (для импорта). Скоуп проекта обязателен —
+-- чужие строки не импортируем.
+SELECT id, project_id, job_id, hostname, ip, alive, source, ports, imported, created_at
+FROM recon_farm_staged_hosts
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[])
+ORDER BY id;
+
+-- name: LatestFarmRunJobID :one
+-- id последнего прогона фермы проекта (для отчёта без явного job_id).
+SELECT id FROM host_farm_jobs
+WHERE project_id = sqlc.arg('project_id') AND kind = 'farm_run'
+ORDER BY id DESC
+LIMIT 1;
+
+-- name: MarkStagedImported :exec
+-- Помечает выбранные staged-строки импортированными (идемпотентно).
+UPDATE recon_farm_staged_hosts SET imported = true
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);
+
+-- name: ClearStagedHosts :execrows
+-- Удаляет staged-строки одного прогона; возвращает число удалённых.
+DELETE FROM recon_farm_staged_hosts
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id');
