@@ -764,7 +764,7 @@ function navStateFromPath(path: string): Partial<FrostState> {
     if (seg === "ips") {
       return { ...base, section: "hosts", reconView: "ips", openIp: parts[3] != null ? decodeURIComponent(parts[3]) : null };
     }
-    if (seg === "endpoints" || seg === "js") return { ...base, section: "hosts", reconView: seg };
+    if (seg === "endpoints" || seg === "js" || seg === "farm") return { ...base, section: "hosts", reconView: seg };
     // /projects/{id}/vulns/{vulnId} and /projects/{id}/notes/{noteId} — deep links.
     if (seg === "vulns") return { ...base, section: "vulns", openVulnId: entityId() };
     if (seg === "notes") return { ...base, section: "notes", openNoteId: entityId() };
@@ -3881,8 +3881,8 @@ export function FrostApp() {
               { v: "ips" as const, icon: "card" as const, label: "IPs", count: ipsRows.length as number | null },
               { v: "endpoints" as const, icon: "link" as const, label: "Endpoints", count: endpointTotal as number | null },
               { v: "js" as const, icon: "doc" as const, label: "JS", count: jsFiles.length as number | null },
-              // Farm settings — no count badge, just the per-project recon config.
-              { v: "farm" as const, icon: "settings" as const, label: "Farm", count: null },
+              // Farm settings — только лидам/админам (конфиг рекон-фермы проекта).
+              ...(canEditProject ? [{ v: "farm" as const, icon: "settings" as const, label: "Farm", count: null }] : []),
             ]).map((it) => {
               // Nothing is highlighted while another section is open: the recon
               // view only counts as active when Recon itself is the open section.
@@ -4728,7 +4728,7 @@ export function FrostApp() {
 
   const renderRecon = () => {
     if (state.exportPageOpen) return renderExport();
-    if (rv === "farm") return renderFarmConfig();
+    if (rv === "farm") return canEditProject ? renderFarmConfig() : renderNoAccessPage("The Farm settings are available to project leads and admins.");
     if (rv === "js" && state.jsScanSetupOpen) return renderJsScanSetup();
     if (rv === "ips") {
       if (state.ipImportOpen) return renderIpImport();
