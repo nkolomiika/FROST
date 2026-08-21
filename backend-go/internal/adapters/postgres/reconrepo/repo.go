@@ -745,6 +745,110 @@ func (r *Repo) ProjectOriginHostMap(ctx context.Context, projectID int32) (map[s
 	return out, nil
 }
 
+// ─────────────────────────── стейджинг прогона фермы ───────────────────────────
+
+// mapStagedHost переводит строку sqlc в доменный StagedHost (ports из JSONB).
+func mapStagedHost(row sqlc.ReconFarmStagedHost) recon.StagedHost {
+	var ports []recon.StagedPort
+	if len(row.Ports) > 0 {
+		_ = json.Unmarshal(row.Ports, &ports)
+	}
+	if ports == nil {
+		ports = []recon.StagedPort{}
+	}
+	return recon.StagedHost{
+		ID:       row.ID,
+		Hostname: row.Hostname,
+		IP:       pgconv.TextValPtr(row.Ip),
+		Alive:    row.Alive,
+		Source:   pgconv.TextVal(row.Source),
+		Imported: row.Imported,
+		Ports:    ports,
+	}
+}
+
+func (r *Repo) InsertStagedHosts(ctx context.Context, hosts []recon.StagedHostInput) error {
+	if len(hosts) == 0 {
+		return nil
+	}
+	return r.tx(ctx, func(q *sqlc.Queries) error {
+		for _, h := range hosts {
+			portsJSON, err := json.Marshal(orEmptyPorts(h.Ports))
+			if err != nil {
+				return err
+			}
+			if err := q.InsertStagedHost(ctx, sqlc.InsertStagedHostParams{
+				ProjectID: h.ProjectID,
+				JobID:     h.JobID,
+				Hostname:  h.Hostname,
+				Ip:        pgconv.TextPtr(h.IP),
+				Alive:     h.Alive,
+				Source:    pgconv.Text(h.Source),
+				Ports:     portsJSON,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *Repo) ListStagedHosts(ctx context.Context, projectID, jobID int32) ([]recon.StagedHost, error) {
+	rows, err := r.q.ListStagedHosts(ctx, sqlc.ListStagedHostsParams{ProjectID: projectID, JobID: jobID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedHost, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedHost(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) ListStagedHostsByIDs(ctx context.Context, projectID int32, ids []int32) ([]recon.StagedHost, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.q.ListStagedHostsByIDs(ctx, sqlc.ListStagedHostsByIDsParams{ProjectID: projectID, Ids: ids})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedHost, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedHost(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) LatestFarmRunJobID(ctx context.Context, projectID int32) (int32, bool, error) {
+	id, err := r.q.LatestFarmRunJobID(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
+func (r *Repo) MarkStagedImported(ctx context.Context, projectID int32, ids []int32) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.q.MarkStagedImported(ctx, sqlc.MarkStagedImportedParams{ProjectID: projectID, Ids: ids})
+}
+
+func (r *Repo) ClearStagedHosts(ctx context.Context, projectID, jobID int32) (int64, error) {
+	return r.q.ClearStagedHosts(ctx, sqlc.ClearStagedHostsParams{ProjectID: projectID, JobID: jobID})
+}
+
+func orEmptyPorts(p []recon.StagedPort) []recon.StagedPort {
+	if p == nil {
+		return []recon.StagedPort{}
+	}
+	return p
+}
+
 // ─────────────────────────── js-файлы ───────────────────────────
 
 func (r *Repo) ListJsFiles(ctx context.Context, projectID int32) ([]recon.JSFileView, error) {

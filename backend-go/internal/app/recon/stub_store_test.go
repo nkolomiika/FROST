@@ -20,9 +20,19 @@ type stubStore struct {
 	originHostMap      map[string]int32
 	jsFileURLs         []string
 
-	persistHostFn func(HostPersistInput) (HostPersistOutcome, error)
-	persistIPFn   func(IPPersistInput) (IPPersistOutcome, error)
-	reclaimN      int64
+	persistHostFn    func(HostPersistInput) (HostPersistOutcome, error)
+	persistIPFn      func(IPPersistInput) (IPPersistOutcome, error)
+	persistHostCalls int
+	reclaimN         int64
+
+	// стейджинг прогона фермы
+	stagedInserts  []StagedHostInput      // захват InsertStagedHosts
+	stagedByJob    map[int32][]StagedHost // ListStagedHosts(project, job)
+	stagedByID     map[int32]StagedHost   // ListStagedHostsByIDs
+	latestFarmJob  func() (int32, bool)   // LatestFarmRunJobID
+	markedImported []int32                // захват MarkStagedImported
+	clearedStaged  [][2]int32             // (project, job) очистки
+	clearStagedN   int64
 
 	// захваты
 	captured       *NewJob
@@ -98,10 +108,48 @@ func (s *stubStore) JSFileURLs(context.Context, int32, *int32) ([]string, error)
 }
 
 func (s *stubStore) PersistHost(_ context.Context, in HostPersistInput) (HostPersistOutcome, error) {
+	s.persistHostCalls++
 	if s.persistHostFn != nil {
 		return s.persistHostFn(in)
 	}
 	return defaultPersistHost(in), nil
+}
+
+// ─── стейджинг прогона фермы ───
+
+func (s *stubStore) InsertStagedHosts(_ context.Context, hosts []StagedHostInput) error {
+	s.stagedInserts = append(s.stagedInserts, hosts...)
+	return nil
+}
+func (s *stubStore) ListStagedHosts(_ context.Context, _ int32, jobID int32) ([]StagedHost, error) {
+	if s.stagedByJob != nil {
+		return s.stagedByJob[jobID], nil
+	}
+	return []StagedHost{}, nil
+}
+func (s *stubStore) ListStagedHostsByIDs(_ context.Context, _ int32, ids []int32) ([]StagedHost, error) {
+	out := make([]StagedHost, 0, len(ids))
+	for _, id := range ids {
+		if h, ok := s.stagedByID[id]; ok {
+			out = append(out, h)
+		}
+	}
+	return out, nil
+}
+func (s *stubStore) LatestFarmRunJobID(_ context.Context, _ int32) (int32, bool, error) {
+	if s.latestFarmJob != nil {
+		id, ok := s.latestFarmJob()
+		return id, ok, nil
+	}
+	return 0, false, nil
+}
+func (s *stubStore) MarkStagedImported(_ context.Context, _ int32, ids []int32) error {
+	s.markedImported = append(s.markedImported, ids...)
+	return nil
+}
+func (s *stubStore) ClearStagedHosts(_ context.Context, projectID, jobID int32) (int64, error) {
+	s.clearedStaged = append(s.clearedStaged, [2]int32{projectID, jobID})
+	return s.clearStagedN, nil
 }
 func (s *stubStore) PersistIP(_ context.Context, in IPPersistInput) (IPPersistOutcome, error) {
 	if s.persistIPFn != nil {

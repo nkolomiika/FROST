@@ -139,6 +139,73 @@ func (s *Service) probeHosts(ctx context.Context, projectID, actorID int32, raw 
 	return result, nil
 }
 
+// ─────────────────────────── dry-probe (стейджинг фермы) ───────────────────────────
+// Полный прогон фермы НЕ пишет в проект — он собирает находки в карантин. probeHostsDry
+// повторяет ту же цепочку резолв→liveness (dnsx/httpx), что и probeHosts, но НЕ зовёт
+// PersistHost: возвращает открытое по каждому хосту (резолв IP, живость, веб-порты с
+// http_status и сервисом) для последующей вставки staged-строк. Обычная дорожка
+// (add-hosts) продолжает пользоваться probeHosts и писать в проект как раньше.
+
+// dryPort — веб-порт, открытый dry-пробивом (http_status от httpx, service от детекта).
+type dryPort struct {
+	port       int
+	state      string // OPEN | FILTERED
+	httpStatus *int
+	service    string
+	version    *string
+}
+
+// dryHost — что dry-пробив открыл по одному хосту (без персиста).
+type dryHost struct {
+	hostname string
+	isIP     bool
+	ip       *string
+	alive    bool
+	ports    []dryPort
+}
+
+// probeHostsDry — резолв+liveness без персиста (для стейджинга прогона фермы).
+// Сид dryProber перекрывает реализацию в тестах (в проде nil → реальная цепочка).
+func (s *Service) probeHostsDry(ctx context.Context, raw string) ([]dryHost, []string) {
+	if s.dryProber != nil {
+		return s.dryProber(ctx, raw)
+	}
+	targets, parseErrors := reconnet.ParseTargets(raw)
+	parseErrors = append(parseErrors, reconnet.TrimExcessPorts(targets, s.settings.FarmMaxPortsPerHost)...)
+
+	resolved := reconnet.ResolveForward(ctx, targetKeys(targets), s.settings)
+	probes := s.probeAll(ctx, targets, resolved)
+	techsByPort := reconnet.DetectServices(ctx, probes, s.settings, s.detector, s.resolverSeam)
+	byHost := groupProbes(probes)
+
+	out := make([]dryHost, 0, len(targets))
+	for _, t := range targets {
+		r, hasR := resolved[t.Hostname]
+		hostProbes := byHost[t.Hostname]
+		dh := dryHost{hostname: t.Hostname, isIP: t.IsIP, alive: anyResponded(hostProbes)}
+		if hasR && r.IP != "" && !r.Blocked {
+			ip := r.IP
+			dh.ip = &ip
+		}
+		for _, p := range hostProbes {
+			if !p.Responded && p.Inferred {
+				continue
+			}
+			dp := dryPort{port: p.Port, state: stateFILTERED, httpStatus: p.HTTPStatus}
+			if p.Responded {
+				dp.state = stateOPEN
+			}
+			if techs, ok := techsByPort[reconnet.TechKey{Host: p.Hostname, Port: p.Port}]; ok && len(techs) > 0 {
+				dp.service = techs[0].Name
+				dp.version = techs[0].Version
+			}
+			dh.ports = append(dh.ports, dp)
+		}
+		out = append(out, dh)
+	}
+	return out, append(parseErrors, resolveErrors(resolved)...)
+}
+
 func (s *Service) persistHosts(ctx context.Context, projectID, actorID int32, targets []*reconnet.ParsedTarget, resolved map[string]reconnet.ResolvedHost, probes []reconnet.ProbeResult, techsByPort map[reconnet.TechKey][]reconnet.Tech) *HostFarmResult {
 	result := newHostFarmResult()
 	byHost := groupProbes(probes)

@@ -228,83 +228,85 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 	}
 	prog.update(func(p *RunProgress) { p.SubsFound = len(capped); p.Stage = "resolve"; p.Percent = pctResolve })
 
-	// ── стадия 2: резолв + liveness (dnsx resolve → httpx-pd) с персистом хостов ──
+	// ── стадия 2: резолв + liveness (dnsx resolve → httpx-pd) БЕЗ персиста ──
+	// Прогон фермы ничего не пишет в проект: находки уходят в стейджинг. Здесь мы
+	// только собираем по каждому новому поддомену резолв IP, живость и веб-порты
+	// (http_status), а persist заменён на вставку staged-строк в конце стадии 3.
 	newSubs := s.filterNewSubs(ctx, claim.ProjectID, capped)
 	result.SubdomainsNew = len(newSubs)
 	if len(newSubs) > rs.FarmMaxTargets {
 		result.Errors = append(result.Errors, "Поддоменов больше лимита пробива — часть не резолвилась")
 		newSubs = newSubs[:rs.FarmMaxTargets]
 	}
+	// accums — накопитель staged-хостов по имени; order хранит порядок открытия.
+	accums := map[string]*stagedHostAccum{}
+	var order []string
 	if len(newSubs) > 0 {
-		// dnsx-резолв и httpx-liveness — единый вызов probeHosts, но во фронте это
-		// два видимых шага; оба вешаем на один stepCtx, чтобы cancel любого из них
-		// оборвал этот вызов.
+		// dnsx-резолв и httpx-liveness — единый dry-вызов, но во фронте это два
+		// видимых шага; оба вешаем на один stepCtx, чтобы cancel любого оборвал вызов.
 		stepCtx, stepCancel := context.WithCancel(ctx)
 		resolveID := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx -resp -silent (resolve)", Target: "новые поддомены", StartedAt: time.Now()}, stepCancel)
 		httpxID := prog.addStep(RunStep{Tool: "httpx-pd", Args: "httpx-pd -json -td -cdn (liveness)", Target: "resolved", StartedAt: time.Now()}, stepCancel)
-		hostRes, herr := runSvc.probeHosts(stepCtx, claim.ProjectID, claim.CreatedBy, strings.Join(newSubs, "\n"), nil, true)
+		dryHosts, dryErrs := runSvc.probeHostsDry(stepCtx, strings.Join(newSubs, "\n"))
 		prog.removeStep(resolveID)
 		prog.removeStep(httpxID)
 		stepCancel()
-		if herr != nil {
-			if wasCancelled.Load() {
-				return finalizeCancelled()
-			}
-			if stepCtx.Err() != nil {
-				// per-step cancel: шаг оборван, но прогон НЕ валим — мягкая пометка.
-				result.Errors = append(result.Errors, "процесс отменён: dnsx/httpx-pd новые поддомены")
-			} else {
-				return nil, herr
-			}
-		} else {
-			result.HostsCreated = hostRes.HostsCreated
-			result.HostsOnline = hostRes.HostsOnline
-			result.Errors = append(result.Errors, hostRes.Errors...)
-			prog.update(func(p *RunProgress) { p.HostsFound = hostRes.HostsCreated + hostRes.HostsUpdated })
+		result.Errors = append(result.Errors, dryErrs...)
+		if wasCancelled.Load() {
+			return finalizeCancelled()
 		}
+		if stepCtx.Err() != nil {
+			// per-step cancel: шаг оборван, но прогон НЕ валим — мягкая пометка.
+			result.Errors = append(result.Errors, "процесс отменён: dnsx/httpx-pd новые поддомены")
+		}
+		alive := 0
+		for _, dh := range dryHosts {
+			a := &stagedHostAccum{hostname: dh.hostname, isIP: dh.isIP, ip: dh.ip, alive: dh.alive, source: stagedSourceSub, ports: map[int]StagedPort{}}
+			for _, p := range dh.ports {
+				a.ports[p.port] = StagedPort{Port: p.port, Proto: "tcp", State: strings.ToLower(p.state), Service: strOrNil(p.service), Version: p.version, HTTPStatus: p.httpStatus}
+			}
+			accums[dh.hostname] = a
+			order = append(order, dh.hostname)
+			if dh.alive {
+				alive++
+			}
+		}
+		result.HostsCreated = len(order)
+		result.HostsOnline = alive
+		prog.update(func(p *RunProgress) { p.HostsFound = len(order) })
 	}
 	if wasCancelled.Load() {
 		return finalizeCancelled()
 	}
 	prog.update(func(p *RunProgress) { p.Stage = "ports"; p.Percent = pctPorts })
 
-	// ── стадия 3: скан портов (nmap) над целями проекта ──
-	// Цели берём как create_job портов: hostname/IP всех хостов проекта. Пустой
-	// raw в probePorts не сканирует ничего, поэтому список собираем явно.
-	scanKeys, skErr := s.store.ProjectScanTargets(ctx, claim.ProjectID)
-	if skErr != nil {
-		result.Errors = append(result.Errors, reconnet.ErrLabel(skErr))
+	// ── стадия 3: прогрессивный скан портов (nmap -sV) над открытыми хостами ──
+	// Не бьём -p- по всему сразу: идём фазами (top-100 → top-1000 → опц. весь
+	// диапазон), КАЖДАЯ с -sV, чтобы сервисы опознавались. Внутри фазы — bounded
+	// errgroup по хостам (быстрые фазы вперёд). Порты объединяются по хосту.
+	if canceled := s.runFarmPorts(ctx, &runSvc, cfg, rs, accums, order, prog, result, &wasCancelled); canceled {
+		return finalizeCancelled()
 	}
-	scanKeys = dedup(scanKeys)
-	if len(scanKeys) > rs.PortscanMaxTargets {
-		scanKeys = scanKeys[:rs.PortscanMaxTargets]
+
+	// ── вставка staged-строк (по строке на каждый открытый хост) ──
+	totalPorts := 0
+	inputs := make([]StagedHostInput, 0, len(order))
+	for _, hn := range order {
+		a := accums[hn]
+		ports := stagedPortsSorted(a.ports)
+		totalPorts += len(ports)
+		inputs = append(inputs, StagedHostInput{
+			ProjectID: claim.ProjectID, JobID: claim.ID, Hostname: a.hostname,
+			IP: a.ip, Alive: a.alive, Source: a.source, Ports: ports,
+		})
 	}
-	if len(scanKeys) > 0 {
-		nmapArgs := "nmap -Pn --open --top-ports 1000"
-		if rs.PortscanTopPorts == 0 {
-			nmapArgs = "nmap -Pn --open -p-"
-		}
-		stepCtx, stepCancel := context.WithCancel(ctx)
-		portID := prog.addStep(RunStep{Tool: "nmap", Args: nmapArgs, Target: "цели проекта", StartedAt: time.Now()}, stepCancel)
-		portRes, perr := runSvc.probePorts(stepCtx, claim.ProjectID, claim.CreatedBy, strings.Join(scanKeys, "\n"), nil)
-		prog.removeStep(portID)
-		stepCancel()
-		if perr != nil {
-			switch {
-			case wasCancelled.Load():
-				return finalizeCancelled()
-			case stepCtx.Err() != nil:
-				// per-step cancel скана портов — мягкая пометка, прогон завершаем.
-				result.Errors = append(result.Errors, "процесс отменён: nmap цели проекта")
-			default:
-				// Скан портов не критичен для прогона: фиксируем ошибку, но завершаем.
-				result.Errors = append(result.Errors, reconnet.ErrLabel(perr))
-			}
-		} else {
-			result.PortsFound = portRes.PortsFound
-			result.Errors = append(result.Errors, portRes.Errors...)
+	if len(inputs) > 0 {
+		if err := s.store.InsertStagedHosts(ctx, inputs); err != nil {
+			result.Errors = append(result.Errors, reconnet.ErrLabel(err))
 		}
 	}
+	result.PortsFound = totalPorts
+	prog.update(func(p *RunProgress) { p.PortsFound = totalPorts })
 	if wasCancelled.Load() {
 		return finalizeCancelled()
 	}
@@ -477,4 +479,126 @@ func mapFromSlice(list []string) map[string]bool {
 		out[v] = true
 	}
 	return out
+}
+
+// ─────────────────────────── стейджинг: накопление и порт-скан ───────────────────────────
+
+// stagedSourceSub — провенанс staged-хоста, открытого стадией поддоменов.
+const stagedSourceSub = "subdomain"
+
+// stagedHostAccum — накопитель одного staged-хоста в ходе прогона: резолв/живость
+// из стадии 2 и объединённые порты (веб от httpx + nmap -sV) из стадии 3.
+type stagedHostAccum struct {
+	hostname string
+	isIP     bool
+	ip       *string
+	alive    bool
+	source   string
+	ports    map[int]StagedPort // union по номеру порта
+}
+
+// runFarmPorts гоняет прогрессивный nmap -sV по открытым (резолвнутым) хостам и
+// объединяет найденные порты в accums. Возвращает true, если весь прогон отменён
+// (caller уходит в finalizeCancelled). Каждая фаза каждого хоста — видимый RunStep
+// под своим stepCtx (per-step cancel), фазы идут по очереди (быстрые вперёд), внутри
+// фазы — bounded errgroup по хостам (cfg.Concurrency).
+func (s *Service) runFarmPorts(ctx context.Context, runSvc *Service, cfg FarmConfig, rs reconnet.Settings, accums map[string]*stagedHostAccum, order []string, prog *progressTracker, result *FarmRunResult, wasCancelled *atomic.Bool) bool {
+	scanHosts := make([]string, 0, len(order))
+	for _, hn := range order {
+		if accums[hn].ip != nil {
+			scanHosts = append(scanHosts, hn)
+		}
+	}
+	if len(scanHosts) > rs.PortscanMaxTargets {
+		scanHosts = scanHosts[:rs.PortscanMaxTargets]
+	}
+	if len(scanHosts) == 0 {
+		return false
+	}
+	scanner := runSvc.farmScanner
+	if scanner == nil {
+		scanner = reconnet.DefaultNmapServiceScanner(rs)
+	}
+	phases := reconnet.NmapPhases(rs.PortscanTopPorts == 0) // scope=="all" → +фаза -p-
+	limit := cfg.Concurrency
+	if limit < 1 {
+		limit = 1
+	}
+	var mu sync.Mutex
+	for _, phase := range phases {
+		var eg errgroup.Group
+		eg.SetLimit(limit)
+		for _, hn := range scanHosts {
+			hn := hn
+			a := accums[hn]
+			phase := phase
+			eg.Go(func() error {
+				// Свой контекст фазы: per-step cancel рвёт только её, не весь прогон.
+				stepCtx, stepCancel := context.WithCancel(ctx)
+				defer stepCancel()
+				id := prog.addStep(RunStep{Tool: "nmap", Args: reconnet.NmapCommand(rs.PortscanNmapBin, phase, *a.ip), Target: hn, StartedAt: time.Now()}, stepCancel)
+				defer prog.removeStep(id)
+				ports, e := scanner(stepCtx, *a.ip, phase)
+				mu.Lock()
+				for _, np := range ports {
+					mergeStagedPort(a, np)
+				}
+				if e != "" {
+					result.Errors = append(result.Errors, e)
+				}
+				if stepCtx.Err() != nil && ctx.Err() == nil {
+					result.Errors = append(result.Errors, "процесс отменён: nmap "+hn)
+				}
+				mu.Unlock()
+				return nil
+			})
+		}
+		_ = eg.Wait()
+		if wasCancelled.Load() {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeStagedPort вливает порт nmap в accum: nmap уточняет state/service/version,
+// а http_status (от httpx) на порту сохраняется.
+func mergeStagedPort(a *stagedHostAccum, np reconnet.NmapPort) {
+	cur, ok := a.ports[np.Port]
+	if !ok {
+		cur = StagedPort{Port: np.Port, Proto: "tcp"}
+	}
+	if np.Proto != "" {
+		cur.Proto = np.Proto
+	}
+	if np.State != "" {
+		cur.State = np.State
+	}
+	if np.Service != "" {
+		svc := np.Service
+		cur.Service = &svc
+	}
+	if np.Version != "" {
+		ver := np.Version
+		cur.Version = &ver
+	}
+	a.ports[np.Port] = cur
+}
+
+// stagedPortsSorted — порты accum списком, по возрастанию номера.
+func stagedPortsSorted(m map[int]StagedPort) []StagedPort {
+	out := make([]StagedPort, 0, len(m))
+	for _, p := range m {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	return out
+}
+
+// strOrNil — пустая строка → nil (сервис без имени = null в отчёте).
+func strOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

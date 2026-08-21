@@ -73,6 +73,11 @@ func (h *ReconHandler) Register(r chi.Router) {
 		ar.With(pa).Post(base+"/recon/farm/run/cancel-all", h.cancelAllFarmRuns)
 		ar.With(pa).Post(base+"/recon/farm/run/{job_id}/cancel", h.cancelFarmRun)
 		ar.With(pa).Post(base+"/recon/farm/run/{job_id}/steps/{step_id}/cancel", h.cancelFarmStep)
+
+		// отчёт стейджинга прогона (ревью → импорт выбранного → очистка карантина)
+		ar.With(pa).Get(base+"/recon/farm/report", h.getFarmReport)
+		ar.With(pa).Post(base+"/recon/farm/report/import", h.importFarmReport)
+		ar.With(pa).Delete(base+"/recon/farm/report", h.deleteFarmReport)
 	})
 }
 
@@ -211,6 +216,85 @@ func (h *ReconHandler) cancelAllFarmRuns(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]int64{"cancelled": n})
+}
+
+// ─────────────────────────── отчёт стейджинга прогона ───────────────────────────
+
+// optionalJobID разбирает необязательный ?job_id=. Пусто → nil (последний прогон).
+func optionalJobID(r *http.Request) (*int32, error) {
+	raw := r.URL.Query().Get("job_id")
+	if raw == "" {
+		return nil, nil
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return nil, apperr.Validation("Некорректный job_id")
+	}
+	id := int32(v)
+	return &id, nil
+}
+
+// getFarmReport отдаёт отчёт стейджинга прогона (по ?job_id= либо последнего).
+// Прогонов нет → пустой отчёт (200). Только лид/админ.
+func (h *ReconHandler) getFarmReport(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	jobID, err := optionalJobID(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	rep, err := h.svc.FarmReport(r.Context(), pid, jobID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
+}
+
+// importFarmReport создаёт реальные хосты проекта из выбранных staged-строк и
+// помечает их imported. Возвращает {"imported":n}. Только лид/админ.
+func (h *ReconHandler) importFarmReport(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	var req struct {
+		HostIDs []int32 `json:"host_ids"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	actor := actorFrom(r).ID
+	n, err := h.svc.ImportStagedHosts(r.Context(), pid, actor, req.HostIDs)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"imported": n})
+}
+
+// deleteFarmReport чистит staged-строки прогона (по ?job_id= либо последнего).
+// Возвращает {"cleared":n}. Только лид/админ.
+func (h *ReconHandler) deleteFarmReport(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	jobID, err := optionalJobID(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	n, err := h.svc.ClearStagedReport(r.Context(), pid, jobID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"cleared": n})
 }
 
 // ─────────────────────────── общие помощники ───────────────────────────
