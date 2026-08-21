@@ -67,6 +67,9 @@ import {
   saveReconFarmConfig as apiSaveReconFarmConfig,
   startFarmRun as apiStartFarmRun,
   getFarmRun as apiGetFarmRun,
+  cancelFarmRun as apiCancelFarmRun,
+  cancelFarmStep as apiCancelFarmStep,
+  cancelAllFarmRuns as apiCancelAllFarmRuns,
   createEndpoint as apiCreateEndpoint,
   getEndpoints as apiGetEndpoints,
   deleteEndpoint as apiDeleteEndpoint,
@@ -317,6 +320,7 @@ interface FrostState {
    *  чтобы показать сводку, пока пользователь не закроет панель. */
   farmRunJob: ApiFarmRunJob | null;
   farmRunStarting: boolean;
+  farmCancelling: boolean;
   /** Открытая карточка JS-файла (id) — как openHostId/openIp у хостов и адресов. */
   openJsFileId: number | null;
   jsTick: number;
@@ -532,6 +536,7 @@ const initialState: FrostState = {
   hostFarmJob: null,
   farmRunJob: null,
   farmRunStarting: false,
+  farmCancelling: false,
   apiMembers: null,
   membersTick: 0,
   apiVulns: null,
@@ -1160,7 +1165,9 @@ export function FrostApp() {
 
   // Patch one field of the working farm-config copy.
   const setFarmField = <K extends keyof ApiReconFarmConfig>(key: K, value: ApiReconFarmConfig[K]) =>
-    setStateRaw((s) => (s.farmCfg ? { ...s, farmCfg: { ...s.farmCfg, [key]: value } } : s));
+    // Настройки заморожены, пока идёт прогон — прогон использует конфиг, с
+    // которым стартовал, менять его на лету бессмысленно и путает.
+    setStateRaw((s) => (s.farmCfg && !isFarmJobInFlight(s.farmRunJob?.status ?? "") ? { ...s, farmCfg: { ...s.farmCfg, [key]: value } } : s));
 
   const saveFarmConfig = async () => {
     const pid = state.openProjectId;
@@ -1188,6 +1195,36 @@ export function FrostApp() {
     } catch (e) {
       setState({ farmRunStarting: false });
       pushToast(getApiErrorMessage(e, t("Couldn't start the farm run")), "error");
+    }
+  };
+
+  // Stop the whole run (kills every process at once). The poll picks up the
+  // 'cancelled' status; we optimistically flag stopping so the button disables.
+  const stopFarmRun = async () => {
+    const pid = state.openProjectId;
+    const job = state.farmRunJob;
+    if (pid == null || !job || !isFarmJobInFlight(job.status) || state.farmCancelling) return;
+    setState({ farmCancelling: true });
+    try {
+      await apiCancelFarmRun(pid, job.id);
+      pushToast(t("Stopping the farm run…"), "info");
+    } catch (e) {
+      pushToast(getApiErrorMessage(e, t("Couldn't stop the run")), "error");
+    } finally {
+      setState({ farmCancelling: false });
+    }
+  };
+
+  // Kill one running process (a single tool invocation) by its step id. The run
+  // continues; the poll drops the step from the live panel.
+  const killFarmStep = async (stepId: number) => {
+    const pid = state.openProjectId;
+    const job = state.farmRunJob;
+    if (pid == null || !job || !isFarmJobInFlight(job.status)) return;
+    try {
+      await apiCancelFarmStep(pid, job.id, stepId);
+    } catch (e) {
+      pushToast(getApiErrorMessage(e, t("Couldn't kill the process")), "error");
     }
   };
 
@@ -1262,6 +1299,7 @@ export function FrostApp() {
         reloadHosts();
         setStateRaw((s) => (s.farmRunJob && s.farmRunJob.id === next.id ? { ...s, farmRunJob: next } : s));
         if (next.status === "failed") pushToast(next.error || t("Farm run failed"), "error");
+        if (next.status === "cancelled") pushToast(t("Farm run stopped"), "info");
       } catch {
         if (!cancelled) setStateRaw((s) => (s.farmRunJob ? { ...s, farmRunJob: { ...s.farmRunJob } } : s));
       }
@@ -3482,7 +3520,7 @@ export function FrostApp() {
 
   const sectionLabel =
     sec === "hosts"
-      ? ({ hosts: "Hosts", ips: "IPs", endpoints: "Endpoints", js: "JS scan" } as Record<string, string>)[rv] || "Hosts"
+      ? ({ hosts: "Hosts", ips: "IPs", endpoints: "Endpoints", js: "JS scan", farm: "Farm" } as Record<string, string>)[rv] || "Hosts"
       : ({ overview: "Overview", vulns: "Vulnerabilities", notes: "Notes", creds: "Creds", members: "Members", activity: "Activity" } as Record<string, string>)[sec] || "Overview";
   /** The item open inside the section, if any — the last crumb (e.g. the note's title). */
   const crumbLeaf =
@@ -4016,9 +4054,18 @@ export function FrostApp() {
             {sec === "hosts" && rv === "farm" ? (
               /* The Farm view is a workspace, not a list — it gets its own title
                  and subtitle instead of the recon "Total hosts" pill. */
-              <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                 <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t("Farm")}</h1>
-                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", marginTop: 6 }}>{t("Recon automation — run every tool with one click")}</div>
+                {/* Активные процессы прямо сейчас — длина списка «сейчас работает». */}
+                {(() => {
+                  const procs = isFarmJobInFlight(state.farmRunJob?.status ?? "") ? (state.farmRunJob?.progress?.steps?.length ?? 0) : 0;
+                  return procs > 0 ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "600 12.5px Inter,sans-serif", color: "var(--fr-accent)", background: "var(--fr-accent-soft, var(--fr-surface))", border: "1px solid var(--fr-accent)", borderRadius: 20, padding: "5px 13px" }}>
+                      <span className="frost-spin" style={{ width: 11, height: 11, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+                      <b className="mono" style={{ color: "var(--fr-accent)" }}>{procs}</b> {t("processes")}
+                    </span>
+                  ) : null;
+                })()}
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
@@ -4636,6 +4683,9 @@ export function FrostApp() {
       );
     }
     const dirty = JSON.stringify(cfg) !== JSON.stringify(state.farmCfgSaved);
+    // Во время прогона настройки заморожены: сегменты/поля не реагируют
+    // (см. setFarmField), Save заблокирован, показываем подсказку.
+    const runLocked = isFarmJobInFlight(state.farmRunJob?.status ?? "");
 
     // A settings row: label + optional hint on the left, a control on the right.
     const row = (label: string, desc: string, control: ReactNode, last = false) => (
@@ -4687,18 +4737,20 @@ export function FrostApp() {
       <div className="route">
         {/* Sticky-feeling action bar at the top: state + Save. */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <div style={{ font: "600 12.5px Inter,sans-serif", color: dirty ? "var(--fr-accent)" : "var(--fr-text-faint)" }}>
-            {dirty ? t("Unsaved changes") : t("All changes saved")}
-          </div>
+          {runLocked && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>
+              <Icon name="lock" size={13} color="var(--fr-text-faint)" />{t("Settings are locked while a run is in progress")}
+            </div>
+          )}
           <div style={{ flex: 1 }} />
-          {dirty && (
+          {dirty && !runLocked && (
             <button className="clk" onClick={() => setState({ farmCfg: state.farmCfgSaved })} style={{ height: 40, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>{t("Discard")}</button>
           )}
           <button
             className="clk"
             onClick={saveFarmConfig}
-            disabled={!dirty || state.farmCfgSaving}
-            style={{ height: 40, padding: "0 20px", border: "none", borderRadius: 11, background: !dirty || state.farmCfgSaving ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !dirty || state.farmCfgSaving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+            disabled={!dirty || state.farmCfgSaving || runLocked}
+            style={{ height: 40, padding: "0 20px", border: "none", borderRadius: 11, background: !dirty || state.farmCfgSaving || runLocked ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !dirty || state.farmCfgSaving || runLocked ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
           >
             <Icon name="save" size={15} color="var(--fr-on-accent)" sw={2.4} />{state.farmCfgSaving ? t("Saving…") : t("Save settings")}
           </button>
@@ -4710,19 +4762,27 @@ export function FrostApp() {
 
           {/* Global — the only knobs the user touches; tools are chosen by FROST. */}
           {card("settings", t("Run settings"), t("How the run behaves — FROST picks the tools and wordlists for you"),
-            <>
+            <div style={{ opacity: runLocked ? 0.5 : 1, pointerEvents: runLocked ? "none" : "auto", transition: "opacity .2s" }}>
               {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
               {row(t("Wordlist size"), t("Bigger lists find more subdomains but take longer — FROST maps this to a bundled list."), seg(cfg.wordlist_size, ["small", "medium", "large"] as const, (s) => setFarmField("wordlist_size", s)))}
               {numRow("rate_limit", t("Rate limit"), t("Requests per second"), 1, 500)}
               {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100)}
               {row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))))}
               {numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)}
-            </>
+            </div>
           )}
         </div>
       </div>
     );
   };
+
+  // Collapse noisy absolute paths in a tool command for display: the bundled
+  // n0kovo wordlist becomes its tier name, any other /abs/path/file.ext its
+  // basename. The full command stays in the row's title tooltip.
+  const cleanStepArgs = (args: string): string =>
+    args
+      .replace(/\/\S*\/n0kovo_subdomains_(small|medium|huge)\.txt/g, "$1")
+      .replace(/\/\S*\/([^/\s]+\.[A-Za-z0-9]+)/g, "$1");
 
   // The Farm run block: two launch buttons and, once a run is going, a live
   // progress bar + a panel listing the tools running right now with their args.
@@ -4751,6 +4811,16 @@ export function FrostApp() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
           {runBtn(t("Run (defaults)"), true, () => startFarmRun(true))}
           {runBtn(t("Run with my settings"), false, () => startFarmRun(false))}
+          {runInFlight && (
+            <button
+              className="clk"
+              onClick={stopFarmRun}
+              disabled={state.farmCancelling}
+              style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, opacity: state.farmCancelling ? 0.6 : 1 }}
+            >
+              <Icon name="close" size={15} color="var(--fr-danger)" sw={2.6} />{state.farmCancelling ? t("Stopping…") : t("Stop run")}
+            </button>
+          )}
           {runInFlight && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
               <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
@@ -4784,15 +4854,37 @@ export function FrostApp() {
               </div>
             )}
 
-            {/* Live panel: the tools running right now, with their exact args. */}
+            {/* Live panel: the tools running right now, with their exact args.
+                Long bundled paths are collapsed to the file name for readability;
+                each row can be killed on its own, and the header kills them all. */}
             {runInFlight && prog && prog.steps.length > 0 && (
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase", marginBottom: 8 }}>{t("Running now")}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {prog.steps.map((step, i) => (
-                    <div key={`${step.tool}-${step.target}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, background: "var(--fr-surface)", border: "1px solid var(--fr-divider)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+                    {t("Running now")} <span className="mono" style={{ color: "var(--fr-accent)" }}>{prog.steps.length}</span>
+                  </div>
+                  <button
+                    className="clk"
+                    onClick={stopFarmRun}
+                    disabled={state.farmCancelling}
+                    style={{ height: 26, padding: "0 10px", border: "1px solid var(--fr-divider)", borderRadius: 8, background: "transparent", color: "var(--fr-danger)", font: "700 11px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 5, opacity: state.farmCancelling ? 0.6 : 1 }}
+                  >
+                    <Icon name="close" size={12} color="var(--fr-danger)" sw={2.6} />{t("Kill all")}
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 6, maxHeight: 260, overflowY: "auto", paddingRight: 2 }}>
+                  {prog.steps.map((step) => (
+                    <div key={step.id} className="frow-step" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 8px 8px 11px", borderRadius: 9, background: "var(--fr-surface)", border: "1px solid var(--fr-divider)", minWidth: 0 }}>
                       <span className="frost-spin" style={{ width: 11, height: 11, flex: "none", borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
-                      <span className="mono" style={{ fontSize: 12, color: "var(--fr-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{step.args || step.tool}</span>
+                      <span className="mono" title={step.args || step.tool} style={{ flex: 1, fontSize: 12, color: "var(--fr-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{cleanStepArgs(step.args || step.tool)}</span>
+                      <button
+                        className="clk"
+                        title={t("Kill this process")}
+                        onClick={() => killFarmStep(step.id)}
+                        style={{ flex: "none", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 6, background: "transparent", color: "var(--fr-text-faint)", cursor: "pointer" }}
+                      >
+                        <Icon name="close" size={13} sw={2.6} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -4809,6 +4901,11 @@ export function FrostApp() {
             {run.status === "failed" && (
               <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "var(--fr-danger-soft, var(--fr-surface))", border: "1px solid var(--fr-divider)", fontSize: 12.5, color: "var(--fr-danger)" }}>
                 {run.error || t("The farm run failed.")}
+              </div>
+            )}
+            {run.status === "cancelled" && (
+              <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "var(--fr-surface)", border: "1px solid var(--fr-divider)", fontSize: 12.5, color: "var(--fr-text-2)" }}>
+                {t("Run stopped")}{runResult ? ` — ${runResult.subdomains_found} ${t("subdomains")}, ${runResult.hosts_created} ${t("new hosts")}` : ""}.
               </div>
             )}
           </div>
@@ -5271,7 +5368,7 @@ export function FrostApp() {
           {/* Status / severity are multi-select: pills toggle, several can be held at
               once, and clearing the last one falls back to "All". Driven by the token
               lists so they cannot drift from the backend's vocabularies. */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 18px", alignItems: "flex-start", justifyContent: "flex-end", marginLeft: "auto" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end", marginLeft: "auto", minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
               {filterPill(t("All"), vfS.length === 0, () => setState({ vulnFilterStatuses: [] }))}

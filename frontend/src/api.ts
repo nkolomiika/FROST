@@ -764,6 +764,22 @@ export async function getFarmRun(projectId: number, jobId: number): Promise<Farm
   return data;
 }
 
+/** Отменяет весь прогон фермы (job + все его процессы). */
+export async function cancelFarmRun(projectId: number, jobId: number): Promise<void> {
+  await api.post(`/projects/${projectId}/recon/farm/run/${jobId}/cancel`);
+}
+
+/** Отменяет один запущенный шаг/процесс прогона по его id. */
+export async function cancelFarmStep(projectId: number, jobId: number, stepId: number): Promise<void> {
+  await api.post(`/projects/${projectId}/recon/farm/run/${jobId}/steps/${stepId}/cancel`);
+}
+
+/** Отменяет все активные (pending/running) прогоны фермы проекта. Возвращает число отменённых. */
+export async function cancelAllFarmRuns(projectId: number): Promise<number> {
+  const { data } = await api.post<{ cancelled: number }>(`/projects/${projectId}/recon/farm/run/cancel-all`);
+  return data.cancelled;
+}
+
 export async function getPorts(projectId: number, hostId: number): Promise<Port[]> {
   const { data } = await api.get<Port[]>(`/projects/${projectId}/hosts/${hostId}/ports`);
   return data;

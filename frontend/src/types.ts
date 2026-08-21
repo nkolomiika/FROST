@@ -481,6 +481,7 @@ export interface ReconFarmConfig {
 
 /** Один инструмент, работающий прямо сейчас в полном прогоне фермы. */
 export interface FarmRunStep {
+  id: number;
   tool: string;
   args: string;
   target: string;
