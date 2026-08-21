@@ -155,7 +155,13 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/gen-cert.sh:/docker-entrypoint.d/10-gen-cert.sh:ro
+      # Персист self-signed серта между пересозданиями контейнера: без этого
+      # каждый `deploy.sh recreate` генерит НОВЫЙ серт, и браузер теряет доверие
+      # (XHR к /api рвутся → «Server unavailable»), пока пользователь не примет
+      # серт заново. С volume серт стабилен между деплоями.
+      - nginx-certs:/etc/nginx/certs
 
 volumes:
   pgdata:
   miniodata:
+  nginx-certs:
