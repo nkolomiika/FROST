@@ -125,6 +125,7 @@ func DiscoverAndScan(ctx context.Context, domains []string, s Settings) ([]Scann
 			text := string(body)
 			sum := sha256.Sum256(body)
 			size := int32(len(body))
+			secrets, endpoints := MineJS(ctx, text, s.jsMineConfig())
 			scanned[i] = ScannedFile{
 				URL:         j.url,
 				Hostname:    j.domain,
@@ -132,8 +133,8 @@ func DiscoverAndScan(ctx context.Context, domains []string, s Settings) ([]Scann
 				SHA256:      hex.EncodeToString(sum[:]),
 				SizeBytes:   &size,
 				ContentType: ctype,
-				Secrets:     FindSecrets(text),
-				Endpoints:   FindPaths(text),
+				Secrets:     secrets,
+				Endpoints:   endpoints,
 			}
 			return nil
 		})

@@ -23,6 +23,12 @@ type Settings struct {
 	JSMaxConcurrency  int
 	JSMaxTotalFiles   int
 
+	// JS-майнинг внешними инструментами (jsluice + trufflehog).
+	JSMineEnabled bool
+	JsluiceBin    string
+	TrufflehogBin string
+	JSMineTimeout time.Duration
+
 	ServicesDetectEnabled  bool
 	ServicesDetectEngine   string
 	ServicesHttpxBin       string
@@ -48,4 +54,14 @@ func (s Settings) maxConcurrency() int {
 		return 1
 	}
 	return s.FarmMaxConcurrency
+}
+
+// jsMineConfig собирает конфиг внешнего JS-майнинга из Settings.
+func (s Settings) jsMineConfig() JSMineConfig {
+	return JSMineConfig{
+		Enabled:       s.JSMineEnabled,
+		JsluiceBin:    s.JsluiceBin,
+		TrufflehogBin: s.TrufflehogBin,
+		Timeout:       s.JSMineTimeout,
+	}
 }

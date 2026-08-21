@@ -28,6 +28,10 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 		JSDownloadTimeout: secs(c.JSFarmDownloadTimeoutSeconds),
 		JSMaxConcurrency:  c.JSFarmMaxConcurrency,
 		JSMaxTotalFiles:   c.JSFarmMaxTotalFiles,
+		JSMineEnabled:     c.JSMineEnabled,
+		JsluiceBin:        c.JsluiceBin,
+		TrufflehogBin:     c.TrufflehogBin,
+		JSMineTimeout:     secs(c.JSMineTimeoutSecs),
 
 		ServicesDetectEnabled:  c.ServicesDetectEnabled,
 		ServicesDetectEngine:   c.ServicesDetectEngine,

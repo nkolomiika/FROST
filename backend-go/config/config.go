@@ -104,6 +104,12 @@ type Config struct {
 	JSFarmMaxConcurrency         int     `env:"JS_FARM_MAX_CONCURRENCY" envDefault:"10"`
 	JSFarmMaxTotalFiles          int     `env:"JS_FARM_MAX_TOTAL_FILES" envDefault:"500"`
 
+	// --- JS-майнинг: jsluice (секреты+эндпоинты) + trufflehog (verified) ---
+	JSMineEnabled     bool    `env:"JS_MINE_ENABLED" envDefault:"true"`
+	JsluiceBin        string  `env:"JSLUICE_BIN" envDefault:"jsluice"`
+	TrufflehogBin     string  `env:"TRUFFLEHOG_BIN" envDefault:"trufflehog"`
+	JSMineTimeoutSecs float64 `env:"JS_MINE_TIMEOUT_SECONDS" envDefault:"30.0"`
+
 	// --- Определение технологий/CDN веб-порта ---
 	ServicesDetectEnabled        bool    `env:"SERVICES_DETECT_ENABLED" envDefault:"true"`
 	ServicesDetectEngine         string  `env:"SERVICES_DETECT_ENGINE" envDefault:"httpx"`
