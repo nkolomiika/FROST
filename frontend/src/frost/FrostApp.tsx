@@ -70,6 +70,9 @@ import {
   cancelFarmRun as apiCancelFarmRun,
   cancelFarmStep as apiCancelFarmStep,
   cancelAllFarmRuns as apiCancelAllFarmRuns,
+  getFarmReport as apiGetFarmReport,
+  importFarmReport as apiImportFarmReport,
+  clearFarmReport as apiClearFarmReport,
   createEndpoint as apiCreateEndpoint,
   getEndpoints as apiGetEndpoints,
   deleteEndpoint as apiDeleteEndpoint,
@@ -124,6 +127,9 @@ import type {
   JsFile as ApiJsFile,
   ReconFarmConfig as ApiReconFarmConfig,
   FarmRunJob as ApiFarmRunJob,
+  FarmReport as ApiFarmReport,
+  StagedHost as ApiStagedHost,
+  StagedPort as ApiStagedPort,
   Port as ApiPort,
   Service as ApiService,
   Vulnerability as ApiVulnerability,
@@ -321,6 +327,23 @@ interface FrostState {
   farmRunJob: ApiFarmRunJob | null;
   farmRunStarting: boolean;
   farmCancelling: boolean;
+  /** Отчёт фермы открыт как полная страница (как экспорт) — ревью застейдженных
+   *  результатов перед ручным импортом. Часть URL: /projects/{id}/farm/report. */
+  farmReportOpen: boolean;
+  /** Загруженный отчёт фермы. `null` = ещё не загружен. */
+  farmReport: ApiFarmReport | null;
+  farmReportLoading: boolean;
+  /** Идёт импорт/очистка отчёта — блокирует кнопки действий. */
+  farmReportBusy: boolean;
+  /** Выбранные для импорта застейдженные хосты (по staged id). */
+  farmReportSel: number[];
+  /** Фильтры отчёта: поиск по имени, источник, «только живые», «только с портами». */
+  farmReportQuery: string;
+  farmReportSource: string;
+  farmReportAliveOnly: boolean;
+  farmReportPortsOnly: boolean;
+  /** «Только не импортированные» — включён по умолчанию, чтобы видеть, что осталось. */
+  farmReportUnimportedOnly: boolean;
   /** Открытая карточка JS-файла (id) — как openHostId/openIp у хостов и адресов. */
   openJsFileId: number | null;
   jsTick: number;
@@ -537,6 +560,16 @@ const initialState: FrostState = {
   farmRunJob: null,
   farmRunStarting: false,
   farmCancelling: false,
+  farmReportOpen: false,
+  farmReport: null,
+  farmReportLoading: false,
+  farmReportBusy: false,
+  farmReportSel: [],
+  farmReportQuery: "",
+  farmReportSource: "",
+  farmReportAliveOnly: false,
+  farmReportPortsOnly: false,
+  farmReportUnimportedOnly: true,
   apiMembers: null,
   membersTick: 0,
   apiVulns: null,
@@ -716,6 +749,7 @@ function pathFor(s: {
   openIp: string | null;
   exportPageOpen: boolean;
   exportScope: ExportScope;
+  farmReportOpen: boolean;
 }): string {
   if (s.view === "profile") return s.profileTab === "account" ? "/profile" : `/profile/${s.profileTab}`;
   if (s.view === "workspaceMembers") return "/members";
@@ -724,6 +758,9 @@ function pathFor(s: {
     // Экспорт-страница рекона — собственный маршрут, чтобы «Назад» из неё
     // возвращал в тот же раздел рекона, а не в чужой.
     if (s.section === "hosts" && s.exportPageOpen) return `${base}/export/${s.exportScope}`;
+    // Страница отчёта фермы — собственный маршрут (как экспорт), чтобы «Назад»
+    // возвращал на страницу фермы, а не в чужой раздел рекона.
+    if (s.section === "hosts" && s.reconView === "farm" && s.farmReportOpen) return `${base}/farm/report`;
     if (s.section === "overview") return base;
     if (s.section === "hosts") {
       // An open host/IP card is the last path segment, so the card is deep-linkable
@@ -757,6 +794,7 @@ function navStateFromPath(path: string): Partial<FrostState> {
       openHostId: null,
       openIp: null,
       exportPageOpen: false,
+      farmReportOpen: false,
     };
     /** `/…/vulns/7` → 7; a missing or non-numeric segment → null. */
     const entityId = () => {
@@ -779,6 +817,8 @@ function navStateFromPath(path: string): Partial<FrostState> {
     if (seg === "ips") {
       return { ...base, section: "hosts", reconView: "ips", openIp: parts[3] != null ? decodeURIComponent(parts[3]) : null };
     }
+    // /projects/{id}/farm/report — страница отчёта фермы со своим URL.
+    if (seg === "farm" && parts[3] === "report") return { ...base, section: "hosts", reconView: "farm", farmReportOpen: true };
     if (seg === "endpoints" || seg === "js" || seg === "farm") return { ...base, section: "hosts", reconView: seg };
     // /projects/{id}/vulns/{vulnId} and /projects/{id}/notes/{noteId} — deep links.
     if (seg === "vulns") return { ...base, section: "vulns", openVulnId: entityId() };
@@ -1624,8 +1664,8 @@ export function FrostApp() {
      "Add hosts") — otherwise coming back would drop the user into a stale form
      instead of the list they asked for. */
   const setSection = (s: SectionId) =>
-    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
-  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, exportPageOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
 
   /* ---- URL ↔ navigation-state sync (deep links to sections / projects) ----
      Two effects mirror each other: URL → state, and state → URL. They must never
@@ -1676,10 +1716,11 @@ export function FrostApp() {
       openIp: state.openIp,
       exportPageOpen: state.exportPageOpen,
       exportScope: state.exportScope,
+      farmReportOpen: state.farmReportOpen,
     });
     if (p !== location.pathname) navigate(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, location.pathname]);
+  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, state.farmReportOpen, location.pathname]);
   /* Loaded as soon as the project opens, like every other collection — the tab's
      counter has to be right before the tab is ever visited. Entering the tab
      re-fetches, since the feed is a shared audit trail that others add to. */
@@ -1930,6 +1971,57 @@ export function FrostApp() {
   const openReconExport = (scope: ExportScope) =>
     setState({ exportPageOpen: true, exportScope: scope, exportFormat: "list", exportText: exportLinesFor(scope).join("\n") });
   const closeReconExport = () => setState({ exportPageOpen: false, exportText: "" });
+
+  // ---- отчёт фермы: ревью застейдженных результатов и ручной импорт ----
+  // Тянет отчёт в state. Используется при открытии страницы, «Обновить» и после
+  // импорта/очистки. Не трогает выбор, если явно не сбросить его вызывающим.
+  const loadFarmReport = async () => {
+    const pid = state.openProjectId;
+    if (pid == null) return;
+    setState({ farmReportLoading: true });
+    try {
+      const report = await apiGetFarmReport(pid);
+      setState({ farmReport: report, farmReportLoading: false });
+    } catch (e) {
+      setState({ farmReportLoading: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't load the farm report")), "error");
+    }
+  };
+  // Открытие только выставляет флаг + сбрасывает выбор; загрузку делает эффект
+  // ниже (он же ловит прямую ссылку /farm/report и кнопку «Назад»).
+  const openFarmReport = () => setState({ farmReportOpen: true, farmReportSel: [] });
+  const closeFarmReport = () => setState({ farmReportOpen: false, farmReportSel: [] });
+  // Импорт выбранных застейдженных хостов. По успеху: тост, сброс выбора, перечит.
+  const importFarmSelected = async (hostIds: number[]) => {
+    const pid = state.openProjectId;
+    if (pid == null || hostIds.length === 0 || state.farmReportBusy) return;
+    setState({ farmReportBusy: true });
+    try {
+      const imported = await apiImportFarmReport(pid, hostIds);
+      setState({ farmReportBusy: false, farmReportSel: [] });
+      pushToast(`${imported} ${t("imported")}`, "success");
+      void loadFarmReport();
+    } catch (e) {
+      setState({ farmReportBusy: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't import the selected hosts")), "error");
+    }
+  };
+  // Очистка всего отчёта — с подтверждением (действие необратимо).
+  const clearFarmReport = async () => {
+    const pid = state.openProjectId;
+    if (pid == null || state.farmReportBusy) return;
+    if (!window.confirm(t("Clear the farm report? Staged results will be discarded."))) return;
+    setState({ farmReportBusy: true });
+    try {
+      const cleared = await apiClearFarmReport(pid);
+      setState({ farmReportBusy: false, farmReportSel: [] });
+      pushToast(`${cleared} ${t("cleared")}`, "info");
+      void loadFarmReport();
+    } catch (e) {
+      setState({ farmReportBusy: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't clear the farm report")), "error");
+    }
+  };
   // Из ленты активности «показать все» у фарм-карточки открывает recon-экспорт
   // соответствующего типа (переключая раздел на Recon).
   const openFarmExport = (scope: ExportScope) => {
@@ -3512,6 +3604,16 @@ export function FrostApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.exportPageOpen, state.exportScope, state.hostQuery, state.hostFilters, state.hostCfFilter, state.ipQuery, state.ipCfFilter, state.epHostQuery, state.epPathQuery, state.epMethods, state.jsQuery, state.jsSecretsOnly]);
 
+  /* Отчёт фермы грузится один раз при открытии страницы (в т.ч. по прямой ссылке
+     /farm/report и по кнопке «Назад»). Обновление вручную — кнопкой Refresh, и
+     сам собой после импорта/очистки; поэтому единственная зависимость — факт
+     открытия страницы и смена проекта. */
+  useEffect(() => {
+    if (!state.farmReportOpen || state.openProjectId == null) return;
+    void loadFarmReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.farmReportOpen, state.openProjectId]);
+
   /* Список целей скана наполняется один раз при открытии страницы и дальше живёт
      сам: фильтры раздела «Хосты» на него не влияют (см. jsScanDomains), а
      перечитывать его на фоновом обновлении хостов нельзя — это стёрло бы правки
@@ -3539,6 +3641,8 @@ export function FrostApp() {
     // which makes the middle crumb the way back to the list.
     sec === "hosts" && state.exportPageOpen
       ? t("Export")
+      : sec === "hosts" && rv === "farm" && state.farmReportOpen
+      ? t("Report")
       : sec === "hosts" && state.hostImportOpen
         ? t("Add hosts")
         : sec === "hosts" && state.ipImportOpen
@@ -4089,15 +4193,21 @@ export function FrostApp() {
               </div>
             )}
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
-              {sec === "hosts" && rv === "farm" && (
-                <button
-                  className="clk"
-                  onClick={runFarmWithSettings}
-                  disabled={state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")}
-                  style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
-                >
-                  <Icon name="activity" size={16} color="var(--fr-on-accent)" sw={2.4} />{t("Run")}
-                </button>
+              {sec === "hosts" && rv === "farm" && !state.farmReportOpen && (
+                <>
+                  {/* Слева от [Run] — вход в отчёт: ревью застейдженных результатов. */}
+                  <button className="clk" onClick={openFarmReport} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="server" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("View report")}
+                  </button>
+                  <button
+                    className="clk"
+                    onClick={runFarmWithSettings}
+                    disabled={state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")}
+                    style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+                  >
+                    <Icon name="activity" size={16} color="var(--fr-on-accent)" sw={2.4} />{t("Run")}
+                  </button>
+                </>
               )}
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
                 <>
@@ -4757,29 +4867,26 @@ export function FrostApp() {
 
     return (
       <div className="route">
-        {/* Настройки авто-сохраняются при запуске (кнопка Run — в шапке раздела).
-            Здесь остаётся только подсказка про заморозку во время прогона. */}
-        {runLocked && (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 16, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>
-            <Icon name="lock" size={13} color="var(--fr-text-faint)" />{t("Settings are locked while a run is in progress")}
-          </div>
-        )}
-
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* Run — the headline action: one click runs the whole stack. */}
+          {/* Run — the headline action: one click runs the whole stack. While a run
+              is in flight this panel is the live process manager (kill per-process /
+              stop-run / progress). */}
           {renderFarmRun()}
 
-          {/* Global — the only knobs the user touches; tools are chosen by FROST. */}
-          {card("settings", t("Run settings"), t("How the run behaves — FROST picks the tools and wordlists for you"),
-            <div style={{ opacity: runLocked ? 0.5 : 1, pointerEvents: runLocked ? "none" : "auto", transition: "opacity .2s" }}>
-              {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
-              {row(t("Wordlist size"), t("Bigger lists find more subdomains but take longer — FROST maps this to a bundled list."), seg(cfg.wordlist_size, ["small", "medium", "large"] as const, (s) => setFarmField("wordlist_size", s)))}
-              {numRow("rate_limit", t("Rate limit"), t("Requests per second"), 1, 500)}
-              {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100)}
-              {row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))))}
-              {numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)}
-            </div>
-          )}
+          {/* Global — the only knobs the user touches; tools are chosen by FROST.
+              Во время прогона карточка настроек скрыта целиком: панель выше
+              становится диспетчером запущенных процессов, а не формой настроек. */}
+          {!runLocked &&
+            card("settings", t("Run settings"), t("How the run behaves — FROST picks the tools and wordlists for you"),
+              <div>
+                {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
+                {row(t("Wordlist size"), t("Bigger lists find more subdomains but take longer — FROST maps this to a bundled list."), seg(cfg.wordlist_size, ["small", "medium", "large"] as const, (s) => setFarmField("wordlist_size", s)))}
+                {numRow("rate_limit", t("Rate limit"), t("Requests per second"), 1, 500)}
+                {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100)}
+                {row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))))}
+                {numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)}
+              </div>
+            )}
         </div>
       </div>
     );
@@ -4911,8 +5018,197 @@ export function FrostApp() {
     );
   };
 
+  /* Небольшие плашки с портами застейдженного хоста — тот же визуал, что у
+     portPills в списке хостов: `порт/протокол` + сервис (+версия). Показываем не
+     больше нескольких, остальное сворачиваем в «+N». */
+  const stagedPortPills = (ports: ApiStagedPort[]) => {
+    if (ports.length === 0) return <span style={{ color: "var(--fr-text-faint)", fontSize: 12.5 }}>—</span>;
+    const CAP = 6;
+    const shown = ports.slice(0, CAP);
+    const extra = ports.length - shown.length;
+    const palette = PORT as Record<string, { bg: string; color: string }>;
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+        {shown.map((p, i) => {
+          const pc = palette[p.state] ?? PORT.closed;
+          return (
+            <span key={i} className="mono" title={p.http_status != null ? `HTTP ${p.http_status}` : undefined} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: pc.bg, color: pc.color }}>
+              <span>{p.port}/{p.proto}</span>
+              {p.service && <span style={{ opacity: 0.72, fontWeight: 600 }}>{p.service}{p.version ? ` ${p.version}` : ""}</span>}
+            </span>
+          );
+        })}
+        {extra > 0 && (
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)" }}>+{extra}</span>
+        )}
+      </div>
+    );
+  };
+
+  /* Страница отчёта фермы: ревью застейдженных результатов (как страница экспорта
+     по структуре — фильтры сверху, карточка со списком, действия внизу). Ферма
+     ничего не добавляет в проект сама — здесь пользователь отбирает нужное и
+     импортирует вручную. */
+  const renderFarmReport = () => {
+    const report = state.farmReport;
+    const loading = state.farmReportLoading;
+    const busy = state.farmReportBusy;
+    const summary = report?.summary ?? { hosts_total: 0, alive: 0, ports_total: 0, imported: 0 };
+    const allHosts: ApiStagedHost[] = report?.hosts ?? [];
+    // Набор источников выводим из данных — фильтр по источнику всегда точно
+    // соответствует тому, что реально пришло в отчёте.
+    const sources = Array.from(new Set(allHosts.map((h) => h.source).filter(Boolean))).sort();
+
+    const q = state.farmReportQuery.trim().toLowerCase();
+    const filtered = allHosts.filter((h) => {
+      if (q && !(h.hostname.toLowerCase().includes(q) || (h.ip ?? "").toLowerCase().includes(q))) return false;
+      if (state.farmReportSource && h.source !== state.farmReportSource) return false;
+      if (state.farmReportAliveOnly && !h.alive) return false;
+      if (state.farmReportPortsOnly && h.ports.length === 0) return false;
+      if (state.farmReportUnimportedOnly && h.imported) return false;
+      return true;
+    });
+
+    // Выбирать можно только ещё не импортированные строки текущего фильтра.
+    const selectable = filtered.filter((h) => !h.imported);
+    const selSet = new Set(state.farmReportSel);
+    const selectedInView = selectable.filter((h) => selSet.has(h.id)).length;
+    const allSelected = selectable.length > 0 && selectedInView === selectable.length;
+    const selCount = state.farmReportSel.length;
+
+    const toggleRow = (id: number) =>
+      setState((s) => ({ farmReportSel: s.farmReportSel.includes(id) ? s.farmReportSel.filter((x) => x !== id) : [...s.farmReportSel, id] }));
+    // Select-all уважает текущий фильтр и не трогает уже импортированные.
+    const toggleAll = () => {
+      const ids = selectable.map((h) => h.id);
+      if (allSelected) {
+        const drop = new Set(ids);
+        setState((s) => ({ farmReportSel: s.farmReportSel.filter((x) => !drop.has(x)) }));
+      } else {
+        setState((s) => ({ farmReportSel: Array.from(new Set([...s.farmReportSel, ...ids])) }));
+      }
+    };
+
+    const grid = "30px minmax(0,1.25fr) minmax(0,1.7fr) 128px 108px";
+    const stat = (label: string, n: number) => (
+      <div key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 7, padding: "6px 14px", borderRadius: 20, background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)" }}>
+        <span className="mono" style={{ fontSize: 15, fontWeight: 800, color: "var(--fr-text)" }}>{n}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{label}</span>
+      </div>
+    );
+
+    return (
+      <div className="route">
+        {/* Фильтры — тот же ряд, что у списка хостов: поиск слева, пилюли справа. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
+          {searchBox(t("Filter by hostname or IP…"), state.farmReportQuery, (v) => setState({ farmReportQuery: v }))}
+          <div style={{ flex: 1 }} />
+          {sources.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Source")}</span>
+              {filterPill(t("All"), state.farmReportSource === "", () => setState({ farmReportSource: "" }))}
+              {sources.map((s) => filterPill(s, state.farmReportSource === s, () => setState((st) => ({ farmReportSource: st.farmReportSource === s ? "" : s }))))}
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {filterPill(t("Alive only"), state.farmReportAliveOnly, () => toggle("farmReportAliveOnly"))}
+            {filterPill(t("Has ports"), state.farmReportPortsOnly, () => toggle("farmReportPortsOnly"))}
+            {filterPill(t("Not imported"), state.farmReportUnimportedOnly, () => toggle("farmReportUnimportedOnly"))}
+          </div>
+        </div>
+
+        <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 300px)" }}>
+          {/* Шапка: назад к настройкам фермы, заголовок, ручное обновление. */}
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <span className="clk" onClick={closeFarmReport} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{t("Farm report")}</h2>
+            <div style={{ flex: 1 }} />
+            <button className="clk" onClick={() => void loadFarmReport()} disabled={loading} style={{ height: 38, padding: "0 15px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>
+              <Icon name="activity" size={15} sw={2.2} color="var(--fr-accent-2)" />{loading ? t("Refreshing…") : t("Refresh")}
+            </button>
+          </div>
+
+          {/* Сводка отчёта — маленькие статы. */}
+          <div style={{ flex: "none", display: "flex", gap: 10, flexWrap: "wrap", padding: "14px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+            {stat(t("Hosts"), summary.hosts_total)}
+            {stat(t("Alive"), summary.alive)}
+            {stat(t("Ports"), summary.ports_total)}
+            {stat(t("Imported"), summary.imported)}
+          </div>
+
+          {/* Список застейдженных хостов (прокручивается внутри карточки). */}
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+            {loading && allHosts.length === 0 ? (
+              <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading the farm report…")}</div>
+            ) : allHosts.length === 0 ? (
+              <div style={{ padding: "56px 40px", textAlign: "center" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 12, background: "var(--fr-accent-soft)", marginBottom: 14 }}>
+                  <Icon name="server" size={22} color="var(--fr-accent)" sw={2} />
+                </div>
+                <div style={{ font: "800 16px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{t("No farm results yet")}</div>
+                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 420, margin: "0 auto", lineHeight: 1.5 }}>{t("Run the farm to collect subdomains, hosts and ports here for review.")}</div>
+              </div>
+            ) : (
+              <>
+                {/* Заголовок таблицы с select-all (уважает фильтр, пропускает импортированные). */}
+                <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={!canEditProject || selectable.length === 0} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectable.length === 0 ? "default" : "pointer" }} />
+                  <div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Source")}</div><div />
+                </div>
+                {filtered.map((h) => {
+                  const on = selSet.has(h.id);
+                  const selectableRow = !h.imported && canEditProject;
+                  return (
+                    <div
+                      key={h.id}
+                      className={selectableRow ? "prow clk" : "prow"}
+                      onClick={selectableRow ? () => toggleRow(h.id) : undefined}
+                      style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: h.imported ? 0.55 : 1 }}
+                    >
+                      <input type="checkbox" checked={on} disabled={h.imported || !canEditProject} onChange={() => toggleRow(h.id)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                          <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: h.alive ? "var(--fr-success)" : "var(--fr-danger)" }} />
+                          <span className="mono hostname" style={{ font: "700 13.5px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.hostname}</span>
+                        </div>
+                        {h.ip && <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)", marginTop: 3, marginLeft: 15 }}>{h.ip}</div>}
+                      </div>
+                      <div style={{ minWidth: 0 }}>{stagedPortPills(h.ports)}</div>
+                      <div style={{ minWidth: 0 }}>
+                        {h.source ? <span className="mono" style={{ display: "inline-block", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)" }}>{h.source}</span> : <span style={{ color: "var(--fr-text-faint)" }}>—</span>}
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        {h.imported && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 9px", background: "var(--fr-success-soft)", color: "var(--fr-success)" }}><Icon name="check" size={12} color="var(--fr-success)" sw={2.6} />{t("imported")}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No staged hosts match these filters.")}</div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Действия: очистить отчёт (слева, danger) и импортировать выбранное (справа). */}
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "14px 22px", borderTop: "1px solid var(--fr-divider)" }}>
+            <button className="clk" onClick={() => void clearFarmReport()} disabled={busy || allHosts.length === 0} style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: busy || allHosts.length === 0 ? "not-allowed" : "pointer", opacity: busy || allHosts.length === 0 ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Icon name="trash" size={15} color="var(--fr-danger)" sw={2.2} />{t("Clear report")}
+            </button>
+            <div style={{ flex: 1 }} />
+            {selCount > 0 && <span style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-3)" }}>{selCount} {t("selected")}</span>}
+            <button className="clk" onClick={() => void importFarmSelected(state.farmReportSel)} disabled={busy || selCount === 0 || !canEditProject} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: busy || selCount === 0 || !canEditProject ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: busy || selCount === 0 || !canEditProject ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Icon name="download" size={15} color="var(--fr-on-accent)" sw={2.4} />{t("Import selected")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderRecon = () => {
     if (state.exportPageOpen) return renderExport();
+    if (rv === "farm" && state.farmReportOpen) return canEditProject ? renderFarmReport() : renderNoAccessPage("The Farm report is available to project leads and admins.");
     if (rv === "farm") return canEditProject ? renderFarmConfig() : renderNoAccessPage("The Farm settings are available to project leads and admins.");
     if (rv === "js" && state.jsScanSetupOpen) return renderJsScanSetup();
     if (rv === "ips") {
