@@ -4901,7 +4901,7 @@ export function FrostApp() {
           {/* Status / severity are multi-select: pills toggle, several can be held at
               once, and clearing the last one falls back to "All". Driven by the token
               lists so they cannot drift from the backend's vocabularies. */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", marginLeft: "auto" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 18px", alignItems: "flex-start", justifyContent: "flex-end", marginLeft: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
               {filterPill(t("All"), vfS.length === 0, () => setState({ vulnFilterStatuses: [] }))}
