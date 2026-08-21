@@ -2,6 +2,7 @@ services:
   backend:
     build:
       context: ./backend-go
+      target: runtime
       args:
         CMD: api
     # Go-API: сам применяет goose-миграции и создаёт стартового админа на старте.
@@ -29,6 +30,7 @@ services:
   mail-worker:
     build:
       context: ./backend-go
+      target: runtime
       args:
         CMD: mail-worker
     env_file:
@@ -43,6 +45,7 @@ services:
   recon-worker:
     build:
       context: ./backend-go
+      target: recon
       args:
         CMD: recon-worker
     env_file:
