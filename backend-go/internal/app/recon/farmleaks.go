@@ -318,6 +318,7 @@ func githubLeakRecord(sec reconnet.GithubSecret) LeakRecord {
 			"file":     sec.File,
 			"link":     sec.Link,
 			"commit":   sec.Commit,
+			"line":     sec.Line,
 			"detector": sec.Detector,
 			"verified": sec.Verified,
 		},

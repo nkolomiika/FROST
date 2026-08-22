@@ -57,6 +57,7 @@ type Settings struct {
 
 	PortscanNmapBin    string
 	PortscanTopPorts   int
+	PortscanPorts      string // явный список портов (-p); переопределяет TopPorts
 	PortscanTimeout    time.Duration
 	PortscanMaxTargets int
 

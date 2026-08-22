@@ -108,10 +108,18 @@ type NmapPhase struct {
 	Args []string
 }
 
-// NmapPhases — прогрессивный план фаз farm-скана. Фаза 1 (быстрый первый результат)
-// — top-100 с лёгким -sV; фаза 2 — top-1000 с -sV; deep=true (port_scan_scope=="all")
-// добавляет финальную -p- фазу. Все фазы несут -sV — сервисы обязаны опознаваться.
-func NmapPhases(deep bool) []NmapPhase {
+// WebPorts — курируемый набор частых веб-портов (port_scan_scope=="web"): HTTP(S),
+// прокси, дев-серверы, панели/консоли. Через -p сканим точечно и быстро.
+const WebPorts = "80,443,8080,8443,8000,8008,8081,8088,8888,3000,3001,4443,5000,5601,7001,7002,8161,8180,8834,8983,9000,9090,9200,9443,10000,2082,2083,2086,2087"
+
+// NmapPhases — прогрессивный план фаз farm-скана. ports!="" → ОДНА фаза по явному
+// списку портов (-p): и «web»-набор, и кастомный ввод пользователя идут сюда. Иначе:
+// фаза 1 — top-100 (-F); фаза 2 — top-1000; deep=true (scope=="all") добавляет -p-.
+// Все фазы несут -sV — сервисы обязаны опознаваться.
+func NmapPhases(deep bool, ports string) []NmapPhase {
+	if strings.TrimSpace(ports) != "" {
+		return []NmapPhase{{Name: "ports", Args: []string{"-Pn", "-T4", "-p", ports, "--open", "-sV"}}}
+	}
 	phases := []NmapPhase{
 		{Name: "fast", Args: []string{"-Pn", "-T4", "-F", "--open", "-sV", "--version-light"}},
 		{Name: "top1000", Args: []string{"-Pn", "-T4", "--top-ports", "1000", "--open", "-sV"}},
@@ -194,7 +202,9 @@ func DefaultNmapScanner(s Settings) PortScanner {
 		c, cancel := context.WithTimeout(ctx, s.PortscanTimeout)
 		defer cancel()
 		args := []string{"-Pn", "-n", "-T4", "--open", "-oX", "-"}
-		if s.PortscanTopPorts > 0 {
+		if p := strings.TrimSpace(s.PortscanPorts); p != "" {
+			args = append(args, "-p", p) // явный список (web/кастом)
+		} else if s.PortscanTopPorts > 0 {
 			args = append(args, "--top-ports", strconv.Itoa(s.PortscanTopPorts))
 		} else {
 			args = append(args, "-p-")

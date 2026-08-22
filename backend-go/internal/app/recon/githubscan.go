@@ -109,6 +109,7 @@ func (s *Service) runGithubScan(ctx context.Context, claim *JobClaim) (any, erro
 				"file":     sec.File,
 				"link":     sec.Link,
 				"commit":   sec.Commit,
+				"line":     sec.Line,
 				"detector": sec.Detector,
 				"verified": sec.Verified,
 			},

@@ -446,7 +446,9 @@ export interface ReconFarmConfig {
   wordlist_size: "small" | "medium" | "large";
   rate_limit: number;
   concurrency: number;
-  port_scan_scope: "top1000" | "all";
+  port_scan_scope: "top1000" | "web" | "all";
+  /** Явный список портов nmap (напр. "80,443,8080,3000-3010") — переопределяет scope. */
+  port_scan_ports: string;
   crawl_depth: number;
   // Stage toggles — какие стадии полного прогона включены. Все по умолчанию true.
   // Выключенная стадия пропускается прогоном, а её под-ручки прячутся в UI.

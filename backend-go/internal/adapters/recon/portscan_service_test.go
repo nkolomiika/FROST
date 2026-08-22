@@ -47,10 +47,10 @@ func TestParseNmapServicePorts_garbage(t *testing.T) {
 
 // port_scan_scope=="all" добавляет финальную -p- фазу; каждая фаза несёт -sV.
 func TestNmapPhases_deepAddsFullScan(t *testing.T) {
-	if got := len(NmapPhases(false)); got != 2 {
+	if got := len(NmapPhases(false, "")); got != 2 {
 		t.Fatalf("shallow phases = %d, want 2", got)
 	}
-	deep := NmapPhases(true)
+	deep := NmapPhases(true, "")
 	if len(deep) != 3 || deep[2].Name != "full" {
 		t.Fatalf("deep phases = %+v, want 3 ending in full (-p-)", deep)
 	}

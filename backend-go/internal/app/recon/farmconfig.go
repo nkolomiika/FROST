@@ -17,7 +17,8 @@ type FarmConfig struct {
 	WordlistSize  string `json:"wordlist_size"`   // "small" | "medium" | "large" (файл выбирает FROST)
 	RateLimit     int    `json:"rate_limit"`      // rps
 	Concurrency   int    `json:"concurrency"`     // параллельных воркеров
-	PortScanScope string `json:"port_scan_scope"` // "top1000" | "all"
+	PortScanScope string `json:"port_scan_scope"` // "top1000" | "web" | "all"
+	PortScanPorts string `json:"port_scan_ports"` // явный список портов (переопределяет scope)
 	CrawlDepth    int    `json:"crawl_depth"`     // глубина краула (1..10)
 
 	// Выбор словаря брута поддоменов. Приоритет разрешения (см. Materialize):
@@ -104,6 +105,7 @@ func DefaultFarmConfig() FarmConfig {
 		RateLimit:     20,
 		Concurrency:   10,
 		PortScanScope: "top1000",
+		PortScanPorts: "",
 		CrawlDepth:    3,
 
 		SubdomainWordlistID:   0,
@@ -173,9 +175,12 @@ func (c *FarmConfig) Sanitize() {
 	default:
 		c.WordlistSize = "medium"
 	}
-	if c.PortScanScope != "all" {
+	switch c.PortScanScope {
+	case "all", "web", "top1000":
+	default:
 		c.PortScanScope = "top1000"
 	}
+	c.PortScanPorts = sanitizePortList(c.PortScanPorts)
 	switch c.EndpointsMode {
 	case "passive", "active", "both":
 	default:
@@ -273,6 +278,34 @@ func normalizeEmailInput(v string) (string, bool) {
 		return "", false
 	}
 	return v, true
+}
+
+// sanitizePortList чистит пользовательский ввод портов до безопасного nmap -p списка:
+// только цифры/запятые/дефисы (диапазоны), пробелы/переводы строк → запятая, схлопывание
+// и обрезка краёв. Идёт в argv как значение -p (не в шелл) — плюс защита от мусора.
+func sanitizePortList(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9', r == ',', r == '-':
+			b.WriteRune(r)
+		case r == ' ' || r == '\n' || r == '\t' || r == ';':
+			b.WriteRune(',')
+		}
+	}
+	out := b.String()
+	for strings.Contains(out, ",,") {
+		out = strings.ReplaceAll(out, ",,", ",")
+	}
+	out = strings.Trim(out, ",-")
+	if len(out) > 400 {
+		out = out[:400]
+	}
+	return out
 }
 
 // normalizeCompanyInput — название компании для LinkedIn-энумерации: непустое, не

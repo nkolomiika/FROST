@@ -30,6 +30,7 @@ type GithubSecret struct {
 	File     string
 	Link     string
 	Commit   string
+	Line     int64
 }
 
 // GithubTarget — разобранная цель скана: либо конкретный repo-URL, либо org/user.
@@ -144,6 +145,7 @@ func parseGithubOutput(out []byte) []GithubSecret {
 						Repository string `json:"repository"`
 						File       string `json:"file"`
 						Commit     string `json:"commit"`
+						Line       int64  `json:"line"`
 					} `json:"Github"`
 				} `json:"Data"`
 			} `json:"SourceMetadata"`
@@ -160,6 +162,7 @@ func parseGithubOutput(out []byte) []GithubSecret {
 			File:     gh.File,
 			Link:     gh.Link,
 			Commit:   gh.Commit,
+			Line:     gh.Line,
 		})
 	}
 	return res

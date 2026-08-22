@@ -5736,8 +5736,9 @@ export function FrostApp() {
         : cfg.endpoints_wordlist_path && wlBundled.some((b) => b.path === cfg.endpoints_wordlist_path)
           ? `path:${cfg.endpoints_wordlist_path}`
           : "none";
+    // Пикер ffuf показывается ТОЛЬКО в active/both, где дир-фаззинг и есть смысл
+    // прогона — поэтому варианта «None · skip ffuf» тут нет (иначе active без фаззинга).
     const ffufWlOptions: FrostSelectOption[] = [
-      { value: "none", label: t("None · skip ffuf"), desc: t("Don't run directory fuzzing") },
       ...bundledOpts(ffufBundled),
       ...customOpts(),
     ];
@@ -5970,11 +5971,20 @@ export function FrostApp() {
                   {numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)}
                 </>
               )}
-              {stage("doc", t("JS mining"), t("Mine JavaScript for secrets and hidden endpoints."), "stage_js",
-                <div style={{ padding: "13px 0", fontSize: 12.5, color: "var(--fr-text-3)", lineHeight: 1.5 }}>{t("Scans linked scripts for secrets and endpoints — no extra settings.")}</div>
-              )}
+              {stage("doc", t("JS mining"), t("Mine JavaScript for secrets and hidden endpoints."), "stage_js", null)}
               {stage("plug", t("Port scan"), t("Probe open ports on discovered hosts."), "stage_ports",
-                row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))), true)
+                <>
+                  {row(t("Port scan scope"), t("Top 1000, common web ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "web", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : s === "web" ? t("Web ports") : t("All ports"))))}
+                  {row(t("Custom ports"), t("Optional — e.g. 80,443,8080,3000-3010. Overrides the scope above."),
+                    <input
+                      className="finp mono"
+                      placeholder="80,443,8080,…"
+                      value={(cfg.port_scan_ports as string) ?? ""}
+                      onChange={(e) => setFarmField("port_scan_ports", e.target.value)}
+                      style={{ width: 260, font: "600 13px 'JetBrains Mono',monospace" }}
+                    />,
+                    true)}
+                </>
               )}
               {/* Leaks и Account search — ДВА независимых этапа со своими тумблерами,
                   но оба пишут находки в единый Leaks-стор. */}
@@ -5983,21 +5993,7 @@ export function FrostApp() {
               )}
               {stage("idcard", t("Account search"), t("Breach/OSINT by domain, email, and employees enumerated from LinkedIn — free out of the box (ProxyNova); more sources activate with API keys."), "stage_account_search",
                 <>
-                  {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"), false, {
-                    label: t("Use project domains"),
-                    onClick: () => {
-                      // Корневые домены проекта (без IP-строк и вложенных поддоменов) —
-                      // это осмысленные цели domain-пробива утечек. Мёржим с уже введёнными.
-                      const roots = hosts
-                        .filter((h) => h.origin !== "ip" && !isNestedSubdomain(h))
-                        .map((h) => h.host.trim().toLowerCase())
-                        .filter(Boolean);
-                      const existing = ((cfg.leaks_domains as string[] | null) ?? []).map((s) => s.trim()).filter(Boolean);
-                      const merged = [...new Set([...existing, ...roots])];
-                      setFarmField("leaks_domains", merged);
-                      if (roots.length === 0) pushToast(t("No project domains yet — add hosts first."), "info");
-                    },
-                  })}
+                  {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"))}
                   {leaksArea("leaks_companies", t("Companies (LinkedIn)"), t("Acme Corp — one per line · finds employees, guesses emails from Domains above"))}
                   {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"), true)}
                 </>,
@@ -7150,7 +7146,9 @@ export function FrostApp() {
       const d = (l.detail ?? {}) as Record<string, unknown>;
       if (l.source === "github") {
         const repo = d.repo ?? (Array.isArray(d.repos) ? d.repos[0] : "");
-        return String(repo || d.link || "");
+        // Точное место утечки: repo · file:Lline (ссылка ведёт на этот коммит/строку).
+        const loc = [d.file, d.line ? `L${d.line}` : ""].filter(Boolean).join(":");
+        return [repo, loc].filter(Boolean).map(String).join(" · ") || String(d.link || "");
       }
       if (l.source === "linkedin") {
         return [d.company, d.headline].filter(Boolean).map(String).join(" · ");
@@ -7158,6 +7156,11 @@ export function FrostApp() {
       const breaches = d.breaches;
       if (Array.isArray(breaches) && breaches.length) return breaches.slice(0, 3).map(String).join(", ") + (breaches.length > 3 ? "…" : "");
       return String(d.breach ?? d.database ?? d.domain ?? "");
+    };
+    // Прямая ссылка на место находки (github: blob-URL коммита с якорем строки).
+    const resourceLink = (l: ApiLeak): string => {
+      const link = ((l.detail ?? {}) as Record<string, unknown>).link;
+      return typeof link === "string" && /^https?:\/\//.test(link) ? link : "";
     };
 
     const stat = (label: string, n: number) => (
@@ -7235,7 +7238,15 @@ export function FrostApp() {
                       <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.kind}</div>
                       <div style={{ minWidth: 0 }}>
                         <div className="mono" title={l.subject} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.subject || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
-                        {(() => { const rl = resourceLabel(l); return rl ? <div className="mono" title={rl} style={{ fontSize: 11, color: "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{rl}</div> : null; })()}
+                        {(() => {
+                          const rl = resourceLabel(l);
+                          if (!rl) return null;
+                          const href = resourceLink(l);
+                          const st: CSSProperties = { fontSize: 11, color: href ? "var(--fr-accent-2)" : "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2, display: "block", textDecoration: href ? "underline" : "none" };
+                          return href
+                            ? <a className="mono" href={href} target="_blank" rel="noreferrer" title={href} onClick={stop} style={st}>{rl}</a>
+                            : <div className="mono" title={rl} style={st}>{rl}</div>;
+                        })()}
                       </div>
                       {/* Значение маскируется; клик по глазу раскрывает (не выбирая строку). */}
                       <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>

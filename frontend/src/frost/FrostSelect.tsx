@@ -131,14 +131,16 @@ export function FrostSelect({ value, options, onChange, id, placeholder, searcha
           borderRadius: 12,
           boxShadow: "0 20px 54px var(--fr-shadow-strong)",
           zIndex: 50,
-          padding: 6,
+          // Без верхнего паддинга при поиске: иначе прокрученные опции видны в этой
+          // 6px-полосе НАД липкой строкой поиска. Верхний отступ даёт сама строка.
+          padding: searchable ? "0 6px 6px" : 6,
           transformOrigin: "top",
           maxHeight: searchable ? 340 : undefined,
           overflowY: searchable ? "auto" : undefined,
         }}
       >
         {searchable && (
-          <div style={{ position: "sticky", top: 0, background: "var(--fr-surface)", padding: "2px 2px 6px", zIndex: 1 }}>
+          <div style={{ position: "sticky", top: 0, background: "var(--fr-surface)", padding: "6px 2px", zIndex: 1 }}>
             <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
               <Icon name="search" size={14} color="var(--fr-text-faint)" style={{ position: "absolute", left: 10, pointerEvents: "none" }} />
               <input

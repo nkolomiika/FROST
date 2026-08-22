@@ -75,6 +75,13 @@ func (s *Service) runSettings(cfg FarmConfig) reconnet.Settings {
 	} else {
 		rs.PortscanTopPorts = 1000
 	}
+	// Явные порты (-p): кастомный список пользователя > web-набор. Переопределяют
+	// --top-ports/-p- (см. NmapPhases/DefaultNmapScanner).
+	if p := strings.TrimSpace(cfg.PortScanPorts); p != "" {
+		rs.PortscanPorts = p
+	} else if cfg.PortScanScope == "web" {
+		rs.PortscanPorts = reconnet.WebPorts
+	}
 	return rs
 }
 
@@ -568,7 +575,7 @@ func (s *Service) runFarmPorts(ctx context.Context, runSvc *Service, cfg FarmCon
 	if scanner == nil {
 		scanner = reconnet.DefaultNmapServiceScanner(rs)
 	}
-	phases := reconnet.NmapPhases(rs.PortscanTopPorts == 0) // scope=="all" → +фаза -p-
+	phases := reconnet.NmapPhases(rs.PortscanTopPorts == 0, rs.PortscanPorts) // scope=="all" → +фаза -p-
 	limit := cfg.Concurrency
 	if limit < 1 {
 		limit = 1
