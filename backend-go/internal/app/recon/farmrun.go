@@ -250,7 +250,9 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 			return finalizeCancelled()
 		}
 	} else {
-		// Стадия поддоменов выключена: работаем по существующим хостам проекта.
+		// Стадия поддоменов выключена: пере-скан известных хостов проекта. Резолв+
+		// liveness (dnsx/httpx) НЕ гоняем — берём готовые хосты как есть; стадии
+		// JS/эндпоинтов/портов работают по ним напрямую (фетчи сами отсеют мёртвые).
 		prog.update(func(p *RunProgress) { p.Stage = "resolve"; p.Percent = pctResolve })
 		existing, herr := s.store.ProjectAllHostnames(ctx, claim.ProjectID)
 		if herr != nil {
@@ -263,9 +265,7 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		if len(existing) > rs.FarmMaxTargets {
 			existing = existing[:rs.FarmMaxTargets]
 		}
-		if canceled := s.stageResolve(ctx, &runSvc, existing, stagedSourceProject, "хосты проекта", accums, &order, prog, result, &wasCancelled); canceled {
-			return finalizeCancelled()
-		}
+		seedAccumsFromProject(existing, stagedSourceProject, accums, &order, result, prog)
 	}
 	if wasCancelled.Load() {
 		return finalizeCancelled()

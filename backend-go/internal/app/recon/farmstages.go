@@ -64,6 +64,24 @@ func (s *Service) stageResolve(ctx context.Context, runSvc *Service, targets []s
 	return false
 }
 
+// seedAccumsFromProject засевает аккумулятор существующими хостами проекта БЕЗ
+// пробива (dnsx/httpx). Используется, когда стадия поддоменов выключена: оператор
+// хочет пере-скан известных хостов, повторный резолв+liveness тут лишний и только
+// зря гоняет dnsx/httpx. Все хосты помечаются живыми (alive=true) — фетчи стадий
+// JS/эндпоинтов сами отсеют недоступные, а стадия портов резолвит nmap-ом сама.
+func seedAccumsFromProject(existing []string, source string, accums map[string]*stagedHostAccum, order *[]string, result *FarmRunResult, prog *progressTracker) {
+	for _, hn := range existing {
+		if hn == "" || accums[hn] != nil {
+			continue
+		}
+		accums[hn] = &stagedHostAccum{hostname: hn, isIP: reconnet.IsIPLiteral(hn), alive: true, source: source, ports: map[int]StagedPort{}}
+		*order = append(*order, hn)
+	}
+	result.HostsCreated = len(*order)
+	result.HostsOnline = len(*order)
+	prog.update(func(p *RunProgress) { p.HostsFound = len(*order) })
+}
+
 // aliveDomainHosts — живые хосты-домены (не IP-литералы) в порядке открытия. Именно
 // по ним гоняются стадии эндпоинтов и JS (архивы/краул/JS осмысленны для доменов).
 func aliveDomainHosts(accums map[string]*stagedHostAccum, order []string) []string {
