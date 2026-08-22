@@ -4084,7 +4084,7 @@ export function FrostApp() {
       ? ({ hosts: "Hosts", ips: "IPs", endpoints: "Endpoints", js: "JS scan", farm: "Recon farm" } as Record<string, string>)[rv] || "Hosts"
       : sec === "vault"
       ? ({ creds: "Creds", leaks: "Leaks" } as Record<string, string>)[state.vaultView] || "Creds"
-      : ({ overview: "Overview", vulns: "Vulnerabilities", notes: "Notes", members: "Members", activity: "Activity" } as Record<string, string>)[sec] || "Overview";
+      : ({ overview: "Overview", vulns: "Issues", notes: "Notes", members: "Members", activity: "Activity" } as Record<string, string>)[sec] || "Overview";
   /** The item open inside the section, if any — the last crumb (e.g. the note's title). */
   const crumbLeaf =
     // The recon full-page forms are crumbs of their own: Project / Hosts / Export,
@@ -4650,7 +4650,7 @@ export function FrostApp() {
             })}
           </div>
         </div>
-        {tabItem(t("Vulnerabilities"), "star2", sv, () => setSection("vulns"), { text: String(d.vulns.length), color: sv.badgeColor, bg: sv.badgeBg })}
+        {tabItem(t("Issues"), "star2", sv, () => setSection("vulns"), { text: String(d.vulns.length), color: sv.badgeColor, bg: sv.badgeBg })}
         {tabItem(t("Notes"), "doc", sn, () => setSection("notes"), { text: String(d.notes.length), color: sn.badgeColor, bg: sn.badgeBg })}
         <div style={{ position: "relative", display: "flex" }}>
           {/* Vault — раздел-дропдаун (Creds + Leaks), устроен как меню Recon:
