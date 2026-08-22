@@ -777,6 +777,7 @@ function pathFor(s: {
   exportPageOpen: boolean;
   exportScope: ExportScope;
   farmReportOpen: boolean;
+  bulkDelOpen: null | "hosts" | "ips" | "endpoints" | "js";
 }): string {
   if (s.view === "profile") return s.profileTab === "account" ? "/profile" : `/profile/${s.profileTab}`;
   if (s.view === "workspaceMembers") return "/members";
@@ -788,6 +789,9 @@ function pathFor(s: {
     // Страница отчёта фермы — собственный маршрут (как экспорт), чтобы «Назад»
     // возвращал на страницу фермы, а не в чужой раздел рекона.
     if (s.section === "hosts" && s.reconView === "farm" && s.farmReportOpen) return `${base}/farm/report`;
+    // Полностраничный экран массового удаления — свой маршрут (как экспорт), чтобы
+    // «Назад» возвращал в тот же раздел рекона: /projects/{id}/hosts/delete и т.д.
+    if (s.section === "hosts" && s.bulkDelOpen) return `${base}/${s.bulkDelOpen}/delete`;
     if (s.section === "overview") return base;
     if (s.section === "hosts") {
       // An open host/IP card is the last path segment, so the card is deep-linkable
@@ -822,6 +826,7 @@ function navStateFromPath(path: string): Partial<FrostState> {
       openIp: null,
       exportPageOpen: false,
       farmReportOpen: false,
+      bulkDelOpen: null,
     };
     /** `/…/vulns/7` → 7; a missing or non-numeric segment → null. */
     const entityId = () => {
@@ -829,6 +834,11 @@ function navStateFromPath(path: string): Partial<FrostState> {
       return parts[3] != null && Number.isFinite(n) ? n : null;
     };
     if (!seg) return { ...base, section: "overview" };
+    // /projects/{id}/{kind}/delete — полностраничный экран массового удаления.
+    // Перехватываем раньше веток hosts/ips (там parts[3] — id открытой карточки).
+    if (parts[3] === "delete" && (seg === "hosts" || seg === "ips" || seg === "endpoints" || seg === "js")) {
+      return { ...base, section: "hosts", reconView: seg, bulkDelOpen: seg };
+    }
     // /projects/{id}/export/{scope} — экспорт-страница рекона со своим URL.
     if (seg === "export") {
       const scope = (parts[3] ?? "hosts") as ExportScope;
@@ -1691,8 +1701,8 @@ export function FrostApp() {
      "Add hosts") — otherwise coming back would drop the user into a stale form
      instead of the list they asked for. */
   const setSection = (s: SectionId) =>
-    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
-  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
 
   /* ---- URL ↔ navigation-state sync (deep links to sections / projects) ----
      Two effects mirror each other: URL → state, and state → URL. They must never
@@ -1744,10 +1754,11 @@ export function FrostApp() {
       exportPageOpen: state.exportPageOpen,
       exportScope: state.exportScope,
       farmReportOpen: state.farmReportOpen,
+      bulkDelOpen: state.bulkDelOpen,
     });
     if (p !== location.pathname) navigate(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, state.farmReportOpen, location.pathname]);
+  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, state.farmReportOpen, state.bulkDelOpen, location.pathname]);
   /* Loaded as soon as the project opens, like every other collection — the tab's
      counter has to be right before the tab is ever visited. Entering the tab
      re-fetches, since the feed is a shared audit trail that others add to. */
@@ -3750,6 +3761,8 @@ export function FrostApp() {
     // which makes the middle crumb the way back to the list.
     sec === "hosts" && state.exportPageOpen
       ? t("Export")
+      : sec === "hosts" && state.bulkDelOpen
+      ? t("Delete")
       : sec === "hosts" && rv === "farm" && state.farmReportOpen
       ? t("Report")
       : sec === "hosts" && state.hostImportOpen
@@ -4368,15 +4381,12 @@ export function FrostApp() {
               )}
               {/* Opens the domain picker rather than scanning straight away, so the
                   label says what the click does: choose what to scan. */}
-              {/* Пути и секреты выгружаются раздельно: это разные артефакты и
-                  разные потребители, один файл на двоих смысла не имеет. */}
+              {/* Одна кнопка «Экспорт»: что именно выгружать (секреты или пути) —
+                  выбирается уже на странице экспорта переключателем. */}
               {sec === "hosts" && rv === "js" && !state.jsScanSetupOpen && !state.exportPageOpen && !_jsd && (
                 <>
                   <button className="clk" onClick={() => openReconExport("js-endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export paths")}
-                  </button>
-                  <button className="clk" onClick={() => openReconExport("js-secrets")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export secrets")}
+                    <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
                     <Icon name="search" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Select domains & scan")}
@@ -4726,7 +4736,7 @@ export function FrostApp() {
     // IP-строки не удаляются, а скрываются — потому у них своя подпись в тултипе.
     const title = kind === "ips" ? t("Hide objects") : t("Delete objects");
     return (
-      <button className="clk" title={title} aria-label={title} onClick={() => openBulkDelete(kind)} style={{ width: 42, height: 42, flex: "none", padding: 0, border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", color: "var(--fr-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+      <button className="clk" title={title} aria-label={title} onClick={() => openBulkDelete(kind)} onMouseEnter={(e) => (e.currentTarget.style.background = "var(--fr-elevated)")} onMouseLeave={(e) => (e.currentTarget.style.background = "var(--fr-surface)")} style={{ width: 42, height: 42, flex: "none", padding: 0, border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", color: "var(--fr-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
         <Icon name="trash" size={16} sw={2.2} color="var(--fr-danger)" />
       </button>
     );
@@ -4866,6 +4876,14 @@ export function FrostApp() {
               </div>
             </div>
             <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
+              {/* JS-выгрузка одна на кнопку: здесь выбираем, что именно выгружать —
+                  найденные секреты или пути. Смена scope пересобирает список. */}
+              {scope.startsWith("js-") && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {filterPill(t("Secrets"), scope === "js-secrets", () => setState({ exportScope: "js-secrets" }))}
+                  {filterPill(t("Endpoints"), scope === "js-endpoints", () => setState({ exportScope: "js-endpoints" }))}
+                </div>
+              )}
               {/* Endpoints can also go out as an OpenAPI doc, rebuilt from these lines. */}
               {scope === "endpoints" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -5523,6 +5541,7 @@ export function FrostApp() {
   const renderRecon = () => {
     if (state.exportPageOpen) return renderExport();
     if (rv === "farm" && state.farmReportOpen) return canEditProject ? renderFarmReport() : renderNoAccessPage("The Farm report is available to project leads and admins.");
+    if (state.bulkDelOpen) return canEditProject ? renderBulkDeletePage() : renderNoAccessPage("Bulk delete is available to project leads and admins.");
     if (rv === "farm") return canEditProject ? renderFarmConfig() : renderNoAccessPage("The Farm settings are available to project leads and admins.");
     if (rv === "js" && state.jsScanSetupOpen) return renderJsScanSetup();
     if (rv === "ips") {
@@ -5764,12 +5783,16 @@ export function FrostApp() {
           <Icon name="chevron-left" size={15} />{t("All JS files")}
         </span>
         <div style={{ flex: 1 }} />
-        <button className="clk" onClick={() => openReconExport("js-endpoints")} disabled={f.endpoints.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: f.endpoints.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.endpoints.length ? "pointer" : "default" }}>
-          <Icon name="upload" size={14} sw={2.2} color={f.endpoints.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export paths")}
-        </button>
-        <button className="clk" onClick={() => openReconExport("js-secrets")} disabled={f.secrets.length === 0} style={{ height: 38, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: f.secrets.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: f.secrets.length ? "pointer" : "default" }}>
-          <Icon name="upload" size={14} sw={2.2} color={f.secrets.length ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export secrets")}
-        </button>
+        {/* Одна кнопка: секреты/пути выбираются переключателем на странице
+            экспорта. Стартуем с того набора, что у файла непустой. */}
+        {(() => {
+          const canExport = f.endpoints.length > 0 || f.secrets.length > 0;
+          return (
+            <button className="clk" onClick={() => openReconExport(f.endpoints.length ? "js-endpoints" : "js-secrets")} disabled={!canExport} style={{ height: 38, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canExport ? "pointer" : "default" }}>
+              <Icon name="upload" size={14} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
+            </button>
+          );
+        })()}
       </div>
       <div style={{ ...CARD, padding: "22px 24px", marginBottom: 16 }}>
         <div className="mono" style={{ font: "800 17px 'JetBrains Mono',monospace", color: "var(--fr-text)", wordBreak: "break-all" }}>{fileBase(f.url)}</div>
@@ -6760,118 +6783,97 @@ export function FrostApp() {
      вано» у JS-скана и как страница экспорта). Слева весь список объектов текущего
      типа со своим поиском, справа — отмеченные к удалению. Клик по элементу слева
      переносит его вправо, клик справа — возвращает. Всё в едином state. */
-  const renderBulkDeleteModal = () => {
+  // ================= массовое удаление объектов recon-раздела (полностраничный экран) =================
+  /* Полностраничный экран массового удаления — тот же приём, что у экспорта и
+     отчёта фермы (.route + карточка со списком). Один список с чекбоксами и
+     «выбрать всё», поиск сверху, danger-кнопка «Delete N»/«Hide N» внизу.
+     Идентичность строки — по типу: host→id, endpoint→id, js→file id, ip→адрес. */
+  const renderBulkDeletePage = () => {
     const kind = state.bulkDelOpen;
-    const open = kind !== null;
+    if (!kind) return null;
     const cfg = {
-      hosts: { heading: t("All hosts"), verb: t("Delete"), grouped: false, note: t("This can't be undone. Deleting a host also removes its ports, endpoints and JS files.") },
-      ips: { heading: t("All IPs"), verb: t("Hide"), grouped: false, note: t("This can't be undone. The addresses are hidden from this view.") },
-      endpoints: { heading: t("All endpoints"), verb: t("Delete"), grouped: true, note: t("This can't be undone.") },
-      js: { heading: t("All JS files"), verb: t("Delete"), grouped: true, note: t("This can't be undone.") },
-    }[kind ?? "hosts"];
-    const items = kind ? bulkDelItemsFor(kind) : [];
-    const selSet = new Set(state.bulkDelSel);
+      hosts: { heading: t("Delete hosts"), verb: t("Delete"), col: t("Host"), note: t("This can't be undone. Deleting a host also removes its ports, endpoints and JS files.") },
+      ips: { heading: t("Hide IPs"), verb: t("Hide"), col: t("IP address"), note: t("This can't be undone. The addresses are hidden from this view.") },
+      endpoints: { heading: t("Delete endpoints"), verb: t("Delete"), col: t("Endpoint"), note: t("This can't be undone.") },
+      js: { heading: t("Delete JS files"), verb: t("Delete"), col: t("JS file"), note: t("This can't be undone.") },
+    }[kind];
+    const items = bulkDelItemsFor(kind);
     const q = state.bulkDelQuery.trim().toLowerCase();
-    const leftItems = items.filter(
-      (it) => !selSet.has(it.key) && (!q || it.label.toLowerCase().includes(q) || (it.group ?? "").toLowerCase().includes(q)),
-    );
-    const rightItems = items.filter((it) => selSet.has(it.key));
-    const selCount = rightItems.length;
+    const filtered = items.filter((it) => !q || it.label.toLowerCase().includes(q) || (it.group ?? "").toLowerCase().includes(q));
+    const selSet = new Set(state.bulkDelSel);
+    const selCount = state.bulkDelSel.length;
+    const busy = state.bulkDelBusy;
 
-    /* Строка списка: усечение по ширине, чтобы длинные пути/имена не рвали вёрстку
-       вбок. Иконка справа подсказывает направление переноса. */
-    const paneRow = (it: BulkDelItem, side: "left" | "right") => (
-      <div
-        key={String(it.key)}
-        className="clk"
-        onClick={() => (side === "left" ? bulkDelAdd(it.key) : bulkDelRemove(it.key))}
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--st-hover)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-      >
-        <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--st-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
-        <Icon name={side === "left" ? "plus" : "close"} size={14} sw={2.2} color={side === "left" ? "var(--st-accent-2)" : "var(--st-danger)"} />
-      </div>
-    );
-
-    /* Плоский или сгруппированный по хосту рендер панели. Группировка сохраняет
-       порядок исходного списка (объекты одного хоста идут подряд). */
-    const renderPane = (list: BulkDelItem[], side: "left" | "right", emptyMsg: string): ReactNode => {
-      if (list.length === 0) return <div style={{ padding: "28px 12px", textAlign: "center", color: "var(--st-text-faint)", fontSize: 12.5 }}>{emptyMsg}</div>;
-      if (!cfg.grouped) return <>{list.map((it) => paneRow(it, side))}</>;
-      const groups: { group: string; rows: BulkDelItem[] }[] = [];
-      for (const it of list) {
-        const g = it.group ?? "—";
-        const last = groups[groups.length - 1];
-        if (last && last.group === g) last.rows.push(it);
-        else groups.push({ group: g, rows: [it] });
-      }
-      return (
-        <>
-          {groups.map((grp, gi) => (
-            <div key={`${grp.group}-${gi}`} style={{ marginBottom: 6 }}>
-              <div className="mono" style={{ padding: "6px 10px 2px", fontSize: 10.5, letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{grp.group}</div>
-              {grp.rows.map((it) => paneRow(it, side))}
-            </div>
-          ))}
-        </>
-      );
+    // Select-all уважает текущий фильтр: снимает/ставит ровно видимые строки.
+    const allSel = filtered.length > 0 && filtered.every((it) => selSet.has(it.key));
+    const toggleAll = () => {
+      const keys = filtered.map((it) => it.key);
+      if (allSel) { const drop = new Set(keys); setState((s) => ({ bulkDelSel: s.bulkDelSel.filter((k) => !drop.has(k)) })); }
+      else bulkDelAddAll(keys);
     };
+    const toggleOne = (key: number | string) => setState((s) => ({ bulkDelSel: toggleIn(s.bulkDelSel, key) }));
 
-    const paneBox = (header: ReactNode, body: ReactNode) => (
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", border: "1px solid var(--st-border-light)", borderRadius: 12, background: "var(--st-bg)", overflow: "hidden" }}>
-        {header}
-        <div style={{ flex: 1, overflowY: "auto", padding: 6, maxHeight: 340, minHeight: 340 }}>{body}</div>
+    const grid = "36px minmax(0,1fr)";
+
+    return (
+      <div className="route">
+        {/* Поиск сверху — как на отчёте фермы; сужает список и select-all. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
+          {searchBox(t("Filter…"), state.bulkDelQuery, (v) => setState({ bulkDelQuery: v }))}
+          <div style={{ flex: 1 }} />
+          {selCount > 0 && <span className="clk" onClick={bulkDelClear} style={{ font: "700 12px Inter,sans-serif", color: "var(--fr-text-3)", cursor: "pointer" }}>{t("Clear selection")}</span>}
+        </div>
+
+        <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 300px)" }}>
+          {/* Шапка: назад в раздел, заголовок. */}
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <span className="clk" onClick={closeBulkDelete} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{cfg.heading}</h2>
+            <span className="mono" style={{ font: "700 12px 'JetBrains Mono',monospace", color: "var(--fr-text-faint)", borderRadius: 10, padding: "2px 9px", background: "var(--fr-elevated)" }}>{items.length}</span>
+          </div>
+
+          {/* Список: чекбокс select-all в шапке, по строке на объект. */}
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+            <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
+              <input type="checkbox" checked={allSel} onChange={toggleAll} disabled={filtered.length === 0} style={{ width: 16, height: 16, accentColor: "var(--fr-danger)", cursor: filtered.length ? "pointer" : "default" }} />
+              <div>{cfg.col}</div>
+            </div>
+            {filtered.map((it) => {
+              const on = selSet.has(it.key);
+              return (
+                <div key={String(it.key)} className="prow clk" onClick={() => toggleOne(it.key)} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={on} onChange={() => toggleOne(it.key)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-danger)", cursor: "pointer" }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</div>
+                    {it.group && <div className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.group}</div>}
+                  </div>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{items.length === 0 ? t("Nothing to delete.") : t("Nothing matches the filter.")}</div>
+            )}
+          </div>
+
+          {/* Действия: пометка о необратимости слева, danger-кнопка справа. */}
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "14px 22px", borderTop: "1px solid var(--fr-divider)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--fr-text-3)", minWidth: 0 }}>
+              <Icon name="trash" size={13} color="var(--fr-danger)" /><span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{cfg.note}</span>
+            </div>
+            <div style={{ flex: 1 }} />
+            {selCount > 0 && <span style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-3)" }}>{selCount} {t("selected")}</span>}
+            <button className="clk" onClick={closeBulkDelete} style={{ height: 42, padding: "0 20px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Cancel")}</button>
+            <button
+              className="clk"
+              onClick={doBulkDelete}
+              disabled={selCount === 0 || busy}
+              style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: "var(--fr-danger)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif", opacity: selCount === 0 || busy ? 0.5 : 1, cursor: selCount === 0 || busy ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
+              <Icon name="trash" size={15} color="var(--fr-on-accent)" sw={2.2} />{busy ? t("Working…") : `${cfg.verb} ${selCount}`}
+            </button>
+          </div>
+        </div>
       </div>
-    );
-
-    return modalShell(
-      open,
-      closeBulkDelete,
-      70,
-      880,
-      <>
-        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 16 }}>
-          <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--st-danger-soft)", color: "var(--st-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={20} /></span>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{cfg.heading}</h2>
-        </div>
-        <div style={{ display: "flex", gap: 16, alignItems: "stretch" }}>
-          {/* Левая панель: весь список + поиск + «выбрать всё (по фильтру)». */}
-          {paneBox(
-            <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid var(--st-border-light)", display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)" }}>{cfg.heading} <b className="mono" style={{ color: "var(--st-text-3)" }}>{leftItems.length}</b></span>
-                <span className="clk" onClick={() => bulkDelAddAll(leftItems.map((it) => it.key))} style={{ font: "700 11.5px Inter,sans-serif", color: "var(--st-accent-2)", cursor: leftItems.length ? "pointer" : "default", opacity: leftItems.length ? 1 : 0.4 }}>{t("Select all (filtered)")}</span>
-              </div>
-              {searchBox(t("Filter…"), state.bulkDelQuery, (v) => setState({ bulkDelQuery: v }), "100%")}
-            </div>,
-            renderPane(leftItems, "left", q ? t("Nothing matches the filter.") : t("Everything is marked for deletion.")),
-          )}
-          {/* Правая панель: отмеченные к удалению. */}
-          {paneBox(
-            <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid var(--st-border-light)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minHeight: 39 }}>
-              <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-danger)" }}>{t("To delete")} <b className="mono">{selCount}</b></span>
-              {selCount > 0 && <span className="clk" onClick={bulkDelClear} style={{ font: "700 11.5px Inter,sans-serif", color: "var(--st-text-3)", cursor: "pointer" }}>{t("Clear")}</span>}
-            </div>,
-            renderPane(rightItems, "right", t("Click objects on the left to mark them.")),
-          )}
-        </div>
-        {/* Необратимость — маленькой явной пометкой над кнопкой действия. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 14, fontSize: 12, color: "var(--st-text-3)" }}>
-          <Icon name="trash" size={13} color="var(--st-danger)" />{cfg.note}
-        </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button className="clk" onClick={closeBulkDelete} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
-          <button
-            className="clk"
-            onClick={doBulkDelete}
-            disabled={selCount === 0 || state.bulkDelBusy}
-            style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: "var(--st-danger)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", opacity: selCount === 0 || state.bulkDelBusy ? 0.5 : 1, cursor: selCount === 0 || state.bulkDelBusy ? "default" : "pointer" }}
-          >
-            {state.bulkDelBusy ? t("Working…") : `${cfg.verb} ${selCount}`}
-          </button>
-        </div>
-      </>,
     );
   };
 
@@ -7307,8 +7309,6 @@ export function FrostApp() {
         )
       )}
 
-      {/* bulk-delete two-pane picker */}
-      {renderBulkDeleteModal()}
 
       {/* endpoint detail */}
       <div className={`modalback ${state.epOpen ? "open" : ""}`} onClick={closeEndpoint} style={{ position: "absolute", inset: 0, zIndex: 66, background: "rgba(20,28,40,.42)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 24px", overflow: "auto" }}>
