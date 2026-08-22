@@ -53,6 +53,10 @@ import {
   getHost as apiGetHost,
   updateHost as apiUpdateHost,
   deleteHost as apiDeleteHost,
+  bulkDeleteHosts as apiBulkDeleteHosts,
+  bulkDeleteEndpoints as apiBulkDeleteEndpoints,
+  bulkDeleteJsFiles as apiBulkDeleteJsFiles,
+  bulkHideIps as apiBulkHideIps,
   startHostFarm as apiStartHostFarm,
   getHostFarmJob as apiGetHostFarmJob,
   startIpFarm as apiStartIpFarm,
@@ -314,6 +318,14 @@ interface FrostState {
   confirmType: EditorType | null;
   confirmIndex: number;
   confirmLabel: string;
+  /* ---- Массовое удаление объектов recon-раздела (двухпанельный пикер) ----
+     Какой тип открыт (или null), выбранные к удалению идентичности (host→id,
+     endpoint→id, js→file id, ip→адрес-строка), строка поиска левой панели и флаг
+     занятости на время запроса. */
+  bulkDelOpen: null | "hosts" | "ips" | "endpoints" | "js";
+  bulkDelSel: (number | string)[];
+  bulkDelQuery: string;
+  bulkDelBusy: boolean;
   noteEditorOpen: boolean;
   noteEditorMode: "add" | "edit";
   noteEditorIndex: number;
@@ -504,6 +516,10 @@ const initialState: FrostState = {
   confirmType: null,
   confirmIndex: -1,
   confirmLabel: "",
+  bulkDelOpen: null,
+  bulkDelSel: [],
+  bulkDelQuery: "",
+  bulkDelBusy: false,
   noteEditorOpen: false,
   noteEditorMode: "add",
   noteEditorIndex: -1,
@@ -2955,6 +2971,53 @@ export function FrostApp() {
     }
   };
 
+  // ================= массовое удаление объектов recon-раздела =================
+  /* Двухпанельный пикер: слева весь список объектов текущего типа, справа —
+     отмеченные к удалению. Выбор живёт в едином state (bulkDelSel), клик по
+     элементу перекидывает его между панелями. Идентичность — по типу:
+     host→id, endpoint→id, js→file id, ip→адрес-строка. */
+  const openBulkDelete = (kind: "hosts" | "ips" | "endpoints" | "js") =>
+    setState({ bulkDelOpen: kind, bulkDelSel: [], bulkDelQuery: "", bulkDelBusy: false });
+  const closeBulkDelete = () => setState({ bulkDelOpen: null, bulkDelSel: [], bulkDelQuery: "", bulkDelBusy: false });
+  const bulkDelAdd = (key: number | string) =>
+    setState((s) => ({ bulkDelSel: s.bulkDelSel.includes(key) ? s.bulkDelSel : [...s.bulkDelSel, key] }));
+  const bulkDelRemove = (key: number | string) =>
+    setState((s) => ({ bulkDelSel: s.bulkDelSel.filter((k) => k !== key) }));
+  const bulkDelAddAll = (keys: (number | string)[]) =>
+    setState((s) => ({ bulkDelSel: [...new Set([...s.bulkDelSel, ...keys])] }));
+  const bulkDelClear = () => setState({ bulkDelSel: [] });
+  /* Отправляет выбранные идентичности в соответствующий bulk-эндпоинт, тостит
+     результат, перезагружает подлежащий список и закрывает пикер. IP — это
+     скрытие, поэтому у него отдельная ветка и глагол «hidden». */
+  const doBulkDelete = async () => {
+    const kind = state.bulkDelOpen;
+    const pid = state.openProjectId;
+    const sel = state.bulkDelSel;
+    if (!kind || pid == null || sel.length === 0) return;
+    setState({ bulkDelBusy: true });
+    try {
+      if (kind === "ips") {
+        const hidden = await apiBulkHideIps(pid, sel.map((k) => String(k)));
+        pushToast(`${hidden} ${hidden === 1 ? "IP hidden" : "IPs hidden"}`, "success");
+        reloadHosts();
+      } else {
+        const ids = sel.map((k) => Number(k));
+        let deleted = 0;
+        if (kind === "hosts") deleted = await apiBulkDeleteHosts(pid, ids);
+        else if (kind === "endpoints") deleted = await apiBulkDeleteEndpoints(pid, ids);
+        else deleted = await apiBulkDeleteJsFiles(pid, ids);
+        const noun = kind === "hosts" ? "host" : kind === "endpoints" ? "endpoint" : "JS file";
+        pushToast(`${deleted} ${noun}${deleted === 1 ? "" : "s"} deleted`, "success");
+        reloadHosts();
+        if (kind === "js") reloadJsFiles();
+      }
+      closeBulkDelete();
+    } catch (e) {
+      pushToast(getApiErrorMessage(e, "Couldn't delete the selected objects"), "error");
+      setState({ bulkDelBusy: false });
+    }
+  };
+
   // ================= notes =================
   const openNoteEditor = (mode: "add" | "edit", index: number) => {
     const n = mode === "edit" ? d.notes[index] : null;
@@ -3795,6 +3858,30 @@ export function FrostApp() {
   /** Wording for that count, matching the active view. */
   const reconTotalLabel = rv === "ips" ? t("Total IPs") : rv === "endpoints" ? t("Total endpoints") : rv === "js" ? t("Total JS files") : t("Total hosts");
 
+  /* ── Полные (не срезанные фильтрами страницы) списки для пикера массового
+     удаления. У пикера своя строка поиска, поэтому источник берём из базовых
+     данных, а не из hostsList/ipsRows/…, которые уже отфильтрованы вкладкой.
+     Каждый элемент: key — идентичность для bulk-эндпоинта, label — что показать,
+     group — заголовок группы (хост) там, где объекты группируются. */
+  type BulkDelItem = { key: number | string; label: string; group?: string };
+  const jsBasename = (url: string): string => {
+    const noQuery = url.split(/[?#]/)[0];
+    const parts = noQuery.split("/").filter(Boolean);
+    return parts[parts.length - 1] || url;
+  };
+  const bulkHostItems: BulkDelItem[] = hosts
+    .filter((h) => !isIpFarmRow(h))
+    .map((h) => ({ key: h.id, label: h.host }));
+  const bulkIpItems: BulkDelItem[] = [...ipRowsByAddr.values()]
+    .filter((r) => !state.hiddenIps.includes(r.ip))
+    .map((r) => ({ key: r.ip, label: r.ip }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const bulkEndpointItems: BulkDelItem[] = endpointRows.map((e) => ({ key: e.endpointId, label: e.label, group: e.host }));
+  const bulkJsItems: BulkDelItem[] = jsFiles.map((f) => ({ key: f.id, label: jsBasename(f.url), group: f.host }));
+  /** Источник пикера для активного типа. */
+  const bulkDelItemsFor = (kind: "hosts" | "ips" | "endpoints" | "js"): BulkDelItem[] =>
+    kind === "hosts" ? bulkHostItems : kind === "ips" ? bulkIpItems : kind === "endpoints" ? bulkEndpointItems : bulkJsItems;
+
   /* Retuning a filter reseeds the editable pane from what the filter left on
      screen. Hand edits are dropped on purpose: the filters are the coarse
      selection and the pane the fine one, so the coarse one has to win. Only the
@@ -4367,6 +4454,7 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--st-accent-2)" />{t("Export")}
                   </button>
+                  {bulkDelButton("hosts")}
                   <button className="addbtn clk" onClick={openHostImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add hosts")}
                   </button>
@@ -4386,6 +4474,7 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("ips")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--st-accent-2)" />{t("Export")}
                   </button>
+                  {bulkDelButton("ips")}
                   <button className="addbtn clk" onClick={openIpImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add IPs")}
                   </button>
@@ -4402,6 +4491,7 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--st-accent-2)" />{t("Export")}
                   </button>
+                  {bulkDelButton("endpoints")}
                   <button className="addbtn clk" onClick={openEpImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Add endpoints")}
                   </button>
@@ -4419,6 +4509,7 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("js-secrets")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="upload" size={15} sw={2.2} color="var(--st-accent-2)" />{t("Export secrets")}
                   </button>
+                  {bulkDelButton("js")}
                   <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
                     <Icon name="search" size={15} color="var(--st-on-accent)" sw={2.6} />{t("Select domains & scan")}
                   </button>
@@ -4756,6 +4847,18 @@ export function FrostApp() {
       <input placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
+
+  /* Кнопка запуска пикера массового удаления в шапке раздела — вторичная, с
+     иконкой корзины и текстом в danger-тон. Показывается только при праве на
+     редактирование проекта и непустом списке объектов этого типа. */
+  const bulkDelButton = (kind: "hosts" | "ips" | "endpoints" | "js") => {
+    if (!canEditProject || bulkDelItemsFor(kind).length === 0) return null;
+    return (
+      <button className="clk" onClick={() => openBulkDelete(kind)} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-danger)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+        <Icon name="trash" size={15} sw={2.2} color="var(--st-danger)" />{t("Delete objects")}
+      </button>
+    );
+  };
 
   const filterPill = (label: string, on: boolean, onClick: () => void) => (
     <div key={label} className="clk" onClick={onClick} style={{ font: "600 12px Inter,sans-serif", padding: "6px 12px", borderRadius: 20, cursor: "pointer", ...vfPill(on) }}>{label}</div>
@@ -6180,6 +6283,125 @@ export function FrostApp() {
     </div>
   );
 
+  /* ── Пикер массового удаления (двухпанельный, как «Найдено | Будет отсканиро-
+     вано» у JS-скана и как страница экспорта). Слева весь список объектов текущего
+     типа со своим поиском, справа — отмеченные к удалению. Клик по элементу слева
+     переносит его вправо, клик справа — возвращает. Всё в едином state. */
+  const renderBulkDeleteModal = () => {
+    const kind = state.bulkDelOpen;
+    const open = kind !== null;
+    const cfg = {
+      hosts: { heading: t("All hosts"), verb: t("Delete"), grouped: false, note: t("This can't be undone. Deleting a host also removes its ports, endpoints and JS files.") },
+      ips: { heading: t("All IPs"), verb: t("Hide"), grouped: false, note: t("This can't be undone. The addresses are hidden from this view.") },
+      endpoints: { heading: t("All endpoints"), verb: t("Delete"), grouped: true, note: t("This can't be undone.") },
+      js: { heading: t("All JS files"), verb: t("Delete"), grouped: true, note: t("This can't be undone.") },
+    }[kind ?? "hosts"];
+    const items = kind ? bulkDelItemsFor(kind) : [];
+    const selSet = new Set(state.bulkDelSel);
+    const q = state.bulkDelQuery.trim().toLowerCase();
+    const leftItems = items.filter(
+      (it) => !selSet.has(it.key) && (!q || it.label.toLowerCase().includes(q) || (it.group ?? "").toLowerCase().includes(q)),
+    );
+    const rightItems = items.filter((it) => selSet.has(it.key));
+    const selCount = rightItems.length;
+
+    /* Строка списка: усечение по ширине, чтобы длинные пути/имена не рвали вёрстку
+       вбок. Иконка справа подсказывает направление переноса. */
+    const paneRow = (it: BulkDelItem, side: "left" | "right") => (
+      <div
+        key={String(it.key)}
+        className="clk"
+        onClick={() => (side === "left" ? bulkDelAdd(it.key) : bulkDelRemove(it.key))}
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, cursor: "pointer" }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--st-hover)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      >
+        <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--st-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
+        <Icon name={side === "left" ? "plus" : "close"} size={14} sw={2.2} color={side === "left" ? "var(--st-accent-2)" : "var(--st-danger)"} />
+      </div>
+    );
+
+    /* Плоский или сгруппированный по хосту рендер панели. Группировка сохраняет
+       порядок исходного списка (объекты одного хоста идут подряд). */
+    const renderPane = (list: BulkDelItem[], side: "left" | "right", emptyMsg: string): ReactNode => {
+      if (list.length === 0) return <div style={{ padding: "28px 12px", textAlign: "center", color: "var(--st-text-faint)", fontSize: 12.5 }}>{emptyMsg}</div>;
+      if (!cfg.grouped) return <>{list.map((it) => paneRow(it, side))}</>;
+      const groups: { group: string; rows: BulkDelItem[] }[] = [];
+      for (const it of list) {
+        const g = it.group ?? "—";
+        const last = groups[groups.length - 1];
+        if (last && last.group === g) last.rows.push(it);
+        else groups.push({ group: g, rows: [it] });
+      }
+      return (
+        <>
+          {groups.map((grp, gi) => (
+            <div key={`${grp.group}-${gi}`} style={{ marginBottom: 6 }}>
+              <div className="mono" style={{ padding: "6px 10px 2px", fontSize: 10.5, letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{grp.group}</div>
+              {grp.rows.map((it) => paneRow(it, side))}
+            </div>
+          ))}
+        </>
+      );
+    };
+
+    const paneBox = (header: ReactNode, body: ReactNode) => (
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", border: "1px solid var(--st-border-light)", borderRadius: 12, background: "var(--st-bg)", overflow: "hidden" }}>
+        {header}
+        <div style={{ flex: 1, overflowY: "auto", padding: 6, maxHeight: 340, minHeight: 340 }}>{body}</div>
+      </div>
+    );
+
+    return modalShell(
+      open,
+      closeBulkDelete,
+      70,
+      880,
+      <>
+        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 16 }}>
+          <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--st-danger-soft)", color: "var(--st-danger)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={20} /></span>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--st-text)" }}>{cfg.heading}</h2>
+        </div>
+        <div style={{ display: "flex", gap: 16, alignItems: "stretch" }}>
+          {/* Левая панель: весь список + поиск + «выбрать всё (по фильтру)». */}
+          {paneBox(
+            <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid var(--st-border-light)", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-text-faint)" }}>{cfg.heading} <b className="mono" style={{ color: "var(--st-text-3)" }}>{leftItems.length}</b></span>
+                <span className="clk" onClick={() => bulkDelAddAll(leftItems.map((it) => it.key))} style={{ font: "700 11.5px Inter,sans-serif", color: "var(--st-accent-2)", cursor: leftItems.length ? "pointer" : "default", opacity: leftItems.length ? 1 : 0.4 }}>{t("Select all (filtered)")}</span>
+              </div>
+              {searchBox(t("Filter…"), state.bulkDelQuery, (v) => setState({ bulkDelQuery: v }), "100%")}
+            </div>,
+            renderPane(leftItems, "left", q ? t("Nothing matches the filter.") : t("Everything is marked for deletion.")),
+          )}
+          {/* Правая панель: отмеченные к удалению. */}
+          {paneBox(
+            <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid var(--st-border-light)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minHeight: 39 }}>
+              <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--st-danger)" }}>{t("To delete")} <b className="mono">{selCount}</b></span>
+              {selCount > 0 && <span className="clk" onClick={bulkDelClear} style={{ font: "700 11.5px Inter,sans-serif", color: "var(--st-text-3)", cursor: "pointer" }}>{t("Clear")}</span>}
+            </div>,
+            renderPane(rightItems, "right", t("Click objects on the left to mark them.")),
+          )}
+        </div>
+        {/* Необратимость — маленькой явной пометкой над кнопкой действия. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 14, fontSize: 12, color: "var(--st-text-3)" }}>
+          <Icon name="trash" size={13} color="var(--st-danger)" />{cfg.note}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+          <button className="clk" onClick={closeBulkDelete} style={{ height: 42, padding: "0 20px", border: "1px solid var(--st-border)", borderRadius: 11, background: "var(--st-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--st-text-2)" }}>{t("Cancel")}</button>
+          <button
+            className="clk"
+            onClick={doBulkDelete}
+            disabled={selCount === 0 || state.bulkDelBusy}
+            style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: "var(--st-danger)", color: "var(--st-on-accent)", font: "700 13.5px Inter,sans-serif", opacity: selCount === 0 || state.bulkDelBusy ? 0.5 : 1, cursor: selCount === 0 || state.bulkDelBusy ? "default" : "pointer" }}
+          >
+            {state.bulkDelBusy ? t("Working…") : `${cfg.verb} ${selCount}`}
+          </button>
+        </div>
+      </>,
+    );
+  };
+
   return (
     <div className="frost" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--st-bg)", position: "relative" }}>
       {/* top app bar */}
@@ -6595,6 +6817,9 @@ export function FrostApp() {
           </>
         )
       )}
+
+      {/* bulk-delete two-pane picker */}
+      {renderBulkDeleteModal()}
 
       {/* endpoint detail */}
       <div className={`modalback ${state.epOpen ? "open" : ""}`} onClick={closeEndpoint} style={{ position: "absolute", inset: 0, zIndex: 66, background: "rgba(20,28,40,.42)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 24px", overflow: "auto" }}>

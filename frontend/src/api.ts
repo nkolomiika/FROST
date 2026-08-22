@@ -660,6 +660,33 @@ export async function deleteHost(projectId: number, hostId: number): Promise<voi
   await api.delete(`/projects/${projectId}/hosts/${hostId}`);
 }
 
+/* ── Массовое удаление объектов recon-разделов (двухпанельный пикер на фронте) ──
+   Каждый эндпоинт принимает список идентификаторов и возвращает число удалённых. */
+
+/** Массово удаляет хосты по id; каскадно сносит их порты/эндпоинты/JS. Возвращает `deleted`. */
+export async function bulkDeleteHosts(projectId: number, ids: number[]): Promise<number> {
+  const { data } = await api.post<{ deleted: number }>(`/projects/${projectId}/hosts/bulk-delete`, { ids });
+  return data.deleted;
+}
+
+/** Массово удаляет эндпоинты по id. Возвращает `deleted`. */
+export async function bulkDeleteEndpoints(projectId: number, ids: number[]): Promise<number> {
+  const { data } = await api.post<{ deleted: number }>(`/projects/${projectId}/endpoints/bulk-delete`, { ids });
+  return data.deleted;
+}
+
+/** Массово удаляет JS-файлы по id. Возвращает `deleted`. */
+export async function bulkDeleteJsFiles(projectId: number, ids: number[]): Promise<number> {
+  const { data } = await api.post<{ deleted: number }>(`/projects/${projectId}/js-files/bulk-delete`, { ids });
+  return data.deleted;
+}
+
+/** Массово скрывает IP-адреса из вкладки IP (это скрытие, не жёсткое удаление). Возвращает `hidden`. */
+export async function bulkHideIps(projectId: number, ips: string[]): Promise<number> {
+  const { data } = await api.post<{ hidden: number }>(`/projects/${projectId}/hidden-ips/bulk`, { ips });
+  return data.hidden;
+}
+
 /* ── Скрытые IP: «удаление» адреса из вкладки IP без разрыва привязки к хостам ──
    Список адресов, скрытых из вкладки IP. Фронт фильтрует по нему ipsRows. */
 export async function getHiddenIps(projectId: number): Promise<string[]> {
