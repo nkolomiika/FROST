@@ -228,6 +228,26 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		return nil, err
 	}
 
+	// Скоуп выбранных доменов: выбрал корневой домен → скан по нему И всем его
+	// поддоменам (tld+n). При пустом RunDomains скоуп не сужаем (все домены проекта).
+	scopeActive := len(cfg.RunDomains) > 0
+	lowerRoots := make([]string, len(roots))
+	for i, r := range roots {
+		lowerRoots[i] = strings.ToLower(r)
+	}
+	inScope := func(hn string) bool {
+		if !scopeActive {
+			return true
+		}
+		h := strings.ToLower(strings.TrimSpace(hn))
+		for _, r := range lowerRoots {
+			if h == r || strings.HasSuffix(h, "."+r) {
+				return true
+			}
+		}
+		return false
+	}
+
 	// accums — накопитель staged-хостов по имени; order хранит порядок открытия.
 	// Наполняется стадией поддоменов (свежие живые хосты) ИЛИ, если она выключена,
 	// существующими хостами проекта — чтобы поздние стадии (порты/эндпоинты/JS)
@@ -265,6 +285,22 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		if canceled := s.stageResolve(ctx, &runSvc, newSubs, stagedSourceSub, "новые поддомены", accums, &order, prog, result, &wasCancelled); canceled {
 			return finalizeCancelled()
 		}
+		// tld+n: существующие поддомены выбранных доменов тоже включаем в скан (а не
+		// только новонайденные). Без сужения (пустой выбор) — не расширяем.
+		if scopeActive {
+			if existing, herr := s.store.ProjectAllHostnames(ctx, claim.ProjectID); herr == nil {
+				var scoped []string
+				for _, hn := range dedup(existing) {
+					if inScope(hn) && accums[hn] == nil {
+						scoped = append(scoped, hn)
+					}
+				}
+				if len(scoped) > rs.FarmMaxTargets {
+					scoped = scoped[:rs.FarmMaxTargets]
+				}
+				seedAccumsFromProject(scoped, stagedSourceProject, accums, &order, result, prog)
+			}
+		}
 	} else {
 		// Стадия поддоменов выключена: пере-скан известных хостов проекта. Резолв+
 		// liveness (dnsx/httpx) НЕ гоняем — берём готовые хосты как есть; стадии
@@ -278,6 +314,16 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 			return nil, herr
 		}
 		existing = dedup(existing)
+		// Скоуп выбранных доменов: только сам домен и его поддомены (tld+n).
+		if scopeActive {
+			scoped := existing[:0:0]
+			for _, hn := range existing {
+				if inScope(hn) {
+					scoped = append(scoped, hn)
+				}
+			}
+			existing = scoped
+		}
 		if len(existing) > rs.FarmMaxTargets {
 			existing = existing[:rs.FarmMaxTargets]
 		}

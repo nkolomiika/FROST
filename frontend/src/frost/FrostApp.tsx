@@ -4843,7 +4843,7 @@ export function FrostApp() {
           <div className={`menu ${state.vaultMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 0, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("VAULT")}</div>
             {([
-              { v: "creds" as const, icon: "card" as const, label: "Creds", count: d.creds.length as number | null },
+              { v: "creds" as const, icon: "idcard" as const, label: "Creds", count: d.creds.length as number | null },
               { v: "leaks" as const, icon: "globe" as const, label: "Leaks", count: (state.leaksReport?.summary.total ?? null) as number | null },
             ]).map((it) => {
               const on = sec === "vault" && state.vaultView === it.v;
