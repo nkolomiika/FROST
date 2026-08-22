@@ -37,6 +37,9 @@ type Settings struct {
 	// LinkedIn-энумерация сотрудников (стадия поиска учёток): таймаут и потолок людей.
 	LinkedInTimeout    time.Duration
 	LinkedInMaxResults int
+	// Google Programmable Search (CSE) как надёжный бэкенд LinkedIn-энумерации.
+	GoogleCSEKey string
+	GoogleCSECx  string
 
 	ServicesDetectEnabled  bool
 	ServicesDetectEngine   string

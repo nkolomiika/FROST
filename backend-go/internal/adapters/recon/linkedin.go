@@ -2,6 +2,7 @@ package recon
 
 import (
 	"context"
+	"encoding/json"
 	"html"
 	"io"
 	"net/http"
@@ -63,23 +64,48 @@ func EnumerateLinkedIn(ctx context.Context, company string, s Settings) ([]Linke
 		maxResults = 150
 	}
 
+	// Google CSE (если заданы ключ+cx) — надёжный JSON-бэкенд, датацентр-IP не банит.
+	// Иначе — скрейп DDG (best-effort, часто блокируется с серверных IP).
+	var pages []string
+	viaGoogle := strings.TrimSpace(s.GoogleCSEKey) != "" && strings.TrimSpace(s.GoogleCSECx) != ""
+	if viaGoogle {
+		pages = []string{"1", "11", "21"} // start-offset'ы CSE (10 на страницу)
+	} else {
+		pages = []string{"0", "30", "60"} // s-offset'ы DDG HTML
+	}
+
 	seen := map[string]struct{}{}
 	var people []LinkedInPerson
 	var lastNote string
-	// До 3 страниц (offset 0/30/60) — дальше DDG обычно повторяется/режет.
-	for _, offset := range []int{0, 30, 60} {
+	for _, pg := range pages {
 		if len(people) >= maxResults {
 			break
 		}
 		if ctx.Err() != nil {
 			break
 		}
-		body, note := linkedinFetch(ctx, client, linkedinSearchURL(company, offset))
+		var found []LinkedInPerson
+		var note string
+		if viaGoogle {
+			body, n := linkedinFetch(ctx, client, googleCSEURL(s.GoogleCSEKey, s.GoogleCSECx, company, pg))
+			if n != "" {
+				note = n
+			} else {
+				found, note = parseGoogleCSE(body)
+			}
+		} else {
+			off, _ := strconv.Atoi(pg)
+			body, n := linkedinFetch(ctx, client, linkedinSearchURL(company, off))
+			if n != "" {
+				note = n
+			} else {
+				found = parseLinkedInResults(body)
+			}
+		}
 		if note != "" {
 			lastNote = note
 			break
 		}
-		found := parseLinkedInResults(body)
 		if len(found) == 0 {
 			break // пусто — дальше листать смысла нет
 		}
@@ -99,6 +125,45 @@ func EnumerateLinkedIn(ctx context.Context, company string, s Settings) ([]Linke
 		return nil, "linkedin(" + company + "): " + lastNote
 	}
 	return people, ""
+}
+
+// googleCSEURL — Custom Search JSON API: site:linkedin.com/in "Company", 10/страница.
+func googleCSEURL(key, cx, company, start string) string {
+	v := url.Values{
+		"key": {key},
+		"cx":  {cx},
+		"q":   {`site:linkedin.com/in "` + company + `"`},
+		"num": {"10"},
+	}
+	if start != "" && start != "1" {
+		v.Set("start", start)
+	}
+	return "https://www.googleapis.com/customsearch/v1?" + v.Encode()
+}
+
+// parseGoogleCSE разбирает JSON-ответ CSE в людей. Ошибка API (квота/ключ) → note.
+func parseGoogleCSE(body string) ([]LinkedInPerson, string) {
+	var resp struct {
+		Items []struct {
+			Title string `json:"title"`
+		} `json:"items"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		return nil, "cse_parse"
+	}
+	if resp.Error.Message != "" {
+		return nil, "cse: " + resp.Error.Message
+	}
+	var out []LinkedInPerson
+	for _, it := range resp.Items {
+		if p, ok := parseLinkedInName(html.UnescapeString(it.Title)); ok {
+			out = append(out, p)
+		}
+	}
+	return out, ""
 }
 
 func linkedinFetch(ctx context.Context, client *http.Client, target string) (string, string) {

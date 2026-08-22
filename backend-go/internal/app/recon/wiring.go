@@ -36,6 +36,8 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 		GithubScanTimeout:  secs(c.GithubScanTimeoutSecs),
 		LinkedInTimeout:    secs(c.ReconLinkedInTimeoutSec),
 		LinkedInMaxResults: c.ReconLinkedInMaxResults,
+		GoogleCSEKey:       c.GoogleCSEKey,
+		GoogleCSECx:        c.GoogleCSECx,
 
 		ServicesDetectEnabled:  c.ServicesDetectEnabled,
 		ServicesDetectEngine:   c.ServicesDetectEngine,

@@ -20,17 +20,17 @@ type Config struct {
 	DatabaseURL string `env:"DATABASE_URL,required"`
 
 	// --- JWT / сессии ---
-	JWTSecretKey                string `env:"JWT_SECRET_KEY,required"`
+	JWTSecretKey string `env:"JWT_SECRET_KEY,required"`
 
 	// Ключи внешних OSINT/breach-источников и github-скана — ТОЛЬКО через окружение
 	// (.env.prod), не через вебку (раздел Integrations удалён). Пусто → источник
 	// самопропускается. ProxyNova бесплатный/keyless — ключа не требует.
-	GithubToken        string `env:"GITHUB_TOKEN"`
-	BreachHIBPKey      string `env:"BREACH_HIBP_KEY"`
-	BreachDehashedKey  string `env:"BREACH_DEHASHED_KEY"`
-	BreachIntelXKey    string `env:"BREACH_INTELX_KEY"`
-	BreachLeakCheckKey string `env:"BREACH_LEAKCHECK_KEY"`
-	BreachSnusbaseKey  string `env:"BREACH_SNUSBASE_KEY"`
+	GithubToken                 string `env:"GITHUB_TOKEN"`
+	BreachHIBPKey               string `env:"BREACH_HIBP_KEY"`
+	BreachDehashedKey           string `env:"BREACH_DEHASHED_KEY"`
+	BreachIntelXKey             string `env:"BREACH_INTELX_KEY"`
+	BreachLeakCheckKey          string `env:"BREACH_LEAKCHECK_KEY"`
+	BreachSnusbaseKey           string `env:"BREACH_SNUSBASE_KEY"`
 	JWTAccessTokenExpireMinutes int    `env:"JWT_ACCESS_TOKEN_EXPIRE_MINUTES" envDefault:"30"`
 	JWTRefreshTokenExpireDays   int    `env:"JWT_REFRESH_TOKEN_EXPIRE_DAYS" envDefault:"30"`
 
@@ -114,6 +114,9 @@ type Config struct {
 	// LinkedIn-энумерация сотрудников (search-engine, без ключей).
 	ReconLinkedInTimeoutSec float64 `env:"RECON_LINKEDIN_TIMEOUT_SECONDS" envDefault:"20.0"`
 	ReconLinkedInMaxResults int     `env:"RECON_LINKEDIN_MAX_RESULTS" envDefault:"150"`
+	// Google CSE (100 запросов/день бесплатно) — бэкенд LinkedIn-энумерации.
+	GoogleCSEKey string `env:"GOOGLE_CSE_KEY"`
+	GoogleCSECx  string `env:"GOOGLE_CSE_CX"`
 
 	// --- Ферма JS ---
 	JSFarmMaxFilesPerHost        int     `env:"JS_FARM_MAX_FILES_PER_HOST" envDefault:"50"`
