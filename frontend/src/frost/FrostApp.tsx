@@ -77,6 +77,13 @@ import {
   getFarmReport as apiGetFarmReport,
   importFarmReport as apiImportFarmReport,
   clearFarmReport as apiClearFarmReport,
+  getLeaks as apiGetLeaks,
+  startGithubLeakScan as apiStartGithubLeakScan,
+  getLeakScan as apiGetLeakScan,
+  importLeaks as apiImportLeaks,
+  clearLeaks as apiClearLeaks,
+  getIntegrations as apiGetIntegrations,
+  setIntegration as apiSetIntegration,
   createEndpoint as apiCreateEndpoint,
   getEndpoints as apiGetEndpoints,
   deleteEndpoint as apiDeleteEndpoint,
@@ -136,6 +143,10 @@ import type {
   StagedPort as ApiStagedPort,
   StagedEndpoint as ApiStagedEndpoint,
   StagedJs as ApiStagedJs,
+  Leak as ApiLeak,
+  LeaksReport as ApiLeaksReport,
+  LeakScanJob as ApiLeakScanJob,
+  IntegrationKey as ApiIntegrationKey,
   Port as ApiPort,
   Service as ApiService,
   Vulnerability as ApiVulnerability,
@@ -215,10 +226,12 @@ import {
 const getApiErrorMessage = (error: unknown, fallback: string): string =>
   t(rawGetApiErrorMessage(error, fallback));
 
-type NavId = "projects" | "tasks" | "mine" | "docs" | "members";
-type ViewId = "list" | "detail" | "profile" | "workspaceMembers";
-type SectionId = "overview" | "hosts" | "vulns" | "notes" | "creds" | "members" | "activity";
+type NavId = "projects" | "tasks" | "mine" | "docs" | "members" | "integrations";
+type ViewId = "list" | "detail" | "profile" | "workspaceMembers" | "workspaceIntegrations";
+type SectionId = "overview" | "hosts" | "vulns" | "notes" | "vault" | "members" | "activity";
 type ReconView = "hosts" | "ips" | "endpoints" | "js" | "farm";
+/** Подразделы Vault — как reconView для Recon: Creds (по умолчанию) и Leaks. */
+type VaultView = "creds" | "leaks";
 
 // Keys of the farm config split by value type, so the settings form's toggle and
 // number helpers stay type-safe against ApiReconFarmConfig.
@@ -388,6 +401,35 @@ interface FrostState {
   /** The IP address whose detail card is open (IPs have no stored id — keyed by address). */
   openIp: string | null;
   reconMenuOpen: boolean;
+  /* ---- Vault: раздел-дропдаун (Creds + Leaks), зеркалит recon ---- */
+  /** Открытый подраздел Vault. По умолчанию creds (как reconView='hosts'). */
+  vaultView: VaultView;
+  /** Открыт ли дропдаун Vault в баре вкладок (как reconMenuOpen). */
+  vaultMenuOpen: boolean;
+  /** Отчёт по утечкам для openProjectId. null = не загружено. */
+  leaksReport: ApiLeaksReport | null;
+  leaksLoading: boolean;
+  leaksBusy: boolean;
+  /** Выбранные к импорту утечки (id). Импортированные не выбираются. */
+  leaksSel: number[];
+  /** Фильтр по источнику (пустая строка = все). */
+  leaksSource: string;
+  /** Утечки, чьё значение сейчас раскрыто (по умолчанию маскируется). */
+  leaksRevealed: number[];
+  /** Поле URL для запуска GitHub-скана (репозиторий/организация). */
+  leaksScanUrl: string;
+  /** Запускаемая/идущая задача GitHub-скана, либо null в простое. */
+  leaksScanJob: ApiLeakScanJob | null;
+  /** Оптимистичный флаг «стартуем» до ответа сервера (как farmRunStarting). */
+  leaksScanStarting: boolean;
+  /* ---- Workspace: интеграции (API-ключи; только админ) ---- */
+  /** Список ключей интеграций, либо null пока не загружено. */
+  integrations: ApiIntegrationKey[] | null;
+  integrationsLoading: boolean;
+  /** Черновики новых значений по имени ключа (password-инпуты). */
+  integrationDrafts: Record<string, string>;
+  /** Имя ключа, который сейчас сохраняется/чистится, либо null. */
+  integrationBusy: string | null;
   hostQuery: string;
   /* Recon view filters. Methods are multi-select like every other pill filter:
      empty = all. */
@@ -608,6 +650,21 @@ const initialState: FrostState = {
   openHostId: null,
   openIp: null,
   reconMenuOpen: false,
+  vaultView: "creds",
+  vaultMenuOpen: false,
+  leaksReport: null,
+  leaksLoading: false,
+  leaksBusy: false,
+  leaksSel: [],
+  leaksSource: "",
+  leaksRevealed: [],
+  leaksScanUrl: "",
+  leaksScanJob: null,
+  leaksScanStarting: false,
+  integrations: null,
+  integrationsLoading: false,
+  integrationDrafts: {},
+  integrationBusy: null,
   hostQuery: "",
   epMethods: [],
   epHostQuery: "",
@@ -769,6 +826,7 @@ function pathFor(s: {
   openProjectId: number | null;
   section: SectionId;
   reconView: ReconView;
+  vaultView: VaultView;
   profileTab: ProfileTab;
   openVulnId: number | null;
   openNoteId: number | null;
@@ -781,6 +839,7 @@ function pathFor(s: {
 }): string {
   if (s.view === "profile") return s.profileTab === "account" ? "/profile" : `/profile/${s.profileTab}`;
   if (s.view === "workspaceMembers") return "/members";
+  if (s.view === "workspaceIntegrations") return "/integrations";
   if (s.view === "detail" && s.openProjectId != null) {
     const base = `/projects/${s.openProjectId}`;
     // Экспорт-страница рекона — собственный маршрут, чтобы «Назад» из неё
@@ -802,6 +861,8 @@ function pathFor(s: {
     }
     if (s.section === "vulns" && s.openVulnId != null) return `${base}/vulns/${s.openVulnId}`;
     if (s.section === "notes" && s.openNoteId != null) return `${base}/notes/${s.openNoteId}`;
+    // Vault — раздел-дропдаун: подраздел кодируется как у Recon (…/vault/creds).
+    if (s.section === "vault") return `${base}/vault/${s.vaultView}`;
     return `${base}/${s.section}`;
   }
   return ({ projects: "/projects", tasks: "/tasks", mine: "/my-tasks", docs: "/docs", members: "/members" } as Record<NavId, string>)[s.nav] || "/projects";
@@ -860,13 +921,21 @@ function navStateFromPath(path: string): Partial<FrostState> {
     // /projects/{id}/vulns/{vulnId} and /projects/{id}/notes/{noteId} — deep links.
     if (seg === "vulns") return { ...base, section: "vulns", openVulnId: entityId() };
     if (seg === "notes") return { ...base, section: "notes", openNoteId: entityId() };
-    if (seg === "creds" || seg === "members" || seg === "activity") return { ...base, section: seg };
+    // /projects/{id}/vault/{creds|leaks} — раздел-дропдаун (как recon).
+    if (seg === "vault") {
+      const vv: VaultView = parts[3] === "leaks" ? "leaks" : "creds";
+      return { ...base, section: "vault", vaultView: vv };
+    }
+    // Старый маршрут /…/creds ведёт в Vault → Creds (обратная совместимость ссылок).
+    if (seg === "creds") return { ...base, section: "vault", vaultView: "creds" };
+    if (seg === "members" || seg === "activity") return { ...base, section: seg };
     return { ...base, section: "overview" };
   }
   if (head === "tasks") return { view: "list", nav: "tasks" };
   if (head === "my-tasks") return { view: "list", nav: "mine" };
   if (head === "docs") return { view: "list", nav: "docs" };
   if (head === "members") return { view: "workspaceMembers", nav: "members" };
+  if (head === "integrations") return { view: "workspaceIntegrations", nav: "integrations" };
   if (head === "profile") return { view: "profile", profileTab: ["security", "api", "customizing"].includes(parts[1]) ? (parts[1] as ProfileTab) : "account" };
   return { view: "list", nav: "projects" };
 }
@@ -1465,6 +1534,92 @@ export function FrostApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.jsFarmJob, state.openProjectId]);
 
+  // ================= vault → leaks: загрузка отчёта при открытии/смене фильтра =================
+  // Тянем отчёт, когда открыт Vault→Leaks (и при смене источника-фильтра). Прямой
+  // fetch (не reloadLeaks), чтобы эффект зависел только от своих ключей.
+  useEffect(() => {
+    const pid = state.openProjectId;
+    if (pid == null || state.section !== "vault" || state.vaultView !== "leaks") return;
+    let cancelled = false;
+    setStateRaw((s) => ({ ...s, leaksLoading: true }));
+    void (async () => {
+      try {
+        const report = await apiGetLeaks(pid);
+        if (!cancelled) setStateRaw((s) => ({ ...s, leaksReport: report, leaksLoading: false }));
+      } catch (e) {
+        if (!cancelled) {
+          setStateRaw((s) => ({ ...s, leaksLoading: false }));
+          pushToast(getApiErrorMessage(e, t("Couldn't load leaks")), "error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.openProjectId, state.section, state.vaultView]);
+
+  // Сбрасываем отчёт по утечкам при смене проекта — следующий вход перезагрузит.
+  useEffect(() => {
+    setStateRaw((s) => ({ ...s, leaksReport: null, leaksSel: [], leaksRevealed: [], leaksScanJob: null }));
+  }, [state.openProjectId]);
+
+  // ================= vault → leaks: поллинг задачи GitHub-скана =================
+  // Как прогон фермы: держим job в state, тикаем каждые 1.5с и по завершении
+  // перечитываем отчёт. Терминальный статус гасит поллинг.
+  useEffect(() => {
+    const job = state.leaksScanJob;
+    const pid = state.openProjectId;
+    if (!job || pid == null || !isFarmJobInFlight(job.status)) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const next = await apiGetLeakScan(pid, job.id);
+        if (cancelled) return;
+        if (isFarmJobInFlight(next.status)) {
+          setStateRaw((s) => (s.leaksScanJob && s.leaksScanJob.id === next.id ? { ...s, leaksScanJob: next } : s));
+        } else {
+          setStateRaw((s) => (s.leaksScanJob && s.leaksScanJob.id === next.id ? { ...s, leaksScanJob: null } : s));
+          if (next.status === "done") {
+            pushToast(t("GitHub scan done"), "success");
+            void reloadLeaks();
+          } else if (next.status === "failed") {
+            pushToast(next.error || t("GitHub scan failed"), "error");
+          }
+        }
+      } catch {
+        if (!cancelled) setStateRaw((s) => (s.leaksScanJob ? { ...s, leaksScanJob: { ...s.leaksScanJob } } : s));
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.leaksScanJob, state.openProjectId]);
+
+  // ================= workspace → integrations: загрузка при открытии (админ) =================
+  useEffect(() => {
+    if (state.view !== "workspaceIntegrations" || !isAdmin) return;
+    let cancelled = false;
+    setStateRaw((s) => ({ ...s, integrationsLoading: true }));
+    void (async () => {
+      try {
+        const res = await apiGetIntegrations();
+        if (!cancelled) setStateRaw((s) => ({ ...s, integrations: res.items, integrationsLoading: false }));
+      } catch (e) {
+        if (!cancelled) {
+          setStateRaw((s) => ({ ...s, integrationsLoading: false }));
+          pushToast(getApiErrorMessage(e, t("Couldn't load integrations")), "error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.view, isAdmin]);
+
   /** Hosts rendered by the whole Recon section. Backend-only — never the seed. */
   const hosts: Host[] = state.apiHosts ?? [];
   const hostNameById = (id: number) => hosts.find((h) => h.id === id)?.host ?? "";
@@ -1701,8 +1856,12 @@ export function FrostApp() {
      "Add hosts") — otherwise coming back would drop the user into a stale form
      instead of the list they asked for. */
   const setSection = (s: SectionId) =>
-    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), ...(s === "vault" ? {} : { vaultView: "creds" as VaultView }), reconMenuOpen: false, vaultMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
   const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+  /* Vault-дропдаун зеркалит Recon: выбор подраздела закрывает меню, сбрасывает
+     выбор/раскрытие утечек и уводит из чужих форм раздела. */
+  const selVault = (v: VaultView) => setState({ section: "vault", vaultView: v, vaultMenuOpen: false, reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, leaksSel: [] });
+  const selWSIntegrations = () => setState({ nav: "integrations", view: "workspaceIntegrations" });
 
   /* ---- URL ↔ navigation-state sync (deep links to sections / projects) ----
      Two effects mirror each other: URL → state, and state → URL. They must never
@@ -1746,6 +1905,7 @@ export function FrostApp() {
       openProjectId: state.openProjectId,
       section: state.section,
       reconView: state.reconView,
+      vaultView: state.vaultView,
       profileTab: state.profileTab,
       openVulnId: state.openVulnId,
       openNoteId: state.openNoteId,
@@ -1758,7 +1918,7 @@ export function FrostApp() {
     });
     if (p !== location.pathname) navigate(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, state.farmReportOpen, state.bulkDelOpen, location.pathname]);
+  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.vaultView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, state.farmReportOpen, state.bulkDelOpen, location.pathname]);
   /* Loaded as soon as the project opens, like every other collection — the tab's
      counter has to be right before the tab is ever visited. Entering the tab
      re-fetches, since the feed is a shared audit trail that others add to. */
@@ -1805,7 +1965,7 @@ export function FrostApp() {
           .click();
         return;
       }
-      setStateRaw((s) => (s.userMenuOpen || s.reconMenuOpen ? { ...s, userMenuOpen: false, reconMenuOpen: false } : s));
+      setStateRaw((s) => (s.userMenuOpen || s.reconMenuOpen || s.vaultMenuOpen ? { ...s, userMenuOpen: false, reconMenuOpen: false, vaultMenuOpen: false } : s));
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -2071,6 +2231,125 @@ export function FrostApp() {
       pushToast(getApiErrorMessage(e, t("Couldn't clear the farm report")), "error");
     }
   };
+
+  // ---- Vault → Leaks: ревью OSINT-находок и запуск GitHub-скана ----
+  // Тянет отчёт по утечкам (с учётом фильтра по источнику). Вызывается при
+  // открытии раздела, «Обновить», по завершении скана и после импорта/очистки.
+  const reloadLeaks = async () => {
+    const pid = state.openProjectId;
+    if (pid == null) return;
+    setState({ leaksLoading: true });
+    try {
+      // Тянем все источники разом — фильтр по источнику применяется на клиенте,
+      // чтобы список пилюль оставался стабильным (как в отчёте фермы).
+      const report = await apiGetLeaks(pid);
+      setState({ leaksReport: report, leaksLoading: false });
+    } catch (e) {
+      setState({ leaksLoading: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't load leaks")), "error");
+    }
+  };
+  const toggleLeakReveal = (id: number) =>
+    setState((s) => ({ leaksRevealed: toggleIn(s.leaksRevealed, id) }));
+  // Запуск GitHub-скана: валидируем непустой URL, стартуем задачу и кладём её в
+  // state — дальше её подхватывает поллинг-эффект (мирроринг прогона фермы).
+  const startGithubScan = async () => {
+    const pid = state.openProjectId;
+    const url = state.leaksScanUrl.trim();
+    if (pid == null || state.leaksScanStarting || isFarmJobInFlight(state.leaksScanJob?.status ?? "")) return;
+    if (!url) {
+      pushToast(t("Enter a GitHub repo or org URL"), "error");
+      return;
+    }
+    setState({ leaksScanStarting: true });
+    try {
+      const job = await apiStartGithubLeakScan(pid, url);
+      setState({ leaksScanJob: job, leaksScanStarting: false });
+      pushToast(t("GitHub scan started…"), "info");
+    } catch (e) {
+      setState({ leaksScanStarting: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't start the GitHub scan")), "error");
+    }
+  };
+  // Импорт выбранных утечек: тост со счётчиком, сброс выбора и перечит отчёта.
+  const importLeaksSelected = async (ids: number[]) => {
+    const pid = state.openProjectId;
+    if (pid == null || state.leaksBusy || ids.length === 0) return;
+    setState({ leaksBusy: true });
+    try {
+      const res = await apiImportLeaks(pid, ids);
+      setState({ leaksBusy: false, leaksSel: [] });
+      pushToast(res.imported ? `${res.imported} ${t("imported")}` : t("Nothing imported"), "success");
+      void reloadLeaks();
+    } catch (e) {
+      setState({ leaksBusy: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't import the selected leaks")), "error");
+    }
+  };
+  // Очистка утечек (с учётом активного фильтра источника) — с подтверждением.
+  const clearLeaks = async () => {
+    const pid = state.openProjectId;
+    if (pid == null || state.leaksBusy) return;
+    if (!window.confirm(t("Clear leaks? This discards the staged findings."))) return;
+    setState({ leaksBusy: true });
+    try {
+      const cleared = await apiClearLeaks(pid, state.leaksSource || undefined);
+      setState({ leaksBusy: false, leaksSel: [] });
+      pushToast(`${cleared} ${t("cleared")}`, "info");
+      void reloadLeaks();
+    } catch (e) {
+      setState({ leaksBusy: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't clear leaks")), "error");
+    }
+  };
+
+  // ---- Workspace → Integrations: API-ключи источников (только админ) ----
+  const reloadIntegrations = async () => {
+    setState({ integrationsLoading: true });
+    try {
+      const res = await apiGetIntegrations();
+      setState({ integrations: res.items, integrationsLoading: false });
+    } catch (e) {
+      setState({ integrationsLoading: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't load integrations")), "error");
+    }
+  };
+  // Сохранить/удалить ключ. Пустое значение = удаление (см. контракт бэкенда).
+  // По успеху обновляем строку списка на месте и чистим черновик инпута.
+  const saveIntegration = async (keyName: string) => {
+    if (state.integrationBusy) return;
+    const value = (state.integrationDrafts[keyName] ?? "");
+    setState({ integrationBusy: keyName });
+    try {
+      const row = await apiSetIntegration(keyName, value);
+      setState((s) => ({
+        integrationBusy: null,
+        integrations: (s.integrations ?? []).map((it) => (it.key_name === keyName ? row : it)),
+        integrationDrafts: { ...s.integrationDrafts, [keyName]: "" },
+      }));
+      pushToast(value ? t("Integration saved") : t("Integration cleared"), "success");
+    } catch (e) {
+      setState({ integrationBusy: null });
+      pushToast(getApiErrorMessage(e, t("Couldn't save the integration")), "error");
+    }
+  };
+  const clearIntegration = async (keyName: string) => {
+    if (state.integrationBusy) return;
+    setState({ integrationBusy: keyName });
+    try {
+      const row = await apiSetIntegration(keyName, "");
+      setState((s) => ({
+        integrationBusy: null,
+        integrations: (s.integrations ?? []).map((it) => (it.key_name === keyName ? row : it)),
+        integrationDrafts: { ...s.integrationDrafts, [keyName]: "" },
+      }));
+      pushToast(t("Integration cleared"), "info");
+    } catch (e) {
+      setState({ integrationBusy: null });
+      pushToast(getApiErrorMessage(e, t("Couldn't clear the integration")), "error");
+    }
+  };
+
   // Из ленты активности «показать все» у фарм-карточки открывает recon-экспорт
   // соответствующего типа (переключая раздел на Recon).
   const openFarmExport = (scope: ExportScope) => {
@@ -2107,6 +2386,7 @@ export function FrostApp() {
   const openIpDetail = (ip: string) => setState({ openIp: ip });
   const closeIpDetail = () => setState({ openIp: null });
   const toggleReconMenu = () => setState((s) => ({ reconMenuOpen: !s.reconMenuOpen }));
+  const toggleVaultMenu = () => setState((s) => ({ vaultMenuOpen: !s.vaultMenuOpen }));
 
   const toggleEpGroup = (host: string) =>
     setState((s) => ({ epExpanded: s.epExpanded.includes(host) ? s.epExpanded.filter((x) => x !== host) : [...s.epExpanded, host] }));
@@ -3754,7 +4034,9 @@ export function FrostApp() {
   const sectionLabel =
     sec === "hosts"
       ? ({ hosts: "Hosts", ips: "IPs", endpoints: "Endpoints", js: "JS scan", farm: "Farm" } as Record<string, string>)[rv] || "Hosts"
-      : ({ overview: "Overview", vulns: "Vulnerabilities", notes: "Notes", creds: "Creds", members: "Members", activity: "Activity" } as Record<string, string>)[sec] || "Overview";
+      : sec === "vault"
+      ? ({ creds: "Creds", leaks: "Leaks" } as Record<string, string>)[state.vaultView] || "Creds"
+      : ({ overview: "Overview", vulns: "Vulnerabilities", notes: "Notes", members: "Members", activity: "Activity" } as Record<string, string>)[sec] || "Overview";
   /** The item open inside the section, if any — the last crumb (e.g. the note's title). */
   const crumbLeaf =
     // The recon full-page forms are crumbs of their own: Project / Hosts / Export,
@@ -3897,7 +4179,7 @@ export function FrostApp() {
   const sh = secStyle("hosts");
   const sv = secStyle("vulns");
   const sn = secStyle("notes");
-  const scr = secStyle("creds");
+  const svault = secStyle("vault");
   const sm = secStyle("members");
   const sa = secStyle("activity");
 
@@ -4200,12 +4482,94 @@ export function FrostApp() {
     </div>
   );
 
+  // ---- Workspace → Integrations: API-ключи источников (только админ) ----
+  // Порядок и человекочитаемые подписи 7 известных ключей. Список рендерим по
+  // этому порядку, а статус берём из ответа бэкенда (значения секретов не приходят).
+  const INTEGRATION_ROWS: { key: string; label: string }[] = [
+    { key: "github_token", label: "GitHub token" },
+    { key: "hibp", label: "Have I Been Pwned" },
+    { key: "dehashed", label: "DeHashed" },
+    { key: "intelx", label: "IntelX" },
+    { key: "leakcheck", label: "LeakCheck" },
+    { key: "snusbase", label: "Snusbase" },
+    { key: "proxynova", label: "ProxyNova" },
+  ];
+  const renderIntegrations = () => {
+    const items = state.integrations;
+    const byKey = new Map((items ?? []).map((it) => [it.key_name, it]));
+    const loading = state.integrationsLoading && items === null;
+    return (
+      <div className="route" style={{ padding: "40px 48px 36px", width: "100%" }}>
+        {eyebrow([{ label: "Workspace", onClick: selProjects }, { label: "Integrations", muted: true }])}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20 }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t("Integrations")}</h1>
+            <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", marginTop: 6, maxWidth: 560, lineHeight: 1.5 }}>{t("API keys for OSINT sources. Configured keys enable the matching Leaks sources. Secret values are never shown — only whether a key is set.")}</div>
+          </div>
+          <button className="clk" onClick={() => void reloadIntegrations()} disabled={state.integrationsLoading} style={{ flex: "none", height: 40, padding: "0 15px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7, cursor: state.integrationsLoading ? "default" : "pointer", opacity: state.integrationsLoading ? 0.6 : 1 }}>
+            <Icon name="activity" size={15} sw={2.2} color="var(--fr-accent-2)" />{state.integrationsLoading ? t("Refreshing…") : t("Refresh")}
+          </button>
+        </div>
+
+        <div style={{ ...CARD, padding: 0, overflow: "hidden", marginTop: 24 }}>
+          {loading ? (
+            <div style={{ padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading integrations…")}</div>
+          ) : (
+            INTEGRATION_ROWS.map((row, idx) => {
+              const info = byKey.get(row.key);
+              const configured = info?.configured ?? false;
+              const draft = state.integrationDrafts[row.key] ?? "";
+              const rowBusy = state.integrationBusy === row.key;
+              return (
+                <div key={row.key} style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 22px", borderBottom: idx < INTEGRATION_ROWS.length - 1 ? "1px solid var(--fr-divider)" : "none", flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 200, flex: "1 1 200px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ font: "700 14px Inter,sans-serif", color: "var(--fr-text)" }}>{t(row.label)}</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 9px", background: configured ? "var(--fr-success-soft)" : "var(--fr-elevated)", color: configured ? "var(--fr-success)" : "var(--fr-text-faint)" }}>
+                        {configured ? <Icon name="check" size={12} color="var(--fr-success)" sw={2.6} /> : null}
+                        {configured ? t("configured") : t("not configured")}
+                      </span>
+                    </div>
+                    <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)", marginTop: 4 }}>
+                      {row.key}{info?.updated_at ? ` · ${t("updated")} ${relTime(info.updated_at)}` : ""}
+                    </div>
+                  </div>
+                  <input
+                    className="finp mono"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder={configured ? t("Enter a new value to replace…") : t("Paste API key…")}
+                    value={draft}
+                    disabled={rowBusy}
+                    onChange={(e) => setState((s) => ({ integrationDrafts: { ...s.integrationDrafts, [row.key]: e.target.value } }))}
+                    onKeyDown={(e) => { if (e.key === "Enter" && draft) void saveIntegration(row.key); }}
+                    style={{ flex: "2 1 260px", minWidth: 200, height: 42, font: "600 13px 'JetBrains Mono',monospace" }}
+                  />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+                    <button className="clk" onClick={() => void saveIntegration(row.key)} disabled={rowBusy || !draft} style={{ height: 42, padding: "0 18px", border: "none", borderRadius: 11, background: rowBusy || !draft ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: rowBusy || !draft ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                      <Icon name="save" size={15} color="var(--fr-on-accent)" sw={2.2} />{t("Save")}
+                    </button>
+                    <button className="clk" onClick={() => void clearIntegration(row.key)} disabled={rowBusy || !configured} title={t("Remove this key")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: rowBusy || !configured ? "not-allowed" : "pointer", opacity: rowBusy || !configured ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 7 }}>
+                      <Icon name="trash" size={15} color="var(--fr-danger)" sw={2.2} />{t("Clear")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderDetail = () => (
     <div className="route" style={{ padding: "0 0 36px", width: "100%" }}>
       {/* Backdrop ПОД баром вкладок (zIndex ниже), не над ним: клик по пустому
           месту закрывает меню Recon, но вкладки остаются наводимыми и
           кликабельными поверх него даже при открытом списке. */}
       {state.reconMenuOpen && <div onClick={() => setState({ reconMenuOpen: false })} style={{ position: "fixed", inset: 0, zIndex: 20 }} />}
+      {/* То же для дропдауна Vault — клик вне списка закрывает его. */}
+      {state.vaultMenuOpen && <div onClick={() => setState({ vaultMenuOpen: false })} style={{ position: "fixed", inset: 0, zIndex: 20 }} />}
       {/* tabs */}
       <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "0 48px", borderBottom: "1px solid var(--fr-border-light)", background: "var(--fr-surface)", overflow: "visible", position: "relative", zIndex: 30 }}>
         {tabItem(t("Overview"), "layout", so, () => setSection("overview"))}
@@ -4240,7 +4604,29 @@ export function FrostApp() {
         </div>
         {tabItem(t("Vulnerabilities"), "star2", sv, () => setSection("vulns"), { text: String(d.vulns.length), color: sv.badgeColor, bg: sv.badgeBg })}
         {tabItem(t("Notes"), "doc", sn, () => setSection("notes"), { text: String(d.notes.length), color: sn.badgeColor, bg: sn.badgeBg })}
-        {tabItem(t("Creds"), "lock", scr, () => setSection("creds"), { text: String(d.creds.length), color: scr.badgeColor, bg: scr.badgeBg })}
+        <div style={{ position: "relative", display: "flex" }}>
+          {/* Vault — раздел-дропдаун (Creds + Leaks), устроен как меню Recon:
+              открывает список подразделов, подсвечиваясь как обычная вкладка. */}
+          {tabItem(t("Vault"), "lock", svault, toggleVaultMenu, undefined, <Icon name="chevron-down" size={14} sw={2.2} style={{ transform: state.vaultMenuOpen ? "rotate(180deg)" : "none", transition: "transform .2s ease" }} />)}
+          <div className={`menu ${state.vaultMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 0, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("VAULT")}</div>
+            {([
+              { v: "creds" as const, icon: "lock" as const, label: "Creds", count: d.creds.length as number | null },
+              { v: "leaks" as const, icon: "globe" as const, label: "Leaks", count: (state.leaksReport?.summary.total ?? null) as number | null },
+            ]).map((it) => {
+              const on = sec === "vault" && state.vaultView === it.v;
+              return (
+                <div key={it.v} className={`reconrow clk${on ? " on" : ""}`} onClick={() => selVault(it.v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 11px", borderRadius: 10, marginBottom: 3, font: "600 13.5px Inter,sans-serif" }}>
+                  <Icon name={it.icon} size={17} />
+                  {t(it.label)}
+                  {it.count != null && (
+                    <span className="mono" style={{ marginLeft: "auto", minWidth: 22, textAlign: "center", fontSize: 11, fontWeight: 700, color: on ? "var(--fr-accent)" : "var(--fr-text-3)", background: on ? "var(--fr-accent-soft)" : "var(--fr-hover)", border: `1px solid ${on ? "var(--fr-accent-muted)" : "var(--fr-border-light)"}`, borderRadius: 6, padding: "1px 6px" }}>{it.count}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
         {canViewMembers && tabItem(t("Members"), "users", sm, () => setSection("members"), { text: String(d.members.length), color: sm.badgeColor, bg: sm.badgeBg })}
         {tabItem(t("Activity"), "activity", sa, () => setSection("activity"), { text: String(activityGroups.length), color: sa.color, bg: "var(--fr-bg)" })}
       </div>
@@ -4316,20 +4702,14 @@ export function FrostApp() {
             )}
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
               {sec === "hosts" && rv === "farm" && !state.farmReportOpen && (
-                <>
-                  {/* Слева от [Run] — вход в отчёт: ревью застейдженных результатов. */}
-                  <button className="clk" onClick={openFarmReport} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="server" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("View report")}
-                  </button>
-                  <button
-                    className="clk"
-                    onClick={runFarmWithSettings}
-                    disabled={state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")}
-                    style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
-                  >
-                    <Icon name="activity" size={16} color="var(--fr-on-accent)" sw={2.4} />{t("Run")}
-                  </button>
-                </>
+                <button
+                  className="clk"
+                  onClick={runFarmWithSettings}
+                  disabled={state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")}
+                  style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+                >
+                  {t("Run")}
+                </button>
               )}
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
                 <>
@@ -4400,7 +4780,7 @@ export function FrostApp() {
               {sec === "notes" && (
                 <button className="addbtn clk" onClick={() => openNoteEditor("add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add note")}</button>
               )}
-              {sec === "creds" && (
+              {sec === "vault" && state.vaultView === "creds" && (
                 <button className="addbtn clk" onClick={() => openEditor("cred", "add", -1)} style={{ height: 42 }}><Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add credential")}</button>
               )}
               {sec === "members" && canManageMembers && (
@@ -4415,7 +4795,12 @@ export function FrostApp() {
           {sec === "hosts" && renderRecon()}
           {sec === "vulns" && renderVulns()}
           {sec === "notes" && (state.noteEditorOpen ? renderNoteEditor() : state.openNoteId != null ? renderNoteViewer() : renderNotes())}
-          {sec === "creds" && renderCreds()}
+          {sec === "vault" &&
+            (state.vaultView === "leaks"
+              ? canEditProject
+                ? renderLeaks()
+                : renderNoAccessPage("Leaks review is available to project leads and admins.")
+              : renderCreds())}
           {sec === "members" &&
             (canViewMembers
               ? renderMembers()
@@ -4996,7 +5381,7 @@ export function FrostApp() {
         value={cfg[key]}
         onChange={(e) => setFarmField(key, e.target.value === "" ? min : Math.trunc(Number(e.target.value)))}
         onBlur={(e) => setFarmField(key, Math.min(max, Math.max(min, Math.trunc(Number(e.target.value) || min))))}
-        style={{ width: 120, textAlign: "right", font: "600 13px 'JetBrains Mono',monospace" }}
+        style={{ width: 80, textAlign: "right", font: "600 13px 'JetBrains Mono',monospace", appearance: "textfield", WebkitAppearance: "none", MozAppearance: "textfield" }}
       />
     );
 
@@ -6198,6 +6583,175 @@ export function FrostApp() {
   // Fixed-width password box: the mask fills it, so nothing moves when a row is
   // revealed — the eye/copy buttons stay put (the shift bug). Long values ellipsize.
   const CRED_MASK = "••••••••••••••••";
+
+  // ---- Vault → Leaks: ревью утечек (зеркалит отчёт фермы, но один список) ----
+  const renderLeaks = () => {
+    const report = state.leaksReport;
+    const loading = state.leaksLoading;
+    const busy = state.leaksBusy;
+    const summary = report?.summary ?? { total: 0, verified: 0, imported: 0, by_source: {} as Record<string, number> };
+    const allLeaks: ApiLeak[] = report?.leaks ?? [];
+    const scanning = state.leaksScanStarting || isFarmJobInFlight(state.leaksScanJob?.status ?? "");
+
+    // Фильтр по источнику — на клиенте, чтобы набор пилюль был стабилен.
+    const filtered = state.leaksSource ? allLeaks.filter((l) => l.source === state.leaksSource) : allLeaks;
+    // Пилюли источников — из полного набора (не из отфильтрованного).
+    const sources = Array.from(new Set(allLeaks.map((l) => l.source).filter(Boolean))).sort();
+
+    // Выбор уважает фильтр и не трогает импортированные (мирроринг фермы).
+    const selectable = filtered.filter((l) => !l.imported);
+    const selSet = new Set(state.leaksSel);
+    const allSel = selectable.length > 0 && selectable.every((l) => selSet.has(l.id));
+    const toggleLeak = (id: number) => setState((s) => ({ leaksSel: toggleIn(s.leaksSel, id) }));
+    const toggleAll = () => {
+      const ids = selectable.map((l) => l.id);
+      if (allSel) { const drop = new Set(ids); setState((s) => ({ leaksSel: s.leaksSel.filter((x) => !drop.has(x)) })); }
+      else setState((s) => ({ leaksSel: Array.from(new Set([...s.leaksSel, ...ids])) }));
+    };
+
+    const grid = "30px 108px minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.3fr) 168px";
+
+    const stat = (label: string, n: number) => (
+      <div key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 7, padding: "6px 14px", borderRadius: 20, background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)" }}>
+        <span className="mono" style={{ fontSize: 15, fontWeight: 800, color: "var(--fr-text)" }}>{n}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{label}</span>
+      </div>
+    );
+    const sourceChip = (src: string) =>
+      src ? <span className="mono" style={{ display: "inline-block", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{src}</span> : <span style={{ color: "var(--fr-text-faint)" }}>—</span>;
+    const verifiedBadge = (verified: boolean) =>
+      verified ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 9px", background: "var(--fr-accent-soft)", color: "var(--fr-accent)" }}><Icon name="check" size={12} color="var(--fr-accent)" sw={2.6} />{t("verified")}</span> : null;
+    const importedBadge = (imported: boolean) =>
+      imported ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 9px", background: "var(--fr-success-soft)", color: "var(--fr-success)" }}><Icon name="check" size={12} color="var(--fr-success)" sw={2.6} />{t("imported")}</span> : null;
+
+    return (
+      <div className="route">
+        {/* Строка запуска GitHub-скана: URL + кнопка. Прогресс — под ней при работе. */}
+        <div style={{ ...CARD, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 8 }}>{t("Scan GitHub")}</div>
+              <input
+                className="finp mono"
+                placeholder={t("https://github.com/org or repo URL…")}
+                value={state.leaksScanUrl}
+                disabled={!canEditProject || scanning}
+                onChange={(e) => setState({ leaksScanUrl: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") void startGithubScan(); }}
+                style={{ width: "100%", height: 42, font: "600 13px 'JetBrains Mono',monospace" }}
+              />
+            </div>
+            <button
+              className="clk"
+              onClick={() => void startGithubScan()}
+              disabled={!canEditProject || scanning || !state.leaksScanUrl.trim()}
+              style={{ alignSelf: "flex-end", height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: !canEditProject || scanning || !state.leaksScanUrl.trim() ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !canEditProject || scanning || !state.leaksScanUrl.trim() ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
+              <Icon name="search" size={16} color="var(--fr-on-accent)" sw={2.4} />{t("Scan GitHub")}
+            </button>
+          </div>
+          {scanning && (
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 12, font: "600 12.5px Inter,sans-serif", color: "var(--fr-accent)" }}>
+              <span className="frost-spin" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+              {t("Scanning GitHub…")}
+              {state.leaksScanJob?.progress?.found != null && (
+                <span className="mono" style={{ color: "var(--fr-text-3)" }}>{state.leaksScanJob.progress.found} {t("found")}</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Сводка + фильтр по источнику. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+          {stat(t("Total"), summary.total)}
+          {stat(t("Verified"), summary.verified)}
+          {stat(t("Imported"), summary.imported)}
+          {Object.entries(summary.by_source).map(([src, n]) => (
+            <span key={src} className="mono" style={{ display: "inline-flex", alignItems: "baseline", gap: 6, padding: "5px 12px", borderRadius: 20, background: "var(--fr-elevated)", color: "var(--fr-text-3)", fontSize: 11.5, fontWeight: 700 }}>{src} <b style={{ color: "var(--fr-text)" }}>{n}</b></span>
+          ))}
+        </div>
+
+        {sources.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Source")}</span>
+            {filterPill(t("All"), state.leaksSource === "", () => setState({ leaksSource: "" }))}
+            {sources.map((s) => filterPill(s, state.leaksSource === s, () => setState((st) => ({ leaksSource: st.leaksSource === s ? "" : s }))))}
+          </div>
+        )}
+
+        <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 420px)", minHeight: 280 }}>
+          {/* Шапка + обновление. */}
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{t("Leaks")}</h2>
+            <div style={{ flex: 1 }} />
+            <button className="clk" onClick={() => void reloadLeaks()} disabled={loading} style={{ height: 38, padding: "0 15px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>
+              <Icon name="activity" size={15} sw={2.2} color="var(--fr-accent-2)" />{loading ? t("Refreshing…") : t("Refresh")}
+            </button>
+          </div>
+
+          {/* Список (прокручивается внутри карточки). */}
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+            {loading && allLeaks.length === 0 ? (
+              <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading leaks…")}</div>
+            ) : allLeaks.length === 0 ? (
+              <div style={{ padding: "56px 40px", textAlign: "center" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 12, background: "var(--fr-accent-soft)", marginBottom: 14 }}>
+                  <Icon name="globe" size={22} color="var(--fr-accent)" sw={2} />
+                </div>
+                <div style={{ font: "800 16px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{t("No leaks yet")}</div>
+                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>{t("Run a GitHub scan or add integration keys to collect leaked credentials and secrets here for review.")}</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
+                  <input type="checkbox" checked={allSel} onChange={toggleAll} disabled={!canEditProject || selectable.length === 0} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectable.length > 0 ? "pointer" : "default" }} />
+                  <div>{t("Source")}</div>
+                  <div>{t("Kind")}</div>
+                  <div>{t("Subject")}</div>
+                  <div>{t("Value")}</div>
+                  <div />
+                </div>
+                {filtered.map((l) => {
+                  const selectableRow = !l.imported && canEditProject;
+                  const revealed = state.leaksRevealed.includes(l.id);
+                  return (
+                    <div key={l.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleLeak(l.id) : undefined} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: l.imported ? 0.55 : 1 }}>
+                      <input type="checkbox" checked={selSet.has(l.id)} disabled={l.imported || !canEditProject} onChange={() => toggleLeak(l.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
+                      <div style={{ minWidth: 0 }}>{sourceChip(l.source)}</div>
+                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.kind}</div>
+                      <div className="mono" title={l.subject} style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.subject || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
+                      {/* Значение маскируется; клик по глазу раскрывает (не выбирая строку). */}
+                      <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span className="mono" title={revealed ? l.value : undefined} style={{ minWidth: 0, fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{revealed ? (l.value || "—") : CRED_MASK}</span>
+                        {l.value && <div className="actbtn" title={revealed ? t("Hide value") : t("Reveal value")} onClick={(e) => { stop(e); toggleLeakReveal(l.id); }}><Icon name={revealed ? "lock" : "eye"} size={14} /></div>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>{verifiedBadge(l.verified)}{importedBadge(l.imported)}</div>
+                    </div>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No leaks match this source filter.")}</div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Действия: очистить (danger) и импортировать выбранное. */}
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "14px 22px", borderTop: "1px solid var(--fr-divider)" }}>
+            <button className="clk" onClick={() => void clearLeaks()} disabled={busy || allLeaks.length === 0 || !canEditProject} style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: busy || allLeaks.length === 0 || !canEditProject ? "not-allowed" : "pointer", opacity: busy || allLeaks.length === 0 || !canEditProject ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Icon name="trash" size={15} color="var(--fr-danger)" sw={2.2} />{state.leaksSource ? t("Clear source") : t("Clear all")}
+            </button>
+            <div style={{ flex: 1 }} />
+            {state.leaksSel.length > 0 && <span style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-3)" }}>{state.leaksSel.length} {t("selected")}</span>}
+            <button className="clk" onClick={() => void importLeaksSelected(state.leaksSel)} disabled={busy || state.leaksSel.length === 0 || !canEditProject} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: busy || state.leaksSel.length === 0 || !canEditProject ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: busy || state.leaksSel.length === 0 || !canEditProject ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Icon name="download" size={15} color="var(--fr-on-accent)" sw={2.4} />{t("Import selected")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCreds = () => {
     if (state.apiCreds === null) {
       return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading credentials…")}</div>;
@@ -6931,6 +7485,8 @@ export function FrostApp() {
               { id: "mine" as const, icon: "user1" as const, label: "My Tasks", onClick: () => setState({ nav: "mine", view: "list" }) },
               { id: "docs" as const, icon: "doc" as const, label: "Docs", onClick: () => setState({ nav: "docs", view: "list" }) },
               ...(isAdmin ? [{ id: "members" as const, icon: "users" as const, label: "Members", onClick: selWSMembers }] : []),
+              // Интеграции (API-ключи источников) — только админ, рядом с Members.
+              ...(isAdmin ? [{ id: "integrations" as const, icon: "plug" as const, label: "Integrations", onClick: selWSIntegrations }] : []),
             ]).map((it) => (
               <div key={it.id} className="nav clk" onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 13, padding: "10px 12px", borderRadius: 11, font: "600 14px Inter,sans-serif", color: navColor(it.id), background: navBg(it.id) }}>
                 <Icon name={it.icon} size={19} color="currentColor" style={{ flex: "none" }} />
@@ -6960,6 +7516,11 @@ export function FrostApp() {
               (isAdmin
                 ? renderWorkspaceMembers()
                 : renderNoAccessPage("The Members section is admin-only — this is where users are created and roles assigned."))}
+            {/* /integrations is admin-only (workspace API keys). */}
+            {state.view === "workspaceIntegrations" &&
+              (isAdmin
+                ? renderIntegrations()
+                : renderNoAccessPage("Integrations are admin-only — this is where source API keys are configured."))}
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
             </div>
