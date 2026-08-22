@@ -4076,7 +4076,7 @@ export function FrostApp() {
 
   const sectionLabel =
     sec === "hosts"
-      ? ({ hosts: "Hosts", ips: "IPs", endpoints: "Endpoints", js: "JS scan", farm: "Farm" } as Record<string, string>)[rv] || "Hosts"
+      ? ({ hosts: "Hosts", ips: "IPs", endpoints: "Endpoints", js: "JS scan", farm: "Recon farm" } as Record<string, string>)[rv] || "Hosts"
       : sec === "vault"
       ? ({ creds: "Creds", leaks: "Leaks" } as Record<string, string>)[state.vaultView] || "Creds"
       : ({ overview: "Overview", vulns: "Vulnerabilities", notes: "Notes", members: "Members", activity: "Activity" } as Record<string, string>)[sec] || "Overview";
@@ -4628,7 +4628,7 @@ export function FrostApp() {
               { v: "endpoints" as const, icon: "link" as const, label: "Endpoints", count: endpointTotal as number | null },
               { v: "js" as const, icon: "doc" as const, label: "JS", count: jsFiles.length as number | null },
               // Farm settings — только лидам/админам (конфиг рекон-фермы проекта).
-              ...(canEditProject ? [{ v: "farm" as const, icon: "settings" as const, label: "Farm", count: null }] : []),
+              ...(canEditProject ? [{ v: "farm" as const, icon: "settings" as const, label: "Recon farm", count: null }] : []),
             ]).map((it) => {
               // Nothing is highlighted while another section is open: the recon
               // view only counts as active when Recon itself is the open section.
@@ -4721,7 +4721,7 @@ export function FrostApp() {
               /* The Farm view is a workspace, not a list — it gets its own title
                  and subtitle instead of the recon "Total hosts" pill. */
               <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t("Farm")}</h1>
+                <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-.7px", color: "var(--fr-text)" }}>{t("Recon farm")}</h1>
                 {/* Активные процессы прямо сейчас — длина списка «сейчас работает». */}
                 {(() => {
                   const procs = isFarmJobInFlight(state.farmRunJob?.status ?? "") ? (state.farmRunJob?.progress?.steps?.length ?? 0) : 0;
@@ -4751,7 +4751,7 @@ export function FrostApp() {
                   disabled={state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")}
                   style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
                 >
-                  {t("Run")}
+                  {t("Run recon")}
                 </button>
               )}
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
