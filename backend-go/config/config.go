@@ -21,6 +21,16 @@ type Config struct {
 
 	// --- JWT / сессии ---
 	JWTSecretKey                string `env:"JWT_SECRET_KEY,required"`
+
+	// Ключи внешних OSINT/breach-источников и github-скана — ТОЛЬКО через окружение
+	// (.env.prod), не через вебку (раздел Integrations удалён). Пусто → источник
+	// самопропускается. ProxyNova бесплатный/keyless — ключа не требует.
+	GithubToken        string `env:"GITHUB_TOKEN"`
+	BreachHIBPKey      string `env:"BREACH_HIBP_KEY"`
+	BreachDehashedKey  string `env:"BREACH_DEHASHED_KEY"`
+	BreachIntelXKey    string `env:"BREACH_INTELX_KEY"`
+	BreachLeakCheckKey string `env:"BREACH_LEAKCHECK_KEY"`
+	BreachSnusbaseKey  string `env:"BREACH_SNUSBASE_KEY"`
 	JWTAccessTokenExpireMinutes int    `env:"JWT_ACCESS_TOKEN_EXPIRE_MINUTES" envDefault:"30"`
 	JWTRefreshTokenExpireDays   int    `env:"JWT_REFRESH_TOKEN_EXPIRE_DAYS" envDefault:"30"`
 

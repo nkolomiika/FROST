@@ -21,13 +21,10 @@ import (
 
 	"github.com/nkolomiika/frost/config"
 	"github.com/nkolomiika/frost/internal/adapters/leaksink"
-	"github.com/nkolomiika/frost/internal/adapters/postgres/integrationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/leaksrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/reconrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/wordlistrepo"
-	"github.com/nkolomiika/frost/internal/adapters/security"
 	"github.com/nkolomiika/frost/internal/adapters/storage"
-	"github.com/nkolomiika/frost/internal/app/integrations"
 	"github.com/nkolomiika/frost/internal/app/leaks"
 	"github.com/nkolomiika/frost/internal/app/recon"
 	"github.com/nkolomiika/frost/internal/app/wordlists"
@@ -73,15 +70,11 @@ func run() error {
 	reconRepo := reconrepo.New(pool)
 	svc := recon.NewService(reconRepo, recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
 
-	// github secret-scan (kind=github_scan) на обычной дорожке пишет находки в
-	// единое хранилище утечек и резолвит github_token из workspace-интеграций.
-	cipher, err := security.NewSecretCipher(cfg.JWTSecretKey)
-	if err != nil {
-		return fmt.Errorf("cipher: %w", err)
-	}
-	integrationsSvc := integrations.NewService(integrationsrepo.New(pool), cipher)
+	// github secret-scan (kind=github_scan) + стадия утечек пишут находки в единое
+	// хранилище recon_leaks. Ключи источников (github_token, breach-ключи) резолвятся
+	// из ОКРУЖЕНИЯ (.env.prod), а не из БД: раздел Integrations в вебке удалён.
 	leaksSvc := leaks.NewService(leaksrepo.New(pool))
-	svc.AttachLeaks(integrationsSvc, leaksink.New(leaksSvc))
+	svc.AttachLeaks(recon.IntegrationResolverFromConfig(cfg), leaksink.New(leaksSvc))
 
 	// Материализатор словарей: кастомный словарь (SubdomainWordlistID/EndpointsWordlistID)
 	// стримится из MinIO во temp перед dnsx -w / ffuf -w. Без MinIO — только бандл-тиры

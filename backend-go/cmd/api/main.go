@@ -179,7 +179,9 @@ func run() error {
 	// и приёмник утечек — для github secret-scan (kind=github_scan).
 	reconRepo := reconrepo.New(pool)
 	reconSvc := recon.NewService(reconRepo, recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
-	reconSvc.AttachLeaks(integrationsSvc, leaksink.New(leaksSvc))
+	// Ключи источников — из окружения (.env.prod), не из БД: раздел Integrations в
+	// вебке удалён, всё через env. См. recon.IntegrationResolverFromConfig.
+	reconSvc.AttachLeaks(recon.IntegrationResolverFromConfig(cfg), leaksink.New(leaksSvc))
 	// Регидрация заархивированного стейджинга при открытии отчёта (см. archive.go).
 	if archiveBlob != nil {
 		reconSvc.AttachArchive(reconRepo, archiveBlob)

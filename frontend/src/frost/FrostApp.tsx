@@ -864,7 +864,6 @@ function pathFor(s: {
 }): string {
   if (s.view === "profile") return s.profileTab === "account" ? "/profile" : `/profile/${s.profileTab}`;
   if (s.view === "workspaceMembers") return "/members";
-  if (s.view === "workspaceIntegrations") return "/integrations";
   if (s.view === "detail" && s.openProjectId != null) {
     const base = `/projects/${s.openProjectId}`;
     // Экспорт-страница рекона — собственный маршрут, чтобы «Назад» из неё
@@ -961,7 +960,6 @@ function navStateFromPath(path: string): Partial<FrostState> {
   if (head === "my-tasks") return { view: "list", nav: "mine" };
   if (head === "docs") return { view: "list", nav: "docs" };
   if (head === "members") return { view: "workspaceMembers", nav: "members" };
-  if (head === "integrations") return { view: "workspaceIntegrations", nav: "integrations" };
   if (head === "profile") return { view: "profile", profileTab: ["security", "api", "customizing"].includes(parts[1]) ? (parts[1] as ProfileTab) : "account" };
   return { view: "list", nav: "projects" };
 }
@@ -7995,8 +7993,6 @@ export function FrostApp() {
               { id: "mine" as const, icon: "user1" as const, label: "My Tasks", onClick: () => setState({ nav: "mine", view: "list" }) },
               { id: "docs" as const, icon: "doc" as const, label: "Docs", onClick: () => setState({ nav: "docs", view: "list" }) },
               ...(isAdmin ? [{ id: "members" as const, icon: "users" as const, label: "Members", onClick: selWSMembers }] : []),
-              // Интеграции (API-ключи источников) — только админ, рядом с Members.
-              ...(isAdmin ? [{ id: "integrations" as const, icon: "plug" as const, label: "Integrations", onClick: selWSIntegrations }] : []),
             ]).map((it) => (
               <div key={it.id} className="nav clk" onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 13, padding: "10px 12px", borderRadius: 11, font: "600 14px Inter,sans-serif", color: navColor(it.id), background: navBg(it.id) }}>
                 <Icon name={it.icon} size={19} color="currentColor" style={{ flex: "none" }} />
@@ -8026,11 +8022,6 @@ export function FrostApp() {
               (isAdmin
                 ? renderWorkspaceMembers()
                 : renderNoAccessPage("The Members section is admin-only — this is where users are created and roles assigned."))}
-            {/* /integrations is admin-only (workspace API keys). */}
-            {state.view === "workspaceIntegrations" &&
-              (isAdmin
-                ? renderIntegrations()
-                : renderNoAccessPage("Integrations are admin-only — this is where source API keys are configured."))}
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
             </div>

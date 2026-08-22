@@ -79,3 +79,16 @@ func ConfigFromConfig(c *config.Config) Config {
 		ResultMaxItems:   c.ReconResultMaxItems,
 	}
 }
+
+// IntegrationResolverFromConfig — резолвер ключей источников из конфига (env). Ключи
+// приходят из .env.prod (GITHUB_TOKEN, BREACH_*), а не из БД/вебки.
+func IntegrationResolverFromConfig(c *config.Config) IntegrationResolver {
+	return NewStaticKeyResolver(map[string]string{
+		"github_token": c.GithubToken,
+		"hibp":         c.BreachHIBPKey,
+		"dehashed":     c.BreachDehashedKey,
+		"intelx":       c.BreachIntelXKey,
+		"leakcheck":    c.BreachLeakCheckKey,
+		"snusbase":     c.BreachSnusbaseKey,
+	})
+}
