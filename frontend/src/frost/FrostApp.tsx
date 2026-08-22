@@ -4178,7 +4178,7 @@ export function FrostApp() {
           {/* Recon открывает меню, а не раздел напрямую, но выделяется как
               обычная вкладка — той же синей линией снизу, что и соседние. */}
           {tabItem(t("Recon"), "server", sh, toggleReconMenu, undefined, <Icon name="chevron-down" size={14} sw={2.2} style={{ transform: state.reconMenuOpen ? "rotate(180deg)" : "none", transition: "transform .2s ease" }} />)}
-          <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 8, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
+          <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 0, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("RECON")}</div>
             {([
               { v: "hosts" as const, icon: "server" as const, label: "Hosts", count: hosts.length as number | null },
