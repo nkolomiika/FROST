@@ -31,11 +31,14 @@ var farmCancelPollInterval = 2 * time.Second
 
 // проценты-вехи стадий (грубые, для прогресс-бара).
 const (
-	pctSubdomains = 5
-	pctResolve    = 35
-	pctPorts      = 60
-	pctEndpoints  = 75
-	pctJS         = 90
+	// Вехи прогресса подобраны под РЕАЛЬНОЕ время стадий, а не равными долями:
+	// JS-майнинг обычно самый долгий, поэтому под него оставлен большой band
+	// [pctJS..pctDone], внутри которого процент растёт по мере готовности хостов.
+	pctSubdomains = 3
+	pctResolve    = 10
+	pctPorts      = 30
+	pctEndpoints  = 45
+	pctJS         = 55
 	pctDone       = 100
 )
 

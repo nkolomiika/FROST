@@ -5123,27 +5123,21 @@ export function FrostApp() {
 
     return (
       <div style={{ ...CARD, padding: "22px 24px" }}>
-        {cardHeader("activity", t("Run the farm"), t("Runs subdomains, resolve, liveness and port scan across the project's root domains"))}
-        {/* Запуск — кнопкой Run в шапке раздела. Здесь остаётся Stop и индикатор
-            прогресса, когда прогон уже идёт. */}
-        {(runInFlight || state.farmRunStarting) && (
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
-            {runInFlight && (
-              <button
-                className="clk"
-                onClick={stopFarmRun}
-                disabled={state.farmCancelling}
-                style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, opacity: state.farmCancelling ? 0.6 : 1 }}
-              >
-                <Icon name="close" size={15} color="var(--fr-danger)" sw={2.6} />{state.farmCancelling ? t("Stopping…") : t("Stop run")}
-              </button>
-            )}
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
-              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
-              {t("Running")}…
-            </span>
-          </div>
-        )}
+        {/* Заголовок карточки слева, «Stop run» — в правом углу компонента (только
+            во время прогона). Индикатор «Running…» убран — прогресс и так виден. */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          {cardHeader("activity", t("Run the farm"), t("Runs subdomains, resolve, liveness and port scan across the project's root domains"))}
+          {runInFlight && (
+            <button
+              className="clk"
+              onClick={stopFarmRun}
+              disabled={state.farmCancelling}
+              style={{ flex: "none", height: 40, padding: "0 16px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, opacity: state.farmCancelling ? 0.6 : 1 }}
+            >
+              <Icon name="close" size={15} color="var(--fr-danger)" sw={2.6} />{state.farmCancelling ? t("Stopping…") : t("Stop run")}
+            </button>
+          )}
+        </div>
 
         {run && (
           <div style={{ marginTop: 20 }}>

@@ -191,7 +191,17 @@ func (s *Service) runFarmEndpoints(ctx context.Context, runSvc *Service, cfg Far
 			eg.Go(func() error {
 				stepCtx, stepCancel := context.WithCancel(ctx)
 				defer stepCancel()
-				id := prog.addStep(RunStep{Tool: tool, Args: tool + " (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
+				// Реальные флаги запуска тула (без путей) — чтобы видно было, как он крутится.
+				argsDisp := tool
+				switch tool {
+				case "katana":
+					argsDisp = "katana -jc -silent"
+				case "gau":
+					argsDisp = "gau -subs"
+				case "waybackurls":
+					argsDisp = "waybackurls"
+				}
+				id := prog.addStep(RunStep{Tool: tool, Args: argsDisp + " (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
 				defer prog.removeStep(id)
 				hits, e := runSvc.scanEndpointTool(stepCtx, tool, host, toolCfg)
 				mu.Lock()
@@ -269,6 +279,10 @@ func (s *Service) runFarmJS(ctx context.Context, runSvc *Service, cfg FarmConfig
 		})
 	}
 
+	// Прогресс JS-стадии растёт по мере готовности хостов (а не прыгает на pctJS и
+	// висит там, пока крутятся все trufflehog'и) — band [pctJS..pctDone-2].
+	total := len(hosts)
+	var jsDone atomic.Int64
 	var eg errgroup.Group
 	eg.SetLimit(limit)
 	for _, host := range hosts {
@@ -276,7 +290,8 @@ func (s *Service) runFarmJS(ctx context.Context, runSvc *Service, cfg FarmConfig
 		eg.Go(func() error {
 			stepCtx, stepCancel := context.WithCancel(ctx)
 			defer stepCancel()
-			id := prog.addStep(RunStep{Tool: "js-mine", Args: "trufflehog + regex JS (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
+			// Показываем реальные параметры запуска trufflehog; пути temp-файлов не светим.
+			id := prog.addStep(RunStep{Tool: "js-mine", Args: "trufflehog filesystem --json --no-update + regex (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
 			defer prog.removeStep(id)
 			files, errs := runSvc.mineHostJS(stepCtx, host)
 			mu.Lock()
@@ -294,6 +309,15 @@ func (s *Service) runFarmJS(ctx context.Context, runSvc *Service, cfg FarmConfig
 				result.Errors = append(result.Errors, "процесс отменён: js-mine "+host)
 			}
 			mu.Unlock()
+			d := int(jsDone.Add(1))
+			if total > 0 {
+				pct := pctJS + (pctDone-2-pctJS)*d/total
+				prog.update(func(p *RunProgress) {
+					if pct > p.Percent {
+						p.Percent = pct
+					}
+				})
+			}
 			return nil
 		})
 	}
