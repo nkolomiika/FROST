@@ -60,19 +60,36 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 	// Синхронно, каждая компания — видимый шаг (несколько HTTP-запросов). На cancel —
 	// как и breach-находки: накопленное отбрасывается (return true до WriteLeaks).
 	var linkedinRecs []LeakRecord
-	if cfg.StageAccountSearch && len(cfg.LeaksCompanies) > 0 {
+	if cfg.StageAccountSearch {
+		// Дедуп собранных/сгенерированных почт против уже заданных email-целей.
 		genSeen := make(map[string]struct{})
 		for _, tg := range targets {
 			if tg.Kind == reconnet.BreachTargetEmail {
 				genSeen[strings.ToLower(tg.Value)] = struct{}{}
 			}
 		}
+		addEmail := func(em string, rec *LeakRecord) {
+			le := strings.ToLower(strings.TrimSpace(em))
+			if le == "" {
+				return
+			}
+			if _, ok := genSeen[le]; ok {
+				return
+			}
+			genSeen[le] = struct{}{}
+			targets = append(targets, reconnet.BreachTarget{Kind: reconnet.BreachTargetEmail, Value: em})
+			if rec != nil {
+				linkedinRecs = append(linkedinRecs, *rec)
+			}
+		}
+
+		// LinkedIn: компании → сотрудники → сгенерированные почты (+ люди как находки).
 		for _, company := range cfg.LeaksCompanies {
 			if ctx.Err() != nil {
 				break
 			}
 			stepCtx, stepCancel := context.WithCancel(ctx)
-			id := prog.addStep(RunStep{Tool: "linkedin", Args: `duckduckgo site:linkedin.com/in "` + company + `"`, Target: company, StartedAt: time.Now()}, stepCancel)
+			id := prog.addStep(RunStep{Tool: "linkedin", Args: `site:linkedin.com/in "` + company + `"`, Target: company, StartedAt: time.Now()}, stepCancel)
 			people, note := reconnet.EnumerateLinkedIn(stepCtx, company, s.settings)
 			if note != "" {
 				result.Errors = append(result.Errors, note)
@@ -81,12 +98,24 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 				linkedinRecs = append(linkedinRecs, linkedinLeakRecord(p, company, cfg.LeaksDomains))
 			}
 			for _, em := range reconnet.GenerateEmails(people, cfg.LeaksDomains, leaksInputCap) {
-				le := strings.ToLower(em)
-				if _, ok := genSeen[le]; ok {
-					continue
-				}
-				genSeen[le] = struct{}{}
-				targets = append(targets, reconnet.BreachTarget{Kind: reconnet.BreachTargetEmail, Value: em})
+				addEmail(em, nil)
+			}
+			prog.removeStep(id)
+			stepCancel()
+		}
+
+		// Email-harvest через Google CSE: реальные почты доменов из веба → в breach-цели
+		// и как account-находки (source=web). Только при настроенном CSE (key+cx).
+		if len(cfg.LeaksDomains) > 0 && strings.TrimSpace(s.settings.GoogleCSEKey) != "" && strings.TrimSpace(s.settings.GoogleCSECx) != "" {
+			stepCtx, stepCancel := context.WithCancel(ctx)
+			id := prog.addStep(RunStep{Tool: "email-harvest", Args: `google cse "@domain"`, Target: strings.Join(cfg.LeaksDomains, ","), StartedAt: time.Now()}, stepCancel)
+			emails, note := reconnet.HarvestEmailsCSE(stepCtx, cfg.LeaksDomains, s.settings)
+			if note != "" {
+				result.Errors = append(result.Errors, note)
+			}
+			for _, em := range emails {
+				rec := webEmailLeakRecord(em)
+				addEmail(em, &rec)
 			}
 			prog.removeStep(id)
 			stepCancel()
@@ -351,6 +380,22 @@ func linkedinLeakRecord(p reconnet.LinkedInPerson, company string, domains []str
 		Value:    "",
 		Verified: false,
 		Detail:   detail,
+	}
+}
+
+// webEmailLeakRecord — реальная почта домена, найденная в открытом вебе через CSE
+// (пасты/GitHub/доки) → находка (source=web, kind=account). Не верифицируется.
+func webEmailLeakRecord(email string) LeakRecord {
+	return LeakRecord{
+		Source:   "web",
+		Kind:     "account",
+		Subject:  email,
+		Value:    "",
+		Verified: false,
+		Detail: map[string]any{
+			"resource": "web",
+			"note":     "email found on the public web (Google CSE)",
+		},
 	}
 }
 

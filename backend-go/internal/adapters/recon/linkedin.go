@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -12,6 +13,23 @@ import (
 	"strings"
 	"time"
 )
+
+// newSearchClient — клиент для поисковых бэкендов (Google CSE, DuckDuckGo): цели —
+// ФИКСИРОВАННЫЕ доверенные хосты (не пользовательский ввод), поэтому без SSRF-guard и
+// с обычной проверкой TLS. Форсим IPv4: API-ключ Google CSE ограничивают по IPv4, а
+// VPS по умолчанию уходит в googleapis по IPv6 — из-за чего ключ отвергается.
+func newSearchClient(timeout time.Duration) *http.Client {
+	d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	tr := &http.Transport{
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+			return d.DialContext(ctx, "tcp4", addr)
+		},
+		ForceAttemptHTTP2:   true,
+		MaxIdleConns:        16,
+		MaxIdleConnsPerHost: 16,
+	}
+	return &http.Client{Transport: tr, Timeout: timeout}
+}
 
 // LinkedIn-энумерация сотрудников компании БЕЗ логина в LinkedIn и без ключей:
 // дёргаем поисковик (DuckDuckGo HTML — самый терпимый к скрейпу) по запросу
@@ -56,7 +74,7 @@ func EnumerateLinkedIn(ctx context.Context, company string, s Settings) ([]Linke
 	if timeout <= 0 {
 		timeout = 20 * time.Second
 	}
-	client := newGuardedClient(s, timeout, true, 4)
+	client := newSearchClient(timeout)
 	defer client.CloseIdleConnections()
 
 	maxResults := s.LinkedInMaxResults
@@ -125,6 +143,121 @@ func EnumerateLinkedIn(ctx context.Context, company string, s Settings) ([]Linke
 		return nil, "linkedin(" + company + "): " + lastNote
 	}
 	return people, ""
+}
+
+// emailRe — грубый матч e-mail в тексте (title/snippet результатов).
+var emailRe = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+
+// harvestMaxEmails — потолок собранных почт (защита от раздувания breach-пробива).
+const harvestMaxEmails = 100
+
+// HarvestEmailsCSE ищет через Google CSE РЕАЛЬНЫЕ почты доменов, засветившиеся в вебе
+// (GitHub, пасты, доки, форумы — «весь веб»). Не угадывает, а находит уже опубликованные.
+// Требует настроенный CSE (ключ+cx) — иначе пусто. Возвращает уникальные почты + пометку.
+func HarvestEmailsCSE(ctx context.Context, domains []string, s Settings) ([]string, string) {
+	if strings.TrimSpace(s.GoogleCSEKey) == "" || strings.TrimSpace(s.GoogleCSECx) == "" {
+		return nil, ""
+	}
+	timeout := s.LinkedInTimeout
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+	client := newSearchClient(timeout)
+	defer client.CloseIdleConnections()
+
+	seen := map[string]struct{}{}
+	var out []string
+	var lastNote string
+	for _, d := range domains {
+		dl := strings.ToLower(strings.TrimSpace(d))
+		if dl == "" {
+			continue
+		}
+		for _, start := range []string{"1", "11"} {
+			if len(out) >= harvestMaxEmails || ctx.Err() != nil {
+				break
+			}
+			body, note := linkedinFetch(ctx, client, googleCSEEmailURL(s.GoogleCSEKey, s.GoogleCSECx, dl, start))
+			if note != "" {
+				lastNote = note
+				break
+			}
+			found, perr := extractEmailsFromCSE(body, dl)
+			if perr != "" {
+				lastNote = perr
+				break
+			}
+			if len(found) == 0 {
+				break
+			}
+			for _, e := range found {
+				if _, ok := seen[e]; ok {
+					continue
+				}
+				seen[e] = struct{}{}
+				out = append(out, e)
+				if len(out) >= harvestMaxEmails {
+					break
+				}
+			}
+		}
+	}
+	if len(out) == 0 && lastNote != "" {
+		return nil, "email-harvest: " + lastNote
+	}
+	return out, ""
+}
+
+// googleCSEEmailURL — CSE-запрос на почты домена: ищем страницы, где встречается
+// "@domain" (пасты/GitHub/доки), из title+snippet потом вытащим сами адреса.
+func googleCSEEmailURL(key, cx, domain, start string) string {
+	v := url.Values{
+		"key": {key},
+		"cx":  {cx},
+		"q":   {`"@` + domain + `"`},
+		"num": {"10"},
+	}
+	if start != "" && start != "1" {
+		v.Set("start", start)
+	}
+	return "https://www.googleapis.com/customsearch/v1?" + v.Encode()
+}
+
+// extractEmailsFromCSE достаёт из JSON CSE все почты домена (из title+snippet).
+func extractEmailsFromCSE(body, domain string) ([]string, string) {
+	var resp struct {
+		Items []struct {
+			Title   string `json:"title"`
+			Snippet string `json:"snippet"`
+		} `json:"items"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		return nil, "cse_parse"
+	}
+	if resp.Error.Message != "" {
+		return nil, "cse: " + resp.Error.Message
+	}
+	suffix := "@" + strings.ToLower(domain)
+	seen := map[string]struct{}{}
+	var out []string
+	for _, it := range resp.Items {
+		text := html.UnescapeString(it.Title + " " + it.Snippet)
+		for _, m := range emailRe.FindAllString(text, -1) {
+			el := strings.ToLower(m)
+			if !strings.HasSuffix(el, suffix) {
+				continue
+			}
+			if _, ok := seen[el]; ok {
+				continue
+			}
+			seen[el] = struct{}{}
+			out = append(out, el)
+		}
+	}
+	return out, ""
 }
 
 // googleCSEURL — Custom Search JSON API: site:linkedin.com/in "Company", 10/страница.

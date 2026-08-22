@@ -112,10 +112,7 @@ func AllBreachSources(keys BreachKeys, cfg BreachHTTPConfig) []BreachSource {
 		&hibpSource{key: keys.HIBP, cfg: cfg},
 		&dehashedSource{key: keys.Dehashed, cfg: cfg},
 		&intelxSource{key: keys.IntelX, cfg: cfg},
-		newThinBreachSource("leakcheck", keys.LeakCheck, cfg, func(key string, t BreachTarget) (*http.Request, error) {
-			q := url.Values{"key": {key}, "check": {t.Value}, "type": {leakcheckType(t.Kind)}}
-			return http.NewRequest(http.MethodGet, "https://leakcheck.io/api?"+q.Encode(), nil)
-		}),
+		&leakcheckSource{cfg: cfg}, // публичный keyless API (email + domain)
 		newThinBreachSource("snusbase", keys.Snusbase, cfg, func(key string, t BreachTarget) (*http.Request, error) {
 			q := url.Values{"term": {t.Value}, "type": {snusbaseType(t.Kind)}}
 			req, err := http.NewRequest(http.MethodGet, "https://api.snusbase.com/data/search?"+q.Encode(), nil)
@@ -460,6 +457,67 @@ func mapIntelxRecords(t BreachTarget, recs []intelxRecord) []BreachLeak {
 		})
 	}
 	return out
+}
+
+// ─────────────────────────── LeakCheck (public) ───────────────────────────
+
+// leakcheckSource — публичный БЕСПЛАТНЫЙ API LeakCheck (без ключа): по email или
+// домену отдаёт названия дампов/бричей, где селектор засветился, и какие поля были
+// раскрыты (есть password → kind=credential). Значений (паролей) публичный тир не
+// отдаёт — только источники. Всегда активен.
+type leakcheckSource struct{ cfg BreachHTTPConfig }
+
+func (s *leakcheckSource) Name() string { return "leakcheck" }
+
+func (s *leakcheckSource) Enabled(_ BreachKeys) bool { return true } // keyless free
+
+func (s *leakcheckSource) Search(ctx context.Context, t BreachTarget) ([]BreachLeak, error) {
+	q := url.Values{"check": {t.Value}}
+	req, err := http.NewRequest(http.MethodGet, "https://leakcheck.io/api/public?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	body, ok, err := breachDo(ctx, s.cfg, "leakcheck", req)
+	if err != nil || !ok {
+		return nil, err
+	}
+	var r struct {
+		Success bool     `json:"success"`
+		Found   int      `json:"found"`
+		Fields  []string `json:"fields"`
+		Sources []struct {
+			Name string `json:"name"`
+			Date string `json:"date"`
+		} `json:"sources"`
+	}
+	_ = json.Unmarshal(body, &r)
+	if !r.Success || r.Found == 0 {
+		return nil, nil
+	}
+	breaches := make([]string, 0, len(r.Sources))
+	for _, src := range r.Sources {
+		if src.Name != "" {
+			breaches = append(breaches, src.Name)
+		}
+	}
+	kind := "account"
+	for _, f := range r.Fields {
+		if f == "password" {
+			kind = "credential"
+			break
+		}
+	}
+	return []BreachLeak{{
+		Source:  "leakcheck",
+		Kind:    kind,
+		Subject: t.Value,
+		Value:   "",
+		Detail: map[string]any{
+			"breaches": breaches,
+			"fields":   r.Fields,
+			"found":    r.Found,
+		},
+	}}, nil
 }
 
 // ─────────────────────────── тонкие источники ───────────────────────────

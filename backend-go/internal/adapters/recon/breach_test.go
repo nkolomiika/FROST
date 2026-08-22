@@ -111,12 +111,11 @@ func TestBreachSource_NoKeySelfSkips(t *testing.T) {
 		t.Fatalf("want 6 sources, got %d", len(sources))
 	}
 	for _, src := range sources {
-		if src.Name() == "proxynova" {
-			// ProxyNova COMB — бесплатный keyless источник: активен ВСЕГДА (без ключа),
-			// поэтому в «self-skip без ключа» не участвует (и его Search не дёргаем —
-			// он реально пошёл бы в сеть).
+		// Бесплатные keyless-источники (ProxyNova, LeakCheck public) активны ВСЕГДА,
+		// в «self-skip без ключа» не участвуют, и их Search не дёргаем (пошёл бы в сеть).
+		if src.Name() == "proxynova" || src.Name() == "leakcheck" {
 			if !src.Enabled(BreachKeys{}) {
-				t.Fatalf("proxynova (free) must be enabled without a key")
+				t.Fatalf("%s (free) must be enabled without a key", src.Name())
 			}
 			continue
 		}
@@ -133,28 +132,30 @@ func TestBreachSource_NoKeySelfSkips(t *testing.T) {
 	}
 }
 
-// Тонкий источник (leakcheck) с ключом парсит обобщённый ответ.
-func TestThinBreachSource_LeakCheckParses(t *testing.T) {
-	doer := &mockDoer{body: `{"result":[{"email":"x@y.com","password":"pw","source":"Dump2019"}]}`}
-	sources := AllBreachSources(BreachKeys{LeakCheck: "lc-key"}, BreachHTTPConfig{Doer: doer})
+// LeakCheck public (keyless): парсит success/found/fields/sources; password в fields
+// → kind=credential; названия дампов кладёт в detail.breaches.
+func TestLeakCheckPublicParses(t *testing.T) {
+	doer := &mockDoer{body: `{"success":true,"found":3,"fields":["username","password"],"sources":[{"name":"Canva.com","date":"2019-05"},{"name":"StockX.com","date":"2019-07"}]}`}
+	sources := AllBreachSources(BreachKeys{}, BreachHTTPConfig{Doer: doer})
 	var lc BreachSource
 	for _, s := range sources {
 		if s.Name() == "leakcheck" {
 			lc = s
 		}
 	}
-	if lc == nil || !lc.Enabled(BreachKeys{LeakCheck: "lc-key"}) {
-		t.Fatal("leakcheck must be enabled with key")
+	if lc == nil || !lc.Enabled(BreachKeys{}) {
+		t.Fatal("leakcheck (public) must be enabled without a key")
 	}
 	leaks, err := lc.Search(context.Background(), BreachTarget{Kind: BreachTargetEmail, Value: "x@y.com"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(leaks) != 1 || leaks[0].Value != "pw" || leaks[0].Kind != "credential" || leaks[0].Source != "leakcheck" {
-		t.Fatalf("unexpected leaks: %+v", leaks)
+	if len(leaks) != 1 || leaks[0].Kind != "credential" || leaks[0].Source != "leakcheck" || leaks[0].Subject != "x@y.com" {
+		t.Fatalf("unexpected leak: %+v", leaks)
 	}
-	if doer.lastReq.URL.Query().Get("key") != "lc-key" {
-		t.Fatalf("key not sent: %q", doer.lastReq.URL.Query().Get("key"))
+	br, _ := leaks[0].Detail["breaches"].([]string)
+	if len(br) != 2 || br[0] != "Canva.com" {
+		t.Fatalf("breaches not parsed: %+v", leaks[0].Detail)
 	}
 }
 
