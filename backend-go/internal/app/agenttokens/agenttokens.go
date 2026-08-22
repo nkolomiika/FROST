@@ -13,7 +13,7 @@ import (
 )
 
 // AllowedScopes — полный набор разрешённых scope (порт ALLOWED_SCOPES).
-var AllowedScopes = []string{"projects:read", "assets:read", "vulns:read", "vulns:write", "notes:read", "notes:write"}
+var AllowedScopes = []string{"projects:read", "assets:read", "vulns:read", "vulns:write", "notes:read", "notes:write", "leaks:read"}
 
 // DefaultScopes — scope по умолчанию, когда запрос не указал ни одного.
 var DefaultScopes = []string{"projects:read", "assets:read", "vulns:read", "notes:read"}

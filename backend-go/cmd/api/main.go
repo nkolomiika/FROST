@@ -163,9 +163,6 @@ func run() error {
 	vulnsSvc := vulns.NewService(vulnsrepo.New(pool), fileStorage, cfg.MinioBucketName)
 	vulnsHandler := httpadapter.NewVulnsHandler(vulnsSvc, projectsSvc, authSvc, cfg.CSRFOrigins())
 
-	// Контекст agent-tokens v2 (/api/v2 bearer API).
-	agentV2Handler := httpadapter.NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc)
-
 	// Контекст notifications (лента уведомлений).
 	notificationsHandler := httpadapter.NewNotificationsHandler(notifications.NewService(notificationsrepo.New(pool)), authSvc, cfg.CSRFOrigins())
 
@@ -194,6 +191,10 @@ func run() error {
 	reconSvc.AttachWordlists(wordlistsSvc)
 	wordlistHandler := httpadapter.NewWordlistHandler(wordlistsSvc, authSvc, cfg.CSRFOrigins())
 	leaksHandler := httpadapter.NewLeaksHandler(reconSvc, leaksSvc, projectsSvc, authSvc, cfg.CSRFOrigins(), cfg.FarmMaxRawBytes)
+
+	// Контекст agent-tokens v2 (/api/v2 bearer API). После recon/leaks — v2 отдаёт
+	// read по IP/JS/утечкам (scopes assets:read / leaks:read).
+	agentV2Handler := httpadapter.NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc, reconSvc, leaksSvc)
 
 	// Контекст reports (Python-sidecar, интерим).
 	reportsHandler := httpadapter.NewReportsHandler(report.NewService(reportrepo.New(pool), fileStorage, cfg.ReportsSidecarURL, cfg.ReportsSidecarToken), projectsSvc, authSvc, cfg.CSRFOrigins())

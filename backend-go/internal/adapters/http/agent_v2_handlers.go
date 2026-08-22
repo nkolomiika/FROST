@@ -11,7 +11,9 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/http/apiv1"
 	"github.com/nkolomiika/frost/internal/app/agenttokens"
 	"github.com/nkolomiika/frost/internal/app/inventory"
+	"github.com/nkolomiika/frost/internal/app/leaks"
 	"github.com/nkolomiika/frost/internal/app/projects"
+	"github.com/nkolomiika/frost/internal/app/recon"
 	"github.com/nkolomiika/frost/internal/app/vulns"
 	"github.com/nkolomiika/frost/internal/apperr"
 )
@@ -24,11 +26,13 @@ type AgentV2Handler struct {
 	projects  *projects.Service
 	inventory *inventory.Service
 	vulns     *vulns.Service
+	recon     *recon.Service
+	leaks     *leaks.Service
 }
 
 // NewAgentV2Handler собирает v2-обработчик.
-func NewAgentV2Handler(tokens *agenttokens.Service, proj *projects.Service, inv *inventory.Service, v *vulns.Service) *AgentV2Handler {
-	return &AgentV2Handler{tokens: tokens, projects: proj, inventory: inv, vulns: v}
+func NewAgentV2Handler(tokens *agenttokens.Service, proj *projects.Service, inv *inventory.Service, v *vulns.Service, rec *recon.Service, lk *leaks.Service) *AgentV2Handler {
+	return &AgentV2Handler{tokens: tokens, projects: proj, inventory: inv, vulns: v, recon: rec, leaks: lk}
 }
 
 const agentCtxKey ctxKey = 100
@@ -41,6 +45,10 @@ func (h *AgentV2Handler) Register(r chi.Router) {
 		ar.Get("/projects/{project_id}", h.getProject)
 		ar.Get("/projects/{project_id}/hosts", h.listHosts)
 		ar.Get("/projects/{project_id}/hosts/{host_id}", h.getHost)
+		// Новые read-эндпоинты под текущий стек: IP-инвентарь, JS-файлы, утечки.
+		ar.Get("/projects/{project_id}/ips", h.listIps)
+		ar.Get("/projects/{project_id}/js", h.listJs)
+		ar.Get("/projects/{project_id}/leaks", h.listLeaks)
 		ar.Get("/projects/{project_id}/hosts/{host_id}/vulnerabilities", h.listHostVulns)
 		ar.Get("/projects/{project_id}/hosts/{host_id}/vulnerabilities/{vulnerability_id}", h.getHostVuln)
 		ar.Get("/projects/{project_id}/notes", h.listNotes)
@@ -179,6 +187,67 @@ func (h *AgentV2Handler) listHosts(w http.ResponseWriter, r *http.Request) {
 		items = append(items, hostListItem(&hosts[i]))
 	}
 	writeJSON(w, http.StatusOK, paginated(items, total, page, size))
+}
+
+// listIps — IP-инвентарь проекта (хосты origin='ip', созданные фермой IP). scope
+// assets:read. IP-адреса доменных хостов доступны в host detail (ip_addresses).
+func (h *AgentV2Handler) listIps(w http.ResponseWriter, r *http.Request) {
+	_, pid, ok := h.guard(w, r, "assets:read")
+	if !ok {
+		return
+	}
+	page := intQuery(r, "page", 1, 1, 1_000_000)
+	size := intQuery(r, "size", 100, 1, 200)
+	hosts, total, err := h.inventory.ListHosts(r.Context(), pid, page, size, "", "ip")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	items := make([]map[string]any, 0, len(hosts))
+	for i := range hosts {
+		items = append(items, hostListItem(&hosts[i]))
+	}
+	writeJSON(w, http.StatusOK, paginated(items, total, page, size))
+}
+
+// listJs — JS-файлы проекта с находками (секреты/эндпоинты). scope assets:read.
+func (h *AgentV2Handler) listJs(w http.ResponseWriter, r *http.Request) {
+	_, pid, ok := h.guard(w, r, "assets:read")
+	if !ok {
+		return
+	}
+	files, err := h.recon.ListJsFiles(r.Context(), pid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	page := intQuery(r, "page", 1, 1, 1_000_000)
+	size := intQuery(r, "size", 100, 1, 200)
+	total := int64(len(files))
+	start := (page - 1) * size
+	if start > len(files) {
+		start = len(files)
+	}
+	end := start + size
+	if end > len(files) {
+		end = len(files)
+	}
+	writeJSON(w, http.StatusOK, paginated(files[start:end], total, page, size))
+}
+
+// listLeaks — утечки проекта (единое хранилище recon_leaks), все источники. scope
+// leaks:read. Возвращает отчёт (leaks + summary), как GET /leaks в вебке.
+func (h *AgentV2Handler) listLeaks(w http.ResponseWriter, r *http.Request) {
+	_, pid, ok := h.guard(w, r, "leaks:read")
+	if !ok {
+		return
+	}
+	rep, err := h.leaks.Report(r.Context(), pid, leaks.Filter{})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }
 
 func (h *AgentV2Handler) getHost(w http.ResponseWriter, r *http.Request) {

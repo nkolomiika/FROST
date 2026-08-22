@@ -115,7 +115,7 @@ func newE2EServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	vulnsH := NewVulnsHandler(vulnsSvc, projectsSvc, svc, []string{testOrigin})
 	agentSvc := agenttokens.NewService(agenttokenrepo.New(pool), nil)
 	agentTokH := NewAgentTokenHandler(agentSvc, svc, []string{testOrigin})
-	agentV2H := NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc)
+	agentV2H := NewAgentV2Handler(agentSvc, projectsSvc, inventorySvc, vulnsSvc, nil, nil)
 	notifH := NewNotificationsHandler(notifications.NewService(notificationsrepo.New(pool)), svc, []string{testOrigin})
 	sidecar := os.Getenv("FROST_TEST_SIDECAR_URL")
 	reportsH := NewReportsHandler(report.NewService(reportrepo.New(pool), storage.Stub{}, sidecar, ""), projectsSvc, svc, []string{testOrigin})
