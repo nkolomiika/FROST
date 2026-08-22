@@ -1,0 +1,12 @@
+# Кастомные детекторы trufflehog для FROST (передаются через --config в github-скан).
+# UUID (8-4-4-4-12 hex): потенциально чувствительный идентификатор — Azure tenant/
+# subscription id, resource id, некоторые токены UUID-формата. По нашим замерам
+# захардкоженных UUID в репозиториях немного, поэтому шум приемлем.
+detectors:
+  - name: uuid
+    keywords:
+      - "-"
+    regex:
+      uuid: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+    exclude_regexes_match:
+      - '00000000-0000-0000-0000-000000000000'

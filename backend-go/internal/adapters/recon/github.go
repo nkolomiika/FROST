@@ -17,6 +17,7 @@ import (
 
 // GithubScanConfig — настройки github-скана.
 type GithubScanConfig struct {
+	ConfigPath    string // путь к --config (кастомные детекторы: UUID и пр.); "" → не передаём
 	TrufflehogBin string
 	Timeout       time.Duration
 }
@@ -101,6 +102,12 @@ func ScanGithub(ctx context.Context, cfg GithubScanConfig, rawTarget, token stri
 	// --json: построчный JSON; --no-update: не ходить за апдейтами; верификация
 	// включена (verified → критично).
 	args := []string{"github", "--json", "--no-update"}
+	// Кастомные детекторы (UUID и пр.) — только если файл реально есть (на api его нет).
+	if cfg.ConfigPath != "" {
+		if _, err := os.Stat(cfg.ConfigPath); err == nil {
+			args = append(args, "--config="+cfg.ConfigPath)
+		}
+	}
 	if target.IsOrg {
 		args = append(args, "--org="+target.Org)
 	} else {
@@ -123,7 +130,7 @@ func ScanGithub(ctx context.Context, cfg GithubScanConfig, rawTarget, token stri
 // GithubScanConfigFrom собирает конфиг github-скана из Settings (переиспользует
 // TrufflehogBin майнинга JS; таймаут — отдельный, github-скан длиннее).
 func (s Settings) GithubScanConfigFrom() GithubScanConfig {
-	return GithubScanConfig{TrufflehogBin: s.TrufflehogBin, Timeout: s.GithubScanTimeout}
+	return GithubScanConfig{TrufflehogBin: s.TrufflehogBin, Timeout: s.GithubScanTimeout, ConfigPath: s.TrufflehogConfig}
 }
 
 // parseGithubOutput парсит построчный JSON trufflehog github в находки.

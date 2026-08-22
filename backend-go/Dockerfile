@@ -95,6 +95,8 @@ RUN for i in 1 2 3 4 5 6; do \
     done; \
     command -v nmap >/dev/null 2>&1 || { echo "FATAL: nmap install failed after retries"; exit 1; }
 COPY --from=trufflehog /usr/bin/trufflehog /usr/local/bin/trufflehog
+# Кастомные детекторы trufflehog (UUID и пр.) — путь совпадает с TRUFFLEHOG_CONFIG.
+COPY deploy/trufflehog-custom.yaml /usr/local/share/frost/trufflehog-custom.yaml
 COPY --from=dnsx /usr/local/bin/dnsx /usr/local/bin/dnsx
 COPY --from=subfinder /usr/local/bin/subfinder /usr/local/bin/subfinder
 COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd

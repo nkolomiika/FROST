@@ -134,6 +134,9 @@ type Config struct {
 
 	// --- GitHub secret-scan (trufflehog github) для контекста leaks ---
 	GithubScanTimeoutSecs float64 `env:"GITHUB_SCAN_TIMEOUT_SECONDS" envDefault:"300.0"`
+	// Кастомные детекторы trufflehog (UUID и пр.) — YAML, забандлен в recon-образ.
+	// Пусто/файла нет → --config не передаётся (только встроенные детекторы).
+	TrufflehogConfig string `env:"TRUFFLEHOG_CONFIG" envDefault:"/usr/local/share/frost/trufflehog-custom.yaml"`
 
 	// --- Определение технологий/CDN веб-порта ---
 	ServicesDetectEnabled        bool    `env:"SERVICES_DETECT_ENABLED" envDefault:"true"`

@@ -34,6 +34,7 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 		TrufflehogBin:      c.TrufflehogBin,
 		JSMineTimeout:      secs(c.JSMineTimeoutSecs),
 		GithubScanTimeout:  secs(c.GithubScanTimeoutSecs),
+		TrufflehogConfig:   c.TrufflehogConfig,
 		LinkedInTimeout:    secs(c.ReconLinkedInTimeoutSec),
 		LinkedInMaxResults: c.ReconLinkedInMaxResults,
 		GoogleCSEKey:       c.GoogleCSEKey,

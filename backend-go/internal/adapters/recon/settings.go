@@ -33,6 +33,7 @@ type Settings struct {
 	// GitHub secret-scan (trufflehog github) — отдельный таймаут (скан репозитория/
 	// org длиннее файлового майнинга).
 	GithubScanTimeout time.Duration
+	TrufflehogConfig  string // путь к кастомным детекторам trufflehog (--config)
 
 	// LinkedIn-энумерация сотрудников (стадия поиска учёток): таймаут и потолок людей.
 	LinkedInTimeout    time.Duration
