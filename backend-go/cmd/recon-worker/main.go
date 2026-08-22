@@ -70,7 +70,8 @@ func run() error {
 	}
 	defer pool.Close()
 
-	svc := recon.NewService(reconrepo.New(pool), recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
+	reconRepo := reconrepo.New(pool)
+	svc := recon.NewService(reconRepo, recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
 
 	// github secret-scan (kind=github_scan) на обычной дорожке пишет находки в
 	// единое хранилище утечек и резолвит github_token из workspace-интеграций.
@@ -86,23 +87,44 @@ func run() error {
 	// стримится из MinIO во temp перед dnsx -w / ffuf -w. Без MinIO — только бандл-тиры
 	// (fallback внутри resolveWordlist), кастомные id молча деградируют.
 	var wlStorage wordlists.Storage = storage.Stub{}
+	var archiveBlob recon.ArchiveBlobStore
 	if cfg.MinioEndpoint != "" {
 		ms, err := storage.NewMinio(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucketName, cfg.MinioUseSSL)
 		if err != nil {
 			return fmt.Errorf("minio: %w", err)
 		}
 		wlStorage = ms
+		archiveBlob = ms
 	} else {
 		logger.Warn("MINIO_ENDPOINT пуст — кастомные словари фермы недоступны (только бандл-тиры)")
 	}
 	svc.AttachWordlists(wordlists.NewService(wordlistrepo.New(pool), wlStorage))
 
-	logger.Info("recon-worker запущен", "regular_poll", regularPollInterval.String(), "farm_poll", farmPollInterval.String())
+	// Автономная архивация холодного стейджинга в MinIO (см. archive.go). Свип —
+	// отдельная дорожка воркера; без MinIO/при нулевом пороге — выключена.
+	archiveEnabled := archiveBlob != nil && cfg.ReconArchiveStagingAfterDays > 0 && cfg.ReconArchiveSweepSeconds > 0
+	if archiveEnabled {
+		svc.AttachArchive(reconRepo, archiveBlob)
+	}
+
+	logger.Info("recon-worker запущен", "regular_poll", regularPollInterval.String(), "farm_poll", farmPollInterval.String(), "archive", archiveEnabled)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go runLane(ctx, &wg, logger, "regular", regularPollInterval, svc.ProcessPendingRegular)
 	go runLane(ctx, &wg, logger, "farm", farmPollInterval, svc.ProcessPendingFarm)
+	if archiveEnabled {
+		olderThan := time.Duration(cfg.ReconArchiveStagingAfterDays) * 24 * time.Hour
+		batch := int32(cfg.ReconArchiveBatch)
+		wg.Add(1)
+		go runLane(ctx, &wg, logger, "archive", time.Duration(cfg.ReconArchiveSweepSeconds)*time.Second, func(c context.Context) error {
+			n, err := svc.ArchiveColdStaging(c, olderThan, batch)
+			if err == nil && n > 0 {
+				logger.Info("staging archived", "runs", n)
+			}
+			return err
+		})
+	}
 	wg.Wait()
 
 	logger.Info("recon-worker остановлен")

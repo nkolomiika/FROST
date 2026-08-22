@@ -97,6 +97,10 @@ type Config struct {
 	ReconStaleJobSeconds     int  `env:"RECON_STALE_JOB_SECONDS" envDefault:"1800"`
 	ReconFarmStaleJobSeconds int  `env:"RECON_FARM_STALE_JOB_SECONDS" envDefault:"7200"`
 	ReconResultMaxItems      int  `env:"RECON_RESULT_MAX_ITEMS" envDefault:"200"`
+	// Автономная архивация холодного стейджинга ферм-прогонов в MinIO (recon-worker).
+	ReconArchiveStagingAfterDays int `env:"RECON_ARCHIVE_STAGING_AFTER_DAYS" envDefault:"14"`
+	ReconArchiveSweepSeconds     int `env:"RECON_ARCHIVE_SWEEP_SECONDS" envDefault:"3600"`
+	ReconArchiveBatch            int `env:"RECON_ARCHIVE_BATCH" envDefault:"20"`
 
 	// --- Ферма JS ---
 	JSFarmMaxFilesPerHost        int     `env:"JS_FARM_MAX_FILES_PER_HOST" envDefault:"50"`

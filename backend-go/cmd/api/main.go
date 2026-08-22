@@ -137,6 +137,7 @@ func run() error {
 	// сконфигурировано. Один и тот же клиент реализует порты Storage всех контекстов.
 	var fileStorage vulns.Storage
 	var wlStorage wordlists.Storage
+	var archiveBlob recon.ArchiveBlobStore
 	if cfg.MinioEndpoint != "" {
 		ms, err := storage.NewMinio(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucketName, cfg.MinioUseSSL)
 		if err != nil {
@@ -147,6 +148,7 @@ func run() error {
 		}
 		fileStorage = ms
 		wlStorage = ms
+		archiveBlob = ms
 	} else {
 		fileStorage = storage.Stub{}
 		wlStorage = storage.Stub{}
@@ -175,8 +177,13 @@ func run() error {
 
 	// Контекст recon (ферма + scanner + js-files). Подключаем резолвер интеграций
 	// и приёмник утечек — для github secret-scan (kind=github_scan).
-	reconSvc := recon.NewService(reconrepo.New(pool), recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
+	reconRepo := reconrepo.New(pool)
+	reconSvc := recon.NewService(reconRepo, recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
 	reconSvc.AttachLeaks(integrationsSvc, leaksink.New(leaksSvc))
+	// Регидрация заархивированного стейджинга при открытии отчёта (см. archive.go).
+	if archiveBlob != nil {
+		reconSvc.AttachArchive(reconRepo, archiveBlob)
+	}
 	reconHandler := httpadapter.NewReconHandler(reconSvc, projectsSvc, authSvc, cfg.CSRFOrigins(), cfg.FarmMaxRawBytes)
 
 	// Контекст wordlists (кастомные словари фермы, workspace-level, файлы в MinIO).

@@ -35,6 +35,11 @@ func (s *Service) FarmReport(ctx context.Context, projectID int32, jobID *int32)
 	}
 	rep.JobID = jid
 
+	// Автономная архивация: если стейджинг этого прогона был выгружен в MinIO
+	// (холодный прогон), прозрачно возвращаем его в БД перед чтением — «при
+	// необходимости данных используем их». No-op, если прогон не архивирован.
+	s.rehydrateStaging(ctx, projectID, jid)
+
 	// Статус берём из самой задачи прогона (running/done/cancelled/failed). Чужой/
 	// несуществующий job_id → пустой отчёт для этого id (без 404).
 	view, err := s.store.GetJobForProject(ctx, projectID, jid, KindFarmRun)

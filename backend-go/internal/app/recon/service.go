@@ -54,6 +54,12 @@ type Service struct {
 	// reconnet.AllBreachSources). Возвращает ВСЕ источники; активные отбираются по
 	// Enabled(keys) в runFarmLeaks, неактивные мягко самопропускаются.
 	breachSources func(keys reconnet.BreachKeys) []reconnet.BreachSource
+
+	// archiveMeta/archiveBlob — автономная архивация холодного стейджинга в MinIO
+	// (nil → выключена, обычное поведение). См. archive.go. archiveMeta — таблица-
+	// указатель, archiveBlob — объектное хранилище архивов.
+	archiveMeta StagingArchiveMeta
+	archiveBlob ArchiveBlobStore
 }
 
 // AttachLeaks подключает резолвер интеграций и приёмник утечек (composition root).
