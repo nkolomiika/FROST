@@ -29,48 +29,10 @@ RUN apk add --no-cache git \
 FROM alpine:3.20 AS runtime
 RUN apk add --no-cache ca-certificates && adduser -D -u 10001 app
 COPY --from=build /out/app /usr/local/bin/app
-USER app
-ENTRYPOINT ["/usr/local/bin/app"]
-
-# Рантайм recon-worker: тот же бинарь + внешние инструменты разведки.
-#   nmap        — полный скан портов
-#   subfinder   — пассивные поддомены
-#   httpx-pd    — детект живости/технологий на портах (config: SERVICES_HTTPX_BIN=httpx-pd)
-#   dnsx        — резолв
-#   trufflehog  — verified-секреты в JS
-#   katana      — активный краул URL (стадия эндпоинтов)
-#   gau         — архивные URL (стадия эндпоинтов)
-#   waybackurls — URL из Wayback Machine (стадия эндпоинтов)
-#   ffuf        — активный дир-фаззинг (стадия эндпоинтов, active/both режим)
-FROM runtime AS recon
-USER root
-# apk-зеркало Alpine на buildkit сервера периодически флапает ("temporary error").
-# nmap обязателен для recon-образа, поэтому тянем с ретраями, а не одним заходом —
-# иначе разовый сетевой сбой роняет всю пересборку стека.
-RUN for i in 1 2 3 4 5 6; do \
-      apk add --no-cache nmap nmap-scripts && break; \
-      echo "apk nmap: attempt $i failed, retrying in 5s"; sleep 5; \
-    done; \
-    command -v nmap >/dev/null 2>&1 || { echo "FATAL: nmap install failed after retries"; exit 1; }
-COPY --from=trufflehog /usr/bin/trufflehog /usr/local/bin/trufflehog
-COPY --from=dnsx /usr/local/bin/dnsx /usr/local/bin/dnsx
-COPY --from=subfinder /usr/local/bin/subfinder /usr/local/bin/subfinder
-COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd
-COPY --from=katana /usr/local/bin/katana /usr/local/bin/katana
-COPY --from=endpoint-tools /out/gau /usr/local/bin/gau
-COPY --from=endpoint-tools /out/waybackurls /usr/local/bin/waybackurls
-COPY --from=endpoint-tools /out/ffuf /usr/local/bin/ffuf
-# Забандленные словари recon-воркера. Тир-словари поддоменов (n0kovo_subdomains,
-# small|medium|large — см. WordlistPath в Go) в корне каталога + КУРИРОВАННЫЙ набор
-# SecLists (отдельные raw-файлы, НЕ клон ~1ГБ репо) под seclists/<категория>/ с
-# сохранением оригинальных имён. Все *.txt перечисляются в API по оригинальным
-# именам (EnumerateWordlists) и выбираются в ферме по относительному пути. Каталог
-# переопределяется env RECON_WORDLIST_DIR (дефолт — этот).
-#
-# Скачивание НЕ фатально для сборки: сеть buildkit на сервере флапает (из-за этого
-# инструменты берём COPY-ом из образов). Каждый тир тянем с ретраями; при провале
-# удаляем частичный файл и идём дальше — Go-стадия брута деградирует молча
-# (WordlistExists → skip). `apk del` в конце всегда, образ остаётся валидным.
+# Забандленные словари (n0kovo тиры + курируемый SecLists) — в БАЗОВОМ рантайме,
+# чтобы их видел И api-контейнер (эндпоинт GET /recon/wordlists перечисляет их через
+# EnumerateWordlists), И recon-worker (использует для dnsx/ffuf). Один раз качаем
+# здесь; recon-стейдж наследует. Каталог переопределяется env RECON_WORDLIST_DIR.
 RUN apk add --no-cache --virtual .wl-fetch wget; \
     mkdir -p /usr/local/share/frost-wordlists; \
     for tier in small medium huge; do \
@@ -108,5 +70,37 @@ RUN apk add --no-cache --virtual .wl-fetch wget; \
       fi; \
     done; \
     apk del .wl-fetch
+
+USER app
+ENTRYPOINT ["/usr/local/bin/app"]
+
+# Рантайм recon-worker: тот же бинарь + внешние инструменты разведки.
+#   nmap        — полный скан портов
+#   subfinder   — пассивные поддомены
+#   httpx-pd    — детект живости/технологий на портах (config: SERVICES_HTTPX_BIN=httpx-pd)
+#   dnsx        — резолв
+#   trufflehog  — verified-секреты в JS
+#   katana      — активный краул URL (стадия эндпоинтов)
+#   gau         — архивные URL (стадия эндпоинтов)
+#   waybackurls — URL из Wayback Machine (стадия эндпоинтов)
+#   ffuf        — активный дир-фаззинг (стадия эндпоинтов, active/both режим)
+FROM runtime AS recon
+USER root
+# apk-зеркало Alpine на buildkit сервера периодически флапает ("temporary error").
+# nmap обязателен для recon-образа, поэтому тянем с ретраями, а не одним заходом —
+# иначе разовый сетевой сбой роняет всю пересборку стека.
+RUN for i in 1 2 3 4 5 6; do \
+      apk add --no-cache nmap nmap-scripts && break; \
+      echo "apk nmap: attempt $i failed, retrying in 5s"; sleep 5; \
+    done; \
+    command -v nmap >/dev/null 2>&1 || { echo "FATAL: nmap install failed after retries"; exit 1; }
+COPY --from=trufflehog /usr/bin/trufflehog /usr/local/bin/trufflehog
+COPY --from=dnsx /usr/local/bin/dnsx /usr/local/bin/dnsx
+COPY --from=subfinder /usr/local/bin/subfinder /usr/local/bin/subfinder
+COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd
+COPY --from=katana /usr/local/bin/katana /usr/local/bin/katana
+COPY --from=endpoint-tools /out/gau /usr/local/bin/gau
+COPY --from=endpoint-tools /out/waybackurls /usr/local/bin/waybackurls
+COPY --from=endpoint-tools /out/ffuf /usr/local/bin/ffuf
 USER app
 ENTRYPOINT ["/usr/local/bin/app"]
