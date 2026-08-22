@@ -6534,9 +6534,12 @@ export function FrostApp() {
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
             </div>
-            {/* Футер в потоке под контент-обёрткой: по центру, прижат к низу на
-                короткой странице и виден только в конце — на текст не залезает. */}
-            <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "20px 16px 16px", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+            {/* Футер в потоке под контент-обёрткой: прижат к низу на короткой
+                странице и виден только в конце — на текст не залезает. Его бокс
+                занимает ширину main (смещён сайдбаром), поэтому сдвигаем влево на
+                ПОЛОВИНУ ширины сайдбара — так контент встаёт по центру ВСЕГО экрана.
+                transition — чтобы ехал синхронно со сворачиванием сайдбара. */}
+            <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "20px 16px 16px", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap", transform: state.sidebarCollapsed ? "translateX(-38px)" : "translateX(-118px)", transition: "transform .26s ease" }}>
               <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
             </footer>
           </main>
