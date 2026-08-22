@@ -97,6 +97,9 @@ import {
   removeProjectMember as apiRemoveProjectMember,
   getVulnerabilities as apiGetVulnerabilities,
   getVulnerability as apiGetVulnerability,
+  listVulnerabilityFiles as apiListVulnFiles,
+  uploadVulnerabilityFile as apiUploadVulnFile,
+  deleteVulnerabilityFile as apiDeleteVulnFile,
   createVulnerability as apiCreateVulnerability,
   updateVulnerability as apiUpdateVulnerability,
   deleteVulnerability as apiDeleteVulnerability,
@@ -159,6 +162,7 @@ import type {
   Port as ApiPort,
   Service as ApiService,
   Vulnerability as ApiVulnerability,
+  VulnerabilityFile as ApiVulnFile,
   Invitation as ApiInvitation,
 } from "../types";
 import {
@@ -588,6 +592,10 @@ interface FrostState {
   /** Real backend vulnerability id (not a list index) — it is part of the URL. */
   openVulnId: number | null;
   vulnDetailForm: VulnDetailForm;
+  /** Файлы-вложения открытой уязвимости (загружаются при открытии карточки). */
+  vulnFiles: ApiVulnFile[];
+  vulnFilesBusy: boolean;
+  vulnFileDrag: boolean;
 }
 
 const initialState: FrostState = {
@@ -800,6 +808,9 @@ const initialState: FrostState = {
   vulnFilterHost: "",
   openVulnId: null,
   vulnDetailForm: {},
+  vulnFiles: [],
+  vulnFilesBusy: false,
+  vulnFileDrag: false,
 };
 
 const CARD: CSSProperties = { background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 16 };
@@ -2118,8 +2129,30 @@ export function FrostApp() {
     const v = state.apiVulns.find((x) => x.id === state.openVulnId);
     if (!v) return;
     setStateRaw((s) => (s.vulnDetailForm.title === v.title ? s : { ...s, vulnDetailForm: vulnFormFrom(v) }));
-     
+
   }, [state.openVulnId, state.apiVulns]);
+
+  // Вложения открытой уязвимости: грузим при открытии карточки, чистим при закрытии.
+  useEffect(() => {
+    const pid = state.openProjectId;
+    const vid = state.openVulnId;
+    if (pid == null || vid == null) {
+      setStateRaw((s) => (s.vulnFiles.length === 0 ? s : { ...s, vulnFiles: [] }));
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const files = await apiListVulnFiles(pid, vid);
+        if (!cancelled) setStateRaw((s) => ({ ...s, vulnFiles: files }));
+      } catch {
+        if (!cancelled) setStateRaw((s) => ({ ...s, vulnFiles: [] }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.openProjectId, state.openVulnId]);
 
   /* Esc dismisses the frontmost open overlay, mirroring a backdrop click. Modals
      and the notifications panel each carry their own onClose on `.modalback` /
@@ -3382,6 +3415,37 @@ export function FrostApp() {
     setState({ section: "vulns", openVulnId: id, vulnDetailForm: v ? vulnFormFrom(v) : {} });
   };
   const closeVulnDetail = () => setState({ openVulnId: null });
+  // Вложения уязвимости: загрузка (drag-drop / выбор файлов) и удаление. Файлы
+  // привязаны к открытой уязвимости (openVulnId) — доказательная база в MinIO.
+  const uploadVulnFilesFor = async (files: File[]) => {
+    const pid = state.openProjectId;
+    const vid = state.openVulnId;
+    if (pid == null || vid == null || files.length === 0) return;
+    setState({ vulnFilesBusy: true });
+    try {
+      for (const f of files) {
+        await apiUploadVulnFile(pid, vid, f);
+      }
+      const fresh = await apiListVulnFiles(pid, vid);
+      setState({ vulnFiles: fresh, vulnFilesBusy: false });
+      pushToast(files.length === 1 ? t("File attached") : `${files.length} ${t("files attached")}`, "success");
+    } catch (e) {
+      setState({ vulnFilesBusy: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't upload the file")), "error");
+    }
+  };
+  const removeVulnFile = async (fileId: number) => {
+    const pid = state.openProjectId;
+    const vid = state.openVulnId;
+    if (pid == null || vid == null) return;
+    try {
+      await apiDeleteVulnFile(pid, vid, fileId);
+      setState((s) => ({ vulnFiles: s.vulnFiles.filter((f) => f.id !== fileId) }));
+    } catch (e) {
+      pushToast(getApiErrorMessage(e, t("Couldn't delete the file")), "error");
+    }
+  };
+
   const updateVulnDetailForm = <K extends keyof VulnDetailForm>(k: K, v: VulnDetailForm[K]) =>
     setState((s) => ({ vulnDetailForm: { ...s.vulnDetailForm, [k]: v } }));
   const addVdStep = () => setState((s) => ({ vulnDetailForm: { ...s.vulnDetailForm, stepsList: [...(s.vulnDetailForm.stepsList ?? []), ""] } }));
@@ -7134,6 +7198,33 @@ export function FrostApp() {
             <button className="clk" onClick={addVdStep} style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 14px", border: "1px dashed var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-text-2)", cursor: "pointer" }}>
               <Icon name="plus" size={13} sw={2.4} />{t("Add step")}
             </button>
+          </div>
+          {/* Вложения: дропзона (клик открывает проводник / drag-drop) + список файлов. */}
+          <div style={{ marginBottom: 18 }}>
+            <label className="flabel">{t("Attachments")}</label>
+            <label
+              onDragOver={(e) => { e.preventDefault(); if (!state.vulnFileDrag) setState({ vulnFileDrag: true }); }}
+              onDragLeave={() => setState({ vulnFileDrag: false })}
+              onDrop={(e) => { e.preventDefault(); setState({ vulnFileDrag: false }); void uploadVulnFilesFor(Array.from(e.dataTransfer.files)); }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 6, padding: "22px 16px", border: `1.5px dashed ${state.vulnFileDrag ? "var(--fr-accent)" : "var(--fr-border)"}`, borderRadius: 12, background: state.vulnFileDrag ? "var(--fr-accent-soft)" : "var(--fr-surface)", cursor: "pointer", textAlign: "center" }}
+            >
+              <Icon name="upload" size={20} color="var(--fr-text-faint)" sw={2} />
+              <div style={{ fontSize: 13, color: "var(--fr-text-2)", fontWeight: 600 }}>{state.vulnFilesBusy ? t("Uploading…") : t("Drag & drop files here, or click to browse")}</div>
+              <div style={{ fontSize: 11.5, color: "var(--fr-text-faint)" }}>{t("Up to 50 MB each")}</div>
+              <input type="file" multiple hidden onChange={(e) => { const fs = e.target.files ? Array.from(e.target.files) : []; e.currentTarget.value = ""; void uploadVulnFilesFor(fs); }} />
+            </label>
+            {state.vulnFiles.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                {state.vulnFiles.map((f) => (
+                  <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid var(--fr-divider)", borderRadius: 10, background: "var(--fr-surface)" }}>
+                    <Icon name="doc" size={15} color="var(--fr-text-3)" />
+                    <a href={`/api/v1/files/${f.id}/download`} target="_blank" rel="noreferrer" className="mono" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--fr-accent-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none" }}>{f.original_name}</a>
+                    <span className="mono" style={{ flex: "none", fontSize: 11, color: "var(--fr-text-faint)" }}>{kb(f.size_bytes)}</span>
+                    <div className="actbtn del clk" title={t("Delete file")} onClick={() => void removeVulnFile(f.id)} style={{ cursor: "pointer" }}><Icon name="trash" size={14} color="var(--fr-danger)" /></div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div style={{ marginBottom: 18 }}><label className="flabel">{t("Impact")}</label><textarea className="finp" rows={2} placeholder={t("Business/security impact if exploited…")} value={vd.impact || ""} onChange={(e) => updateVulnDetailForm("impact", e.target.value)} /></div>
           <div><label className="flabel">{t("Remediation")}</label><textarea className="finp" rows={3} placeholder={t("How to fix or mitigate this vulnerability…")} value={vd.remediation || ""} onChange={(e) => updateVulnDetailForm("remediation", e.target.value)} /></div>
