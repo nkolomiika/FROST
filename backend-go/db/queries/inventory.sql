@@ -32,6 +32,12 @@ UPDATE hosts SET ip_address = $2, updated_at = now() WHERE id = $1;
 -- name: DeleteHost :exec
 DELETE FROM hosts WHERE id = $1 AND project_id = $2;
 
+-- name: BulkDeleteHosts :execrows
+-- Пакетное удаление хостов проекта по списку id (скоуп проекта обязателен —
+-- чужие id просто не попадают под WHERE). Возвращает число реально удалённых.
+DELETE FROM hosts
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);
+
 -- ─────────── host_ip_addresses ───────────
 -- name: ListHostIPs :many
 SELECT * FROM host_ip_addresses WHERE host_id = $1 ORDER BY created_at;
@@ -133,3 +139,11 @@ WHERE id = $1 RETURNING *;
 
 -- name: DeleteEndpoint :exec
 DELETE FROM endpoints WHERE id = $1;
+
+-- name: BulkDeleteEndpoints :execrows
+-- Пакетное удаление эндпоинтов по списку id. Принадлежность проекту — через
+-- host_id ∈ хостам проекта (эндпоинт чужого проекта не попадает под WHERE).
+-- Возвращает число реально удалённых.
+DELETE FROM endpoints
+WHERE id = ANY(sqlc.arg('ids')::int[])
+  AND host_id IN (SELECT id FROM hosts WHERE project_id = sqlc.arg('project_id'));

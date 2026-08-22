@@ -11,6 +11,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bulkDeleteJsFiles = `-- name: BulkDeleteJsFiles :execrows
+DELETE FROM js_files
+WHERE project_id = $1 AND id = ANY($2::int[])
+`
+
+type BulkDeleteJsFilesParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Пакетное удаление JS-находок проекта по списку id (скоуп проекта обязателен).
+// Возвращает число реально удалённых.
+func (q *Queries) BulkDeleteJsFiles(ctx context.Context, arg BulkDeleteJsFilesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, bulkDeleteJsFiles, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteJsFilesForHost = `-- name: DeleteJsFilesForHost :exec
 DELETE FROM js_files WHERE project_id = $1 AND host_id = $2
 `

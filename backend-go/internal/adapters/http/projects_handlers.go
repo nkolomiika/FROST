@@ -80,6 +80,7 @@ func (h *ProjectsHandler) Register(r chi.Router) {
 		// hidden ips
 		ar.With(pa).Get("/{project_id}/hidden-ips", h.listHiddenIPs)
 		ar.With(pa).Post("/{project_id}/hidden-ips", h.hideIP)
+		ar.With(pa).Post("/{project_id}/hidden-ips/bulk", h.bulkHideIPs)
 		ar.With(pa).Delete("/{project_id}/hidden-ips/{ip_address}", h.unhideIP)
 	})
 }
@@ -705,6 +706,32 @@ func (h *ProjectsHandler) hideIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// bulkHideIPs скрывает список адресов (POST .../hidden-ips/bulk, тело {"ips":[…]}).
+// Отдаёт {"hidden":N} — число реально скрытых (уже скрытые не считаются).
+func (h *ProjectsHandler) bulkHideIPs(w http.ResponseWriter, r *http.Request) {
+	pid, err := pathInt32(r, "project_id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var req bulkIPsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	ips, err := dedupStrings(req.IPs)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	hidden, err := h.svc.HideIPsBulk(r.Context(), pid, ips, actorFrom(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"hidden": hidden})
 }
 
 func (h *ProjectsHandler) unhideIP(w http.ResponseWriter, r *http.Request) {

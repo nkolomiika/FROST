@@ -42,3 +42,9 @@ SELECT url FROM js_files WHERE project_id = $1 AND host_id = $2 ORDER BY url;
 
 -- name: DeleteJsFilesForHost :exec
 DELETE FROM js_files WHERE project_id = $1 AND host_id = $2;
+
+-- name: BulkDeleteJsFiles :execrows
+-- Пакетное удаление JS-находок проекта по списку id (скоуп проекта обязателен).
+-- Возвращает число реально удалённых.
+DELETE FROM js_files
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);

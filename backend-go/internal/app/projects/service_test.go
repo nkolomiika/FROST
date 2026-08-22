@@ -38,6 +38,10 @@ type fakeStore struct {
 	insertedCredID   int32
 	updatedCred      *credUpdateCapture
 	noteComment      *NoteComment // ответ GetNoteComment
+
+	// bulk-hide ip
+	bulkHideCapture []string // ips, переданные в BulkHideIPs (после дедупа сервисом)
+	bulkHideReturn  int64    // сколько «реально скрыто» вернуть
 }
 
 // credUpdateCapture — захват аргументов UpdateCredential.
@@ -280,7 +284,11 @@ func (f *fakeStore) UpdateCredential(_ context.Context, id int32, username *stri
 func (f *fakeStore) DeleteCredential(context.Context, int32) error          { return nil }
 func (f *fakeStore) ListHiddenIPs(context.Context, int32) ([]string, error) { return nil, nil }
 func (f *fakeStore) HideIP(context.Context, int32, string, int32) error     { return nil }
-func (f *fakeStore) UnhideIP(context.Context, int32, string) error          { return nil }
+func (f *fakeStore) BulkHideIPs(_ context.Context, _ int32, ips []string, _ int32) (int64, error) {
+	f.bulkHideCapture = append([]string(nil), ips...)
+	return f.bulkHideReturn, nil
+}
+func (f *fakeStore) UnhideIP(context.Context, int32, string) error { return nil }
 func (f *fakeStore) ListProjectActivity(context.Context, int32, int32) ([]ActivityItem, error) {
 	return nil, nil
 }

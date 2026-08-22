@@ -962,3 +962,10 @@ func lower(s string) string {
 func (r *Repo) DeleteJSFilesForHost(ctx context.Context, projectID, hostID int32) error {
 	return r.q.DeleteJsFilesForHost(ctx, sqlc.DeleteJsFilesForHostParams{ProjectID: projectID, HostID: hostID})
 }
+
+func (r *Repo) BulkDeleteJSFiles(ctx context.Context, projectID int32, ids []int32) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	return r.q.BulkDeleteJsFiles(ctx, sqlc.BulkDeleteJsFilesParams{ProjectID: projectID, Ids: ids})
+}

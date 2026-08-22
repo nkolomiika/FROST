@@ -285,6 +285,27 @@ func (s *Service) DeleteHost(ctx context.Context, projectID, hostID, actorID int
 	return nil
 }
 
+// DeleteHostsBulk удаляет хосты проекта по списку id одним запросом и пишет одну
+// сводную запись аудита. Чужие/несуществующие id не удаляются (не под WHERE).
+// Пустой список — no-op (0). Возвращает число реально удалённых.
+func (s *Service) DeleteHostsBulk(ctx context.Context, projectID int32, ids []int32, actorID int32) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	deleted, err := s.store.BulkDeleteHosts(ctx, projectID, ids)
+	if err != nil {
+		return 0, err
+	}
+	details := mustJSON(map[string]any{
+		"project_id": itoa(projectID),
+		"ids":        ids,
+		"deleted":    deleted,
+	})
+	s.audit(ctx, AuditEntry{UserID: &actorID, Action: "DELETE", EntityType: "hosts.bulk_delete", Details: details})
+	// TODO(phase2): ws broadcast (hosts deleted)
+	return int(deleted), nil
+}
+
 // ─────────────────────────── ports ───────────────────────────
 
 // ListPorts — порты хоста (без проверки принадлежности хоста проекту, как в Python).
@@ -683,6 +704,27 @@ func (s *Service) DeleteEndpoint(ctx context.Context, projectID, hostID, endpoin
 	s.audit(ctx, AuditEntry{UserID: &actorID, Action: "DELETE", EntityType: "endpoint", EntityID: &endpoint.ID, Details: details})
 	// TODO(phase2): ws broadcast (endpoint deleted)
 	return nil
+}
+
+// DeleteEndpointsBulk удаляет эндпоинты по списку id одним запросом и пишет одну
+// сводную запись аудита. Удаляются только эндпоинты, чей host принадлежит проекту.
+// Пустой список — no-op (0). Возвращает число реально удалённых.
+func (s *Service) DeleteEndpointsBulk(ctx context.Context, projectID int32, ids []int32, actorID int32) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	deleted, err := s.store.BulkDeleteEndpoints(ctx, projectID, ids)
+	if err != nil {
+		return 0, err
+	}
+	details := mustJSON(map[string]any{
+		"project_id": itoa(projectID),
+		"ids":        ids,
+		"deleted":    deleted,
+	})
+	s.audit(ctx, AuditEntry{UserID: &actorID, Action: "DELETE", EntityType: "endpoints.bulk_delete", Details: details})
+	// TODO(phase2): ws broadcast (endpoints deleted)
+	return int(deleted), nil
 }
 
 // buildEndpointPayload переводит EndpointRaw в map с семантикой «ключ присутствует».

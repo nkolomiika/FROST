@@ -84,6 +84,10 @@ type Store interface {
 	// hidden ips
 	ListHiddenIPs(ctx context.Context, projectID int32) ([]string, error)
 	HideIP(ctx context.Context, projectID int32, ip string, actorID int32) error
+	// BulkHideIPs скрывает список адресов в одной транзакции (для каждого — снос
+	// отдельных IP-хостов + апсерт в hidden-ips). Возвращает число реально скрытых
+	// (уже скрытые адреса не считаются).
+	BulkHideIPs(ctx context.Context, projectID int32, ips []string, actorID int32) (int64, error)
 	UnhideIP(ctx context.Context, projectID int32, ip string) error
 
 	// activity

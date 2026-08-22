@@ -11,6 +11,20 @@ import (
 )
 
 type Querier interface {
+	// Пакетное удаление эндпоинтов по списку id. Принадлежность проекту — через
+	// host_id ∈ хостам проекта (эндпоинт чужого проекта не попадает под WHERE).
+	// Возвращает число реально удалённых.
+	BulkDeleteEndpoints(ctx context.Context, arg BulkDeleteEndpointsParams) (int64, error)
+	// Пакетное удаление хостов проекта по списку id (скоуп проекта обязателен —
+	// чужие id просто не попадают под WHERE). Возвращает число реально удалённых.
+	BulkDeleteHosts(ctx context.Context, arg BulkDeleteHostsParams) (int64, error)
+	// Пакетное удаление JS-находок проекта по списку id (скоуп проекта обязателен).
+	// Возвращает число реально удалённых.
+	BulkDeleteJsFiles(ctx context.Context, arg BulkDeleteJsFilesParams) (int64, error)
+	// Пакетное скрытие адресов: апсерт по (project_id, ip_address) для списка адресов
+	// (ON CONFLICT DO NOTHING). Возвращает число реально добавленных (уже скрытые не
+	// считаются). Зеркало InsertHiddenIP для множества адресов.
+	BulkInsertHiddenIPs(ctx context.Context, arg BulkInsertHiddenIPsParams) (int64, error)
 	ClaimPendingMailJobs(ctx context.Context, arg ClaimPendingMailJobsParams) ([]MailJob, error)
 	// Атомарно берёт задачу в работу (status='running', attempts++) при статусе, не
 	// равном running/done (порт guard run_recon_job: повторную доставку не пробиваем).

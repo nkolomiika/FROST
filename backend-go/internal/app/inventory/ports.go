@@ -21,6 +21,9 @@ type Store interface {
 	CreateHost(ctx context.Context, nh NewHost, entries []IPEntry) (int32, error)
 	UpdateHost(ctx context.Context, p HostUpdateParams) error
 	DeleteHost(ctx context.Context, projectID, hostID int32) error
+	// BulkDeleteHosts удаляет хосты проекта по списку id одним DELETE; возвращает
+	// число реально удалённых (чужие/несуществующие id не считаются).
+	BulkDeleteHosts(ctx context.Context, projectID int32, ids []int32) (int64, error)
 	LoadTrees(ctx context.Context, hosts []Host) ([]HostAggregate, error)
 	GetHostIP(ctx context.Context, hostID, ipID int32) (*HostIP, error)
 	ListProjectHosts(ctx context.Context, projectID int32) ([]Host, error)
@@ -48,6 +51,9 @@ type Store interface {
 	InsertEndpoint(ctx context.Context, ne NewEndpoint) (*Endpoint, error)
 	UpdateEndpoint(ctx context.Context, p UpdateEndpointParams) (*Endpoint, error)
 	DeleteEndpoint(ctx context.Context, id int32) error
+	// BulkDeleteEndpoints удаляет эндпоинты по списку id одним DELETE; принадлежность
+	// проекту — через host_id ∈ хостам проекта. Возвращает число реально удалённых.
+	BulkDeleteEndpoints(ctx context.Context, projectID int32, ids []int32) (int64, error)
 
 	// import (атомарные)
 	UpsertOpenAPIEndpoints(ctx context.Context, hostID int32, eps []EndpointImport) (created, skipped int, err error)

@@ -193,3 +193,6 @@ func TestCapResult(t *testing.T) {
 }
 
 func (f *fakeStore) DeleteJSFilesForHost(context.Context, int32, int32) error { return nil }
+func (f *fakeStore) BulkDeleteJSFiles(context.Context, int32, []int32) (int64, error) {
+	return 0, nil
+}

@@ -47,6 +47,7 @@ func (h *InventoryHandler) Register(r chi.Router) {
 		// hosts
 		ar.With(pa).Get(base+"/hosts", h.listHosts)
 		ar.With(pa).Post(base+"/hosts", h.createHost)
+		ar.With(pa).Post(base+"/hosts/bulk-delete", h.bulkDeleteHosts)
 		ar.With(pa).Get(base+"/hosts/{host_id}", h.getHost)
 		ar.With(pa).Put(base+"/hosts/{host_id}", h.updateHost)
 		ar.With(pa).Delete(base+"/hosts/{host_id}", h.deleteHost)
@@ -65,6 +66,7 @@ func (h *InventoryHandler) Register(r chi.Router) {
 		ar.With(pa).Delete(base+"/hosts/{host_id}/ports/{port_id}/services/{service_id}", h.deleteService)
 
 		// endpoints
+		ar.With(pa).Post(base+"/endpoints/bulk-delete", h.bulkDeleteEndpoints)
 		ar.With(pa).Get(base+"/hosts/{host_id}/endpoints", h.listEndpoints)
 		ar.With(pa).Post(base+"/hosts/{host_id}/endpoints", h.createEndpoint)
 		ar.With(pa).Put(base+"/hosts/{host_id}/endpoints/{endpoint_id}", h.updateEndpoint)
@@ -200,6 +202,52 @@ func (h *InventoryHandler) deleteHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// bulkDeleteHosts удаляет хосты проекта по списку id (POST .../hosts/bulk-delete,
+// тело {"ids":[…]}). Отдаёт {"deleted":N}. Скоуп проекта в SQL — чужие id не рушат
+// запрос и не удаляются.
+func (h *InventoryHandler) bulkDeleteHosts(w http.ResponseWriter, r *http.Request) {
+	pid := projectFromContext(r.Context()).ID
+	var req bulkIDsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	ids, err := dedupIDs(req.IDs)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	deleted, err := h.svc.DeleteHostsBulk(r.Context(), pid, ids, actorFrom(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"deleted": deleted})
+}
+
+// bulkDeleteEndpoints удаляет эндпоинты по списку id (POST .../endpoints/bulk-delete,
+// тело {"ids":[…]}). Отдаёт {"deleted":N}. Удаляются только эндпоинты, чей host
+// принадлежит проекту.
+func (h *InventoryHandler) bulkDeleteEndpoints(w http.ResponseWriter, r *http.Request) {
+	pid := projectFromContext(r.Context()).ID
+	var req bulkIDsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	ids, err := dedupIDs(req.IDs)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	deleted, err := h.svc.DeleteEndpointsBulk(r.Context(), pid, ids, actorFrom(r).ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"deleted": deleted})
 }
 
 // ─────────────────────────── ports ───────────────────────────

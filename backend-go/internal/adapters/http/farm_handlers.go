@@ -59,6 +59,7 @@ func (h *ReconHandler) Register(r chi.Router) {
 		// js-files (синхронные)
 		ar.With(pa).Get(base+"/js-files", h.listJSFiles)
 		ar.With(pa).Get(base+"/js-files/archive", h.downloadJSArchive)
+		ar.With(pa).Post(base+"/js-files/bulk-delete", h.bulkDeleteJSFiles)
 		ar.With(pa).Delete(base+"/js-files/hosts/{host_id}", h.deleteJSForHost)
 
 		// конфигурация фермы (пер-проектная)
@@ -401,6 +402,29 @@ func (h *ReconHandler) deleteJSForHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// bulkDeleteJSFiles удаляет JS-находки проекта по списку id (POST
+// .../js-files/bulk-delete, тело {"ids":[…]}). Отдаёт {"deleted":N}. Скоуп проекта
+// в SQL — чужие id не удаляются.
+func (h *ReconHandler) bulkDeleteJSFiles(w http.ResponseWriter, r *http.Request) {
+	pid := projectFromContext(r.Context()).ID
+	var req bulkIDsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	ids, err := dedupIDs(req.IDs)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	deleted, err := h.svc.DeleteJSFilesBulk(r.Context(), pid, ids)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"deleted": deleted})
 }
 
 func (h *ReconHandler) downloadJSArchive(w http.ResponseWriter, r *http.Request) {

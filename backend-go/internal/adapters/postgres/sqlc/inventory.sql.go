@@ -11,6 +11,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bulkDeleteEndpoints = `-- name: BulkDeleteEndpoints :execrows
+DELETE FROM endpoints
+WHERE id = ANY($1::int[])
+  AND host_id IN (SELECT id FROM hosts WHERE project_id = $2)
+`
+
+type BulkDeleteEndpointsParams struct {
+	Ids       []int32 `json:"ids"`
+	ProjectID int32   `json:"project_id"`
+}
+
+// Пакетное удаление эндпоинтов по списку id. Принадлежность проекту — через
+// host_id ∈ хостам проекта (эндпоинт чужого проекта не попадает под WHERE).
+// Возвращает число реально удалённых.
+func (q *Queries) BulkDeleteEndpoints(ctx context.Context, arg BulkDeleteEndpointsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, bulkDeleteEndpoints, arg.Ids, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const bulkDeleteHosts = `-- name: BulkDeleteHosts :execrows
+DELETE FROM hosts
+WHERE project_id = $1 AND id = ANY($2::int[])
+`
+
+type BulkDeleteHostsParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Пакетное удаление хостов проекта по списку id (скоуп проекта обязателен —
+// чужие id просто не попадают под WHERE). Возвращает число реально удалённых.
+func (q *Queries) BulkDeleteHosts(ctx context.Context, arg BulkDeleteHostsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, bulkDeleteHosts, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countHosts = `-- name: CountHosts :one
 SELECT count(*) FROM hosts
 WHERE project_id = $1
