@@ -29,7 +29,7 @@ import { FrostDatePicker } from "./FrostDatePicker";
 import { PasswordInput } from "./PasswordInput";
 import { useAuthStore, useToastStore } from "../store";
 import { useThemeStore } from "./theme";
-import { FrostSelect } from "./FrostSelect";
+import { FrostSelect, type FrostSelectOption } from "./FrostSelect";
 import { FrostMark, FrostWordmark } from "./Brand";
 import { t, useLangStore } from "./i18n";
 import {
@@ -79,10 +79,12 @@ import {
   importFarmReport as apiImportFarmReport,
   clearFarmReport as apiClearFarmReport,
   getLeaks as apiGetLeaks,
-  startGithubLeakScan as apiStartGithubLeakScan,
   getLeakScan as apiGetLeakScan,
   importLeaks as apiImportLeaks,
   clearLeaks as apiClearLeaks,
+  getWordlists as apiGetWordlists,
+  uploadWordlist as apiUploadWordlist,
+  deleteWordlist as apiDeleteWordlist,
   getIntegrations as apiGetIntegrations,
   setIntegration as apiSetIntegration,
   createEndpoint as apiCreateEndpoint,
@@ -148,6 +150,8 @@ import type {
   Leak as ApiLeak,
   LeaksReport as ApiLeaksReport,
   LeakScanJob as ApiLeakScanJob,
+  Wordlist as ApiWordlist,
+  WordlistsResponse as ApiWordlistsResponse,
   IntegrationKey as ApiIntegrationKey,
   Port as ApiPort,
   Service as ApiService,
@@ -343,6 +347,11 @@ interface FrostState {
   farmCfgSaved: ApiReconFarmConfig | null;
   farmCfgLoading: boolean;
   farmCfgSaving: boolean;
+  /** Словари брута (бандл-тиры + кастомные) для пикеров фермы. `null` = не загружено. */
+  wordlists: ApiWordlistsResponse | null;
+  wordlistsLoading: boolean;
+  /** Идёт загрузка кастомного словаря (блокирует affordance «Upload…»). */
+  wordlistUploading: boolean;
   /** Полный прогон фермы: задача с живым прогрессом. Держится и после done,
    *  чтобы показать сводку, пока пользователь не закроет панель. */
   farmRunJob: ApiFarmRunJob | null;
@@ -614,6 +623,9 @@ const initialState: FrostState = {
   farmCfgSaved: null,
   farmCfgLoading: false,
   farmCfgSaving: false,
+  wordlists: null,
+  wordlistsLoading: false,
+  wordlistUploading: false,
   openJsFileId: null,
   jsTick: 0,
   jsQuery: "",
@@ -1316,6 +1328,32 @@ export function FrostApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.openProjectId, state.section, state.reconView]);
 
+  // ================= Wordlists: словари брута для пикеров фермы =================
+  // Тянем список словарей (бандл-тиры + кастомные) при открытии страницы фермы.
+  // Дальше список обновляется вручную — после загрузки/удаления кастомного.
+  useEffect(() => {
+    const pid = state.openProjectId;
+    if (pid == null || state.section !== "hosts" || state.reconView !== "farm") return;
+    if (state.wordlists !== null || state.wordlistsLoading) return;
+    let cancelled = false;
+    setStateRaw((s) => ({ ...s, wordlistsLoading: true }));
+    void (async () => {
+      try {
+        const wl = await apiGetWordlists();
+        if (!cancelled) setStateRaw((s) => ({ ...s, wordlists: wl, wordlistsLoading: false }));
+      } catch (e) {
+        if (!cancelled) {
+          setStateRaw((s) => ({ ...s, wordlistsLoading: false }));
+          pushToast(getApiErrorMessage(e, t("Couldn't load wordlists")), "error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.openProjectId, state.section, state.reconView]);
+
   // ================= Scan history: журнал прошлых прогонов фермы =================
   // Тянем историю сканов при открытии страницы настроек фермы (и при смене
   // проекта). Дальше журнал обновляется вручную кнопкой Refresh и сам собой
@@ -1329,7 +1367,7 @@ export function FrostApp() {
 
   // Reset the loaded config when the project changes, so the next open reloads it.
   useEffect(() => {
-    setStateRaw((s) => ({ ...s, farmCfg: null, farmCfgSaved: null }));
+    setStateRaw((s) => ({ ...s, farmCfg: null, farmCfgSaved: null, wordlists: null }));
   }, [state.openProjectId]);
 
   // Patch one field of the working farm-config copy.
@@ -1349,6 +1387,62 @@ export function FrostApp() {
     } catch (e) {
       setState({ farmCfgSaving: false });
       pushToast(getApiErrorMessage(e, t("Couldn't save farm settings")), "error");
+    }
+  };
+
+  // ---- Recon → Farm: кастомные словари брута (загрузка/удаление) ----
+  // Перечитывает список словарей (после загрузки/удаления кастомного).
+  const reloadWordlists = async () => {
+    try {
+      const wl = await apiGetWordlists();
+      setState({ wordlists: wl });
+    } catch (e) {
+      pushToast(getApiErrorMessage(e, t("Couldn't load wordlists")), "error");
+    }
+  };
+  // Загрузка кастомного словаря: шлём файл, обновляем список и сразу выбираем
+  // новый словарь для указанной стадии (subdomains → subdomain_wordlist_id,
+  // endpoints → endpoints_wordlist_id).
+  const uploadWordlistFor = async (file: File, target: "subdomains" | "endpoints") => {
+    if (!file || state.wordlistUploading) return;
+    setState({ wordlistUploading: true });
+    try {
+      const wl = await apiUploadWordlist(file);
+      setState((s) => ({
+        wordlistUploading: false,
+        wordlists: s.wordlists
+          ? { ...s.wordlists, custom: [wl, ...s.wordlists.custom.filter((w) => w.id !== wl.id)] }
+          : { bundled: [], custom: [wl] },
+      }));
+      // Сразу выбираем загруженный словарь для нужной стадии.
+      if (target === "subdomains") setFarmField("subdomain_wordlist_id", wl.id);
+      else setFarmField("endpoints_wordlist_id", wl.id);
+      pushToast(t("Wordlist uploaded"), "success");
+    } catch (e) {
+      setState({ wordlistUploading: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't upload the wordlist")), "error");
+    }
+  };
+  // Удаление кастомного словаря (только админ). Если он был выбран где-то в
+  // конфиге — откатываем на бандл-дефолт (0), чтобы не осталась висячая ссылка.
+  const deleteWordlistById = async (id: number) => {
+    if (!window.confirm(t("Delete this wordlist? Runs using it fall back to the bundled list."))) return;
+    try {
+      await apiDeleteWordlist(id);
+      setState((s) => ({
+        wordlists: s.wordlists ? { ...s.wordlists, custom: s.wordlists.custom.filter((w) => w.id !== id) } : s.wordlists,
+        farmCfg: s.farmCfg
+          ? {
+              ...s.farmCfg,
+              subdomain_wordlist_id: s.farmCfg.subdomain_wordlist_id === id ? 0 : s.farmCfg.subdomain_wordlist_id,
+              endpoints_wordlist_id: s.farmCfg.endpoints_wordlist_id === id ? 0 : s.farmCfg.endpoints_wordlist_id,
+            }
+          : s.farmCfg,
+      }));
+      pushToast(t("Wordlist deleted"), "info");
+      void reloadWordlists();
+    } catch (e) {
+      pushToast(getApiErrorMessage(e, t("Couldn't delete the wordlist")), "error");
     }
   };
 
@@ -1390,7 +1484,7 @@ export function FrostApp() {
     const pid = state.openProjectId;
     if (pid == null || state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")) return;
     const c = state.farmCfg;
-    if (!c || !(c.stage_subdomains || c.stage_endpoints || c.stage_js || c.stage_ports)) {
+    if (!c || !(c.stage_subdomains || c.stage_endpoints || c.stage_js || c.stage_ports || c.stage_leaks)) {
       pushToast(t("Select at least one stage to run"), "info");
       return;
     }
@@ -2299,26 +2393,6 @@ export function FrostApp() {
   };
   const toggleLeakReveal = (id: number) =>
     setState((s) => ({ leaksRevealed: toggleIn(s.leaksRevealed, id) }));
-  // Запуск GitHub-скана: валидируем непустой URL, стартуем задачу и кладём её в
-  // state — дальше её подхватывает поллинг-эффект (мирроринг прогона фермы).
-  const startGithubScan = async () => {
-    const pid = state.openProjectId;
-    const url = state.leaksScanUrl.trim();
-    if (pid == null || state.leaksScanStarting || isFarmJobInFlight(state.leaksScanJob?.status ?? "")) return;
-    if (!url) {
-      pushToast(t("Enter a GitHub repo or org URL"), "error");
-      return;
-    }
-    setState({ leaksScanStarting: true });
-    try {
-      const job = await apiStartGithubLeakScan(pid, url);
-      setState({ leaksScanJob: job, leaksScanStarting: false });
-      pushToast(t("GitHub scan started…"), "info");
-    } catch (e) {
-      setState({ leaksScanStarting: false });
-      pushToast(getApiErrorMessage(e, t("Couldn't start the GitHub scan")), "error");
-    }
-  };
   // Импорт выбранных утечек: тост со счётчиком, сброс выбора и перечит отчёта.
   const importLeaksSelected = async (ids: number[]) => {
     const pid = state.openProjectId;
@@ -4752,7 +4826,7 @@ export function FrostApp() {
               {sec === "hosts" && rv === "farm" && !state.farmReportOpen && (() => {
                 const fcfg = state.farmCfg;
                 // Нельзя запустить прогон, пока не выбран ни один этап — кнопка бледная.
-                const noStage = !fcfg || !(fcfg.stage_subdomains || fcfg.stage_endpoints || fcfg.stage_js || fcfg.stage_ports);
+                const noStage = !fcfg || !(fcfg.stage_subdomains || fcfg.stage_endpoints || fcfg.stage_js || fcfg.stage_ports || fcfg.stage_leaks);
                 const disabled = state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") || noStage;
                 return (
                   <button
@@ -5492,6 +5566,124 @@ export function FrostApp() {
       );
     };
 
+    // ─ Wordlists: словари брута (бандл-тиры + кастомные загруженные) ─
+    // Бандл-тиры всегда доступны (фолбэк на small/medium/large, если список ещё
+    // не подтянулся); кастомные приходят из wordlists.custom.
+    const wlBundled: ("small" | "medium" | "large")[] =
+      state.wordlists && state.wordlists.bundled.length > 0
+        ? state.wordlists.bundled.map((b) => b.tier)
+        : (["small", "medium", "large"] as const).slice();
+    const wlCustom: ApiWordlist[] = state.wordlists?.custom ?? [];
+    // Компактная подпись кастомного словаря: число строк + размер файла.
+    const wlDesc = (w: ApiWordlist): string => `${w.lines.toLocaleString()} ${t("lines")} · ${kb(w.size_bytes)}`;
+
+    // Кнопка-affordance «Upload…» — скрытый file-input внутри label. `target`
+    // решает, какой стадии присвоить загруженный словарь.
+    const uploadBtn = (target: "subdomains" | "endpoints") => (
+      <label
+        className={state.wordlistUploading ? "" : "clk"}
+        style={{ flex: "none", height: 42, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", color: "var(--fr-text-2)", font: "700 12.5px Inter,sans-serif", cursor: state.wordlistUploading ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 7, opacity: state.wordlistUploading ? 0.6 : 1 }}
+      >
+        <Icon name="upload" size={14} sw={2.2} />
+        {state.wordlistUploading ? t("Uploading…") : t("Upload…")}
+        <input
+          type="file"
+          accept=".txt,.lst,text/plain"
+          disabled={state.wordlistUploading}
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void uploadWordlistFor(f, target);
+            e.target.value = "";
+          }}
+        />
+      </label>
+    );
+
+    // Пикер словаря для сабдоменов: бандл-тиры + кастомные. Выбор тира ставит
+    // wordlist_size и обнуляет subdomain_wordlist_id; выбор кастомного — наоборот.
+    const subWlValue =
+      cfg.subdomain_wordlist_id > 0 && wlCustom.some((w) => w.id === cfg.subdomain_wordlist_id)
+        ? `custom:${cfg.subdomain_wordlist_id}`
+        : `tier:${cfg.wordlist_size}`;
+    const subWlOptions: FrostSelectOption[] = [
+      ...wlBundled.map((tier) => ({ value: `tier:${tier}`, label: `${t(cap(tier))} · ${t("bundled")}`, desc: t("Bundled subdomain wordlist") })),
+      ...wlCustom.map((w) => ({ value: `custom:${w.id}`, label: w.name, desc: wlDesc(w) })),
+    ];
+    const onPickSubWl = (v: string) => {
+      if (v.startsWith("custom:")) {
+        setFarmField("subdomain_wordlist_id", Number(v.slice(7)));
+      } else {
+        setFarmField("wordlist_size", v.slice(5) as "small" | "medium" | "large");
+        setFarmField("subdomain_wordlist_id", 0);
+      }
+    };
+    // Пикер словаря для ffuf (endpoints active/both): только кастомные + «None».
+    // None (=0) означает «пропустить ffuf».
+    const ffufWlValue =
+      cfg.endpoints_wordlist_id > 0 && wlCustom.some((w) => w.id === cfg.endpoints_wordlist_id)
+        ? String(cfg.endpoints_wordlist_id)
+        : "0";
+    const ffufWlOptions: FrostSelectOption[] = [
+      { value: "0", label: t("None · skip ffuf"), desc: t("Don't run directory fuzzing") },
+      ...wlCustom.map((w) => ({ value: String(w.id), label: w.name, desc: wlDesc(w) })),
+    ];
+
+    // Полноширинный блок пикера словаря: заголовок + подсказка, ряд «селект +
+    // Upload», и (только админ) список кастомных словарей с корзиной на удаление.
+    const wordlistBlock = (
+      title: string,
+      desc: string,
+      value: string,
+      options: FrostSelectOption[],
+      onPick: (v: string) => void,
+      target: "subdomains" | "endpoints",
+      showManage: boolean,
+    ) => (
+      <div style={{ padding: "13px 0" }}>
+        <div style={{ font: "600 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{title}</div>
+        <div style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, lineHeight: 1.4 }}>{desc}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 240px", minWidth: 200 }}>
+            <FrostSelect value={value} options={options} onChange={onPick} />
+          </div>
+          {uploadBtn(target)}
+        </div>
+        {/* Управление кастомными словарями — удаление доступно только админу. */}
+        {showManage && isAdmin && wlCustom.length > 0 && (
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+            {wlCustom.map((w) => (
+              <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 8, background: "var(--fr-elevated)" }}>
+                <Icon name="file" size={14} color="var(--fr-text-faint)" sw={2} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</div>
+                  <div className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)" }}>{wlDesc(w)}</div>
+                </div>
+                <div className="actbtn" title={t("Delete wordlist")} onClick={() => void deleteWordlistById(w.id)}><Icon name="trash" size={14} /></div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+
+    // ─ Leaks: построчные textarea-ручки (GitHub / домены / e-mail) ─
+    // Значение хранится как string[]; textarea показывает join("\n"), ввод
+    // режется по строкам и триммится (пустые строки при вводе сохраняются).
+    const leaksArea = (key: "leaks_github" | "leaks_domains" | "leaks_emails", label: string, placeholder: string, last = false) => (
+      <div style={{ padding: "13px 0", borderBottom: last ? "none" : "1px solid var(--fr-divider)" }}>
+        <label className="flabel">{label}</label>
+        <textarea
+          className="finp mono"
+          rows={3}
+          placeholder={placeholder}
+          value={(cfg[key] as string[]).join("\n")}
+          onChange={(e) => setFarmField(key, e.target.value.split("\n").map((s) => s.trim()))}
+          style={{ font: "600 12.5px 'JetBrains Mono',monospace", resize: "vertical" }}
+        />
+      </div>
+    );
+
     // Во время прогона форма настроек скрыта целиком: показываем только диспетчер
     // процессов (renderFarmRun). В покое — наоборот: только настройки, без карты
     // «Run the farm» (запуск идёт кнопкой [Run] в шапке).
@@ -5534,6 +5726,7 @@ export function FrostApp() {
       if (c.stage_endpoints) stages.push(t("endpoints"));
       if (c.stage_js) stages.push(t("js"));
       if (c.stage_ports) stages.push(t("ports"));
+      if (c.stage_leaks) stages.push(t("leaks"));
       const stageStr = stages.length > 0 ? stages.join(", ") : t("no stages");
       return `${t(cap(c.mode))} · ${t(cap(c.wordlist_size))} · ${stageStr}`;
     };
@@ -5616,17 +5809,48 @@ export function FrostApp() {
               {stage("globe", t("Subdomains"), t("Discover subdomains of the scope roots."), "stage_subdomains",
                 <>
                   {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
-                  {row(t("Wordlist size"), t("Bigger lists find more subdomains but take longer — FROST maps this to a bundled list."), seg(cfg.wordlist_size, ["small", "medium", "large"] as const, (s) => setFarmField("wordlist_size", s)), true)}
+                  {wordlistBlock(
+                    t("Wordlist"),
+                    t("Pick a bundled tier or a custom uploaded list for subdomain brute-forcing."),
+                    subWlValue,
+                    subWlOptions,
+                    onPickSubWl,
+                    "subdomains",
+                    true,
+                  )}
                 </>
               )}
               {stage("link", t("Endpoints"), t("Crawl each host for URLs and endpoints."), "stage_endpoints",
-                numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)
+                <>
+                  {row(t("Mode"), t("Passive pulls archives (gau + waybackurls); active crawls (katana) and dir-fuzzes (ffuf); both run everything."), seg(cfg.endpoints_mode, ["passive", "active", "both"] as const, (m) => setFarmField("endpoints_mode", m)))}
+                  {(cfg.endpoints_mode === "active" || cfg.endpoints_mode === "both") &&
+                    wordlistBlock(
+                      t("Dir-fuzz wordlist"),
+                      t("Custom list for ffuf directory fuzzing — None skips ffuf entirely."),
+                      ffufWlValue,
+                      ffufWlOptions,
+                      (v) => setFarmField("endpoints_wordlist_id", Number(v)),
+                      "endpoints",
+                      false,
+                    )}
+                  {numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)}
+                </>
               )}
               {stage("doc", t("JS mining"), t("Mine JavaScript for secrets and hidden endpoints."), "stage_js",
                 <div style={{ padding: "13px 0", fontSize: 12.5, color: "var(--fr-text-3)", lineHeight: 1.5 }}>{t("Scans linked scripts for secrets and endpoints — no extra settings.")}</div>
               )}
               {stage("plug", t("Port scan"), t("Probe open ports on discovered hosts."), "stage_ports",
-                row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))), true),
+                row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))), true)
+              )}
+              {stage("lock", t("Leaks"), t("Scan GitHub, breach and OSINT sources for exposed credentials."), "stage_leaks",
+                <>
+                  {leaksArea("leaks_github", t("GitHub URLs"), t("https://github.com/org or repo URL — one per line"))}
+                  {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"))}
+                  {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"))}
+                  <div style={{ padding: "6px 0 4px", fontSize: 12, color: "var(--fr-text-3)", lineHeight: 1.5 }}>
+                    {t("Breach and OSINT sources activate when their API keys are set in Integrations.")}
+                  </div>
+                </>,
                 true
               )}
             </div>
@@ -6757,7 +6981,6 @@ export function FrostApp() {
     const busy = state.leaksBusy;
     const summary = report?.summary ?? { total: 0, verified: 0, imported: 0, by_source: {} as Record<string, number> };
     const allLeaks: ApiLeak[] = report?.leaks ?? [];
-    const scanning = state.leaksScanStarting || isFarmJobInFlight(state.leaksScanJob?.status ?? "");
 
     // Фильтр по источнику — на клиенте, чтобы набор пилюль был стабилен.
     const filtered = state.leaksSource ? allLeaks.filter((l) => l.source === state.leaksSource) : allLeaks;
@@ -6792,41 +7015,6 @@ export function FrostApp() {
 
     return (
       <div className="route">
-        {/* Строка запуска GitHub-скана: URL + кнопка. Прогресс — под ней при работе. */}
-        <div style={{ ...CARD, padding: 16, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 8 }}>{t("Scan GitHub")}</div>
-              <input
-                className="finp mono"
-                placeholder={t("https://github.com/org or repo URL…")}
-                value={state.leaksScanUrl}
-                disabled={!canEditProject || scanning}
-                onChange={(e) => setState({ leaksScanUrl: e.target.value })}
-                onKeyDown={(e) => { if (e.key === "Enter") void startGithubScan(); }}
-                style={{ width: "100%", height: 42, font: "600 13px 'JetBrains Mono',monospace" }}
-              />
-            </div>
-            <button
-              className="clk"
-              onClick={() => void startGithubScan()}
-              disabled={!canEditProject || scanning || !state.leaksScanUrl.trim()}
-              style={{ alignSelf: "flex-end", height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: !canEditProject || scanning || !state.leaksScanUrl.trim() ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !canEditProject || scanning || !state.leaksScanUrl.trim() ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
-            >
-              <Icon name="search" size={16} color="var(--fr-on-accent)" sw={2.4} />{t("Scan GitHub")}
-            </button>
-          </div>
-          {scanning && (
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 12, font: "600 12.5px Inter,sans-serif", color: "var(--fr-accent)" }}>
-              <span className="frost-spin" style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
-              {t("Scanning GitHub…")}
-              {state.leaksScanJob?.progress?.found != null && (
-                <span className="mono" style={{ color: "var(--fr-text-3)" }}>{state.leaksScanJob.progress.found} {t("found")}</span>
-              )}
-            </div>
-          )}
-        </div>
-
         {/* Сводка + фильтр по источнику. */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
           {stat(t("Total"), summary.total)}
@@ -6865,7 +7053,7 @@ export function FrostApp() {
                   <Icon name="globe" size={22} color="var(--fr-accent)" sw={2} />
                 </div>
                 <div style={{ font: "800 16px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{t("No leaks yet")}</div>
-                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>{t("Run a GitHub scan or add integration keys to collect leaked credentials and secrets here for review.")}</div>
+                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>{t("No leaks yet — run the Recon farm with the Leaks stage enabled, and add API keys in Integrations")}</div>
               </div>
             ) : (
               <>
