@@ -39,7 +39,10 @@ const (
 	pctPorts      = 30
 	pctEndpoints  = 45
 	pctJS         = 55
-	pctDone       = 100
+	// Стадия утечек (gated: stage_leaks) идёт последней перед done; JS-band ужат
+	// до [pctJS..pctLeaks-2], чтобы освободить хвост под неё.
+	pctLeaks = 90
+	pctDone  = 100
 )
 
 // parseRunConfig достаёт FarmConfig из raw задачи (там лежит JSON конфига, с
@@ -318,6 +321,17 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 	// ── стадия JS-майнинга: trufflehog + regex по живым хостам (gated: stage_js) ──
 	if cfg.StageJs {
 		if canceled := s.runFarmJS(ctx, &runSvc, cfg, rs, accums, order, claim.ProjectID, claim.ID, prog, result, &wasCancelled); canceled {
+			return finalizeCancelled()
+		}
+	}
+	if wasCancelled.Load() {
+		return finalizeCancelled()
+	}
+
+	// ── стадия утечек: github secret-scan + breach-пробив по доменам/почтам
+	//    (gated: stage_leaks); находки → единое хранилище recon_leaks ──
+	if cfg.StageLeaks {
+		if canceled := s.runFarmLeaks(ctx, &runSvc, cfg, claim.ProjectID, claim.ID, prog, result, &wasCancelled); canceled {
 			return finalizeCancelled()
 		}
 	}

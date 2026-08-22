@@ -311,7 +311,7 @@ func (s *Service) runFarmJS(ctx context.Context, runSvc *Service, cfg FarmConfig
 			mu.Unlock()
 			d := int(jsDone.Add(1))
 			if total > 0 {
-				pct := pctJS + (pctDone-2-pctJS)*d/total
+				pct := pctJS + (pctLeaks-2-pctJS)*d/total
 				prog.update(func(p *RunProgress) {
 					if pct > p.Percent {
 						p.Percent = pct
