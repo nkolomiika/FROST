@@ -516,8 +516,23 @@ export interface FarmRunResult {
   hosts_created: number;
   hosts_online: number;
   ports_found: number;
+  /** Опциональны — присутствуют, только если прогон гонял соответствующие стадии. */
+  endpoints_found?: number;
+  js_found?: number;
   sources_used: string[];
   errors: string[];
+}
+
+/** Элемент журнала прошлых прогонов фермы (история сканов). `config` — снимок
+ *  настроек, с которыми шёл прогон; `result` — его итоговые счётчики (оба могут
+ *  быть null, пока прогон не завершился или если снимок не сохранился). */
+export interface FarmRunListItem {
+  id: number;
+  status: string;
+  created_at: string;
+  finished_at: string | null;
+  config: ReconFarmConfig | null;
+  result: FarmRunResult | null;
 }
 
 /** Задача полного прогона фермы (kind='farm_run') со статусом и прогрессом. */

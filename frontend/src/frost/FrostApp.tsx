@@ -71,6 +71,7 @@ import {
   saveReconFarmConfig as apiSaveReconFarmConfig,
   startFarmRun as apiStartFarmRun,
   getFarmRun as apiGetFarmRun,
+  getFarmRuns as apiGetFarmRuns,
   cancelFarmRun as apiCancelFarmRun,
   cancelFarmStep as apiCancelFarmStep,
   cancelAllFarmRuns as apiCancelAllFarmRuns,
@@ -138,6 +139,7 @@ import type {
   JsFile as ApiJsFile,
   ReconFarmConfig as ApiReconFarmConfig,
   FarmRunJob as ApiFarmRunJob,
+  FarmRunListItem as ApiFarmRunListItem,
   FarmReport as ApiFarmReport,
   StagedHost as ApiStagedHost,
   StagedPort as ApiStagedPort,
@@ -352,6 +354,12 @@ interface FrostState {
   /** Загруженный отчёт фермы. `null` = ещё не загружен. */
   farmReport: ApiFarmReport | null;
   farmReportLoading: boolean;
+  /** Чей именно прогон открыт в отчёте: id прогона из истории; `null` = последний
+   *  (поведение по умолчанию — открыть отчёт свежайшего прогона). */
+  farmReportJobId: number | null;
+  /** Журнал прошлых прогонов фермы (история сканов). `null` = ещё не загружен. */
+  farmRuns: ApiFarmRunListItem[] | null;
+  farmRunsLoading: boolean;
   /** Идёт импорт/очистка отчёта — блокирует кнопки действий. */
   farmReportBusy: boolean;
   /** Выбранные для импорта застейдженные хосты (по staged id). */
@@ -625,6 +633,9 @@ const initialState: FrostState = {
   farmReportOpen: false,
   farmReport: null,
   farmReportLoading: false,
+  farmReportJobId: null,
+  farmRuns: null,
+  farmRunsLoading: false,
   farmReportBusy: false,
   farmReportSel: [],
   farmReportEndpointSel: [],
@@ -887,6 +898,7 @@ function navStateFromPath(path: string): Partial<FrostState> {
       openIp: null,
       exportPageOpen: false,
       farmReportOpen: false,
+      farmReportJobId: null,
       bulkDelOpen: null,
     };
     /** `/…/vulns/7` → 7; a missing or non-numeric segment → null. */
@@ -1304,6 +1316,17 @@ export function FrostApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.openProjectId, state.section, state.reconView]);
 
+  // ================= Scan history: журнал прошлых прогонов фермы =================
+  // Тянем историю сканов при открытии страницы настроек фермы (и при смене
+  // проекта). Дальше журнал обновляется вручную кнопкой Refresh и сам собой
+  // после завершения прогона (см. поллинг farmRunJob).
+  useEffect(() => {
+    const pid = state.openProjectId;
+    if (pid == null || state.section !== "hosts" || state.reconView !== "farm") return;
+    void loadFarmRuns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.openProjectId, state.section, state.reconView]);
+
   // Reset the loaded config when the project changes, so the next open reloads it.
   useEffect(() => {
     setStateRaw((s) => ({ ...s, farmCfg: null, farmCfgSaved: null }));
@@ -1457,6 +1480,9 @@ export function FrostApp() {
         setStateRaw((s) => (s.farmRunJob && s.farmRunJob.id === next.id ? { ...s, farmRunJob: next } : s));
         if (next.status === "failed") pushToast(next.error || t("Farm run failed"), "error");
         if (next.status === "cancelled") pushToast(t("Farm run stopped"), "info");
+        // Прогон завершился — подтягиваем свежую историю сканов, чтобы новый
+        // прогон появился строкой в журнале с итоговыми счётчиками.
+        if (!isFarmJobInFlight(next.status)) void loadFarmRuns();
       } catch {
         if (!cancelled) setStateRaw((s) => (s.farmRunJob ? { ...s, farmRunJob: { ...s.farmRunJob } } : s));
       }
@@ -2178,17 +2204,34 @@ export function FrostApp() {
     if (pid == null) return;
     setState({ farmReportLoading: true });
     try {
-      const report = await apiGetFarmReport(pid);
+      // Тянем отчёт конкретного прогона (по farmReportJobId) — или последнего,
+      // когда id нет (прямая ссылка /farm/report или обычное открытие отчёта).
+      const report = await apiGetFarmReport(pid, state.farmReportJobId ?? undefined);
       setState({ farmReport: report, farmReportLoading: false });
     } catch (e) {
       setState({ farmReportLoading: false });
       pushToast(getApiErrorMessage(e, t("Couldn't load the farm report")), "error");
     }
   };
-  // Открытие только выставляет флаг + сбрасывает выбор; загрузку делает эффект
-  // ниже (он же ловит прямую ссылку /farm/report и кнопку «Назад»).
-  const openFarmReport = () => setState({ farmReportOpen: true, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
-  const closeFarmReport = () => setState({ farmReportOpen: false, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
+  // Тянет журнал прошлых прогонов фермы (история сканов) в state. Зовётся при
+  // открытии страницы настроек и после завершения прогона.
+  const loadFarmRuns = async () => {
+    const pid = state.openProjectId;
+    if (pid == null) return;
+    setState({ farmRunsLoading: true });
+    try {
+      const runs = await apiGetFarmRuns(pid);
+      setState({ farmRuns: runs, farmRunsLoading: false });
+    } catch (e) {
+      setState({ farmRunsLoading: false });
+      pushToast(getApiErrorMessage(e, t("Couldn't load the scan history")), "error");
+    }
+  };
+  // Открытие только выставляет флаг + чей прогон открыт + сбрасывает выбор;
+  // загрузку делает эффект ниже (он же ловит прямую ссылку /farm/report и «Назад»).
+  // jobId задаёт конкретный прогон из истории; без него открывается последний.
+  const openFarmReport = (jobId?: number) => setState({ farmReportOpen: true, farmReportJobId: jobId ?? null, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
+  const closeFarmReport = () => setState({ farmReportOpen: false, farmReportJobId: null, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
   // Импорт выбранного из отчёта: хосты + эндпоинты + JS одним запросом. По успеху:
   // тост с суммарными счётчиками по категориям, сброс выбора и перечит отчёта.
   const importFarmSelected = async (hostIds: number[], endpointIds: number[], jsIds: number[]) => {
@@ -4012,7 +4055,7 @@ export function FrostApp() {
     if (!state.farmReportOpen || state.openProjectId == null) return;
     void loadFarmReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.farmReportOpen, state.openProjectId]);
+  }, [state.farmReportOpen, state.farmReportJobId, state.openProjectId]);
 
   /* Список целей скана наполняется один раз при открытии страницы и дальше живёт
      сам: фильтры раздела «Хосты» на него не влияют (см. jsScanDomains), а
@@ -5451,6 +5494,109 @@ export function FrostApp() {
       );
     }
 
+    // ─ Scan history: журнал прошлых прогонов фермы ─
+    // Цвет+подпись пилюли по статусу прогона (те же роли, что у сводки прогона).
+    const runStatusMeta = (status: string): { label: string; bg: string; color: string } => {
+      switch (status) {
+        case "done":
+          return { label: t("Done"), bg: "var(--fr-success-soft, var(--fr-elevated))", color: "var(--fr-success)" };
+        case "running":
+        case "pending":
+        case "queued":
+          return { label: t(cap(status)), bg: "var(--fr-accent-soft)", color: "var(--fr-accent)" };
+        case "failed":
+          return { label: t("Failed"), bg: "var(--fr-danger-soft, var(--fr-elevated))", color: "var(--fr-danger)" };
+        case "cancelled":
+          return { label: t("Cancelled"), bg: "var(--fr-elevated)", color: "var(--fr-text-faint)" };
+        default:
+          return { label: t(cap(status)), bg: "var(--fr-elevated)", color: "var(--fr-text-3)" };
+      }
+    };
+    // Абсолютные дата+время старта прогона (в локали браузера), с ISO в title.
+    const fmtRunTime = (iso: string): string => {
+      const d = new Date(iso);
+      return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+    };
+    // Компактная сводка конфига прогона: режим · размер словаря · включённые стадии.
+    const runConfigSummary = (c: ApiReconFarmConfig | null): string => {
+      if (!c) return t("config unavailable");
+      const stages: string[] = [];
+      if (c.stage_subdomains) stages.push(t("subs"));
+      if (c.stage_endpoints) stages.push(t("endpoints"));
+      if (c.stage_js) stages.push(t("js"));
+      if (c.stage_ports) stages.push(t("ports"));
+      const stageStr = stages.length > 0 ? stages.join(", ") : t("no stages");
+      return `${t(cap(c.mode))} · ${t(cap(c.wordlist_size))} · ${stageStr}`;
+    };
+    // Компактная сводка итога прогона: показываем только те счётчики, что есть.
+    const runResultSummary = (r: ApiFarmRunListItem["result"]): string => {
+      if (!r) return "";
+      const parts: string[] = [
+        `${r.subdomains_found} ${t("subs")}`,
+        `${r.hosts_created} ${t("hosts")}`,
+        `${r.ports_found} ${t("ports")}`,
+      ];
+      if (r.endpoints_found != null) parts.push(`${r.endpoints_found} ${t("endpoints")}`);
+      if (r.js_found != null) parts.push(`${r.js_found} ${t("js")}`);
+      return parts.join(" · ");
+    };
+
+    const scanHistoryCard = card("clock", t("Scan history"), t("Every past farm run — click one to open its report and the settings it ran with"),
+      (() => {
+        const runs = state.farmRuns;
+        if (state.farmRunsLoading && runs === null) {
+          return <div style={{ padding: "18px 2px", fontSize: 13, color: "var(--fr-text-faint)" }}>{t("Loading scan history…")}</div>;
+        }
+        return (
+          <div>
+            {/* Refresh — маленький аффорданс в правом верхнем углу карточки. */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: runs && runs.length > 0 ? 6 : 0 }}>
+              <button
+                className="clk"
+                onClick={() => void loadFarmRuns()}
+                disabled={state.farmRunsLoading}
+                style={{ height: 28, padding: "0 11px", border: "1px solid var(--fr-divider)", borderRadius: 8, background: "transparent", color: "var(--fr-text-2)", font: "700 11.5px Inter,sans-serif", cursor: state.farmRunsLoading ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, opacity: state.farmRunsLoading ? 0.6 : 1 }}
+              >
+                <Icon name="activity" size={13} sw={2} />{state.farmRunsLoading ? t("Refreshing…") : t("Refresh")}
+              </button>
+            </div>
+            {runs === null || runs.length === 0 ? (
+              <div style={{ padding: "22px 2px", textAlign: "center", fontSize: 13, color: "var(--fr-text-faint)" }}>{t("No runs yet")}</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {runs.map((run, i) => {
+                  const meta = runStatusMeta(run.status);
+                  const resSummary = runResultSummary(run.result);
+                  return (
+                    <div
+                      key={run.id}
+                      className="clk frow-step"
+                      onClick={() => openFarmReport(run.id)}
+                      title={t("Open this run's report")}
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 8px", borderTop: i === 0 ? "none" : "1px solid var(--fr-divider)", cursor: "pointer", minWidth: 0 }}
+                    >
+                      {/* Пилюля статуса. */}
+                      <span style={{ flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 74, padding: "4px 10px", borderRadius: 999, background: meta.bg, color: meta.color, font: "700 11px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".4px" }}>{meta.label}</span>
+                      {/* Дата старта + сводка конфига (ключевые настройки прогона). */}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div title={run.created_at} style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtRunTime(run.created_at)}</div>
+                        <div title={runConfigSummary(run.config)} style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{runConfigSummary(run.config)}</div>
+                      </div>
+                      {/* Сводка итога (справа) — только у завершённых прогонов. */}
+                      {resSummary && (
+                        <div className="mono" style={{ flex: "none", fontSize: 11.5, color: "var(--fr-text-2)", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "42%" }}>{resSummary}</div>
+                      )}
+                      <Icon name="activity" size={15} color="var(--fr-text-faint)" sw={2} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })(),
+    );
+
     return (
       <div className="route">
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -5484,6 +5630,10 @@ export function FrostApp() {
               {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100, true)}
             </div>
           )}
+
+          {/* Scan history — журнал прошлых прогонов; клик по строке открывает
+              отчёт именно того прогона с настройками, с которыми он шёл. */}
+          {scanHistoryCard}
         </div>
       </div>
     );
