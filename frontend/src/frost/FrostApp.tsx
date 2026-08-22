@@ -7000,6 +7000,19 @@ export function FrostApp() {
 
     const grid = "30px 108px minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.3fr) 168px";
 
+    // Ресурс, откуда получена утечка (из detail): github → repo/ссылка;
+    // брич-источники → имена брич-баз / домен. Показываем строкой под Subject.
+    const resourceLabel = (l: ApiLeak): string => {
+      const d = (l.detail ?? {}) as Record<string, unknown>;
+      if (l.source === "github") {
+        const repo = d.repo ?? (Array.isArray(d.repos) ? d.repos[0] : "");
+        return String(repo || d.link || "");
+      }
+      const breaches = d.breaches;
+      if (Array.isArray(breaches) && breaches.length) return breaches.slice(0, 3).map(String).join(", ") + (breaches.length > 3 ? "…" : "");
+      return String(d.breach ?? d.database ?? d.domain ?? "");
+    };
+
     const stat = (label: string, n: number) => (
       <div key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 7, padding: "6px 14px", borderRadius: 20, background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)" }}>
         <span className="mono" style={{ fontSize: 15, fontWeight: 800, color: "var(--fr-text)" }}>{n}</span>
@@ -7073,7 +7086,10 @@ export function FrostApp() {
                       <input type="checkbox" checked={selSet.has(l.id)} disabled={l.imported || !canEditProject} onChange={() => toggleLeak(l.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
                       <div style={{ minWidth: 0 }}>{sourceChip(l.source)}</div>
                       <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.kind}</div>
-                      <div className="mono" title={l.subject} style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.subject || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="mono" title={l.subject} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.subject || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
+                        {(() => { const rl = resourceLabel(l); return rl ? <div className="mono" title={rl} style={{ fontSize: 11, color: "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{rl}</div> : null; })()}
+                      </div>
                       {/* Значение маскируется; клик по глазу раскрывает (не выбирая строку). */}
                       <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
                         <span className="mono" title={revealed ? l.value : undefined} style={{ minWidth: 0, fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{revealed ? (l.value || "—") : CRED_MASK}</span>
