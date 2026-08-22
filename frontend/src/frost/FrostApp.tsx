@@ -6,6 +6,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -1238,6 +1239,17 @@ export function FrostApp() {
      Ref, а не state: подмена кэша не должна сама по себе вызывать ререндер. */
   const hostsCacheRef = useRef<Map<number, Host[]>>(new Map());
   const reloadHosts = () => setStateRaw((s) => ({ ...s, hostsTick: s.hostsTick + 1 }));
+  // Дросселирование тяжёлого рефетча списка хостов (со всеми эндпоинтами + hiddenIps)
+  // на горячем пути поллинга: тики идут раз в 1.5с, но полный список тянем не чаще
+  // раза в 4с — строки всё равно появляются «вживую», а сеть/ре-деривации втрое легче.
+  // Терминальный статус джобы дёргает reloadHosts() напрямую (финальное состояние).
+  const lastHostsReloadRef = useRef(0);
+  const reloadHostsThrottled = () => {
+    const now = Date.now();
+    if (now - lastHostsReloadRef.current < 4000) return;
+    lastHostsReloadRef.current = now;
+    reloadHosts();
+  };
   useEffect(() => {
     const pid = state.openProjectId;
     if (pid == null) {
@@ -1284,6 +1296,13 @@ export function FrostApp() {
 
   // ================= JS files: backend-loaded, refreshed by jsTick =================
   const reloadJsFiles = () => setStateRaw((s) => ({ ...s, jsTick: s.jsTick + 1 }));
+  const lastJsReloadRef = useRef(0);
+  const reloadJsFilesThrottled = () => {
+    const now = Date.now();
+    if (now - lastJsReloadRef.current < 4000) return;
+    lastJsReloadRef.current = now;
+    reloadJsFiles();
+  };
   useEffect(() => {
     const pid = state.openProjectId;
     if (pid == null) {
@@ -1545,11 +1564,13 @@ export function FrostApp() {
       try {
         const next = await apiGetHostFarmJob(pid, job.id);
         if (cancelled) return;
-        // Reload every tick so the per-host commits show up as statuses fill in.
-        reloadHosts();
+        // Per-host commits show up as statuses fill in — throttled so the heavy
+        // list refetch runs ~every 4s, not every 1.5s tick.
+        reloadHostsThrottled();
         if (isFarmJobInFlight(next.status)) {
           setStateRaw((s) => (s.hostFarmJob && s.hostFarmJob.id === next.id ? { ...s, hostFarmJob: next } : s));
         } else {
+          reloadHosts(); // финальное состояние — без дросселя
           setStateRaw((s) => (s.hostFarmJob && s.hostFarmJob.id === next.id ? { ...s, hostFarmJob: null } : s));
           if (next.status === "done" && next.result) {
             hostFarmDoneToast(next.result);
@@ -1581,14 +1602,17 @@ export function FrostApp() {
       try {
         const next = await apiGetFarmRun(pid, job.id);
         if (cancelled) return;
-        // New hosts/ports land per stage — refresh the lists in the background.
-        reloadHosts();
+        // New hosts/ports land per stage — refresh in the background, throttled.
+        reloadHostsThrottled();
         setStateRaw((s) => (s.farmRunJob && s.farmRunJob.id === next.id ? { ...s, farmRunJob: next } : s));
         if (next.status === "failed") pushToast(next.error || t("Farm run failed"), "error");
         if (next.status === "cancelled") pushToast(t("Farm run stopped"), "info");
-        // Прогон завершился — подтягиваем свежую историю сканов, чтобы новый
-        // прогон появился строкой в журнале с итоговыми счётчиками.
-        if (!isFarmJobInFlight(next.status)) void loadFarmRuns();
+        // Прогон завершился — финальный рефетч списка + свежая история сканов, чтобы
+        // новый прогон появился строкой в журнале с итоговыми счётчиками.
+        if (!isFarmJobInFlight(next.status)) {
+          reloadHosts();
+          void loadFarmRuns();
+        }
       } catch {
         if (!cancelled) setStateRaw((s) => (s.farmRunJob ? { ...s, farmRunJob: { ...s.farmRunJob } } : s));
       }
@@ -1610,11 +1634,12 @@ export function FrostApp() {
       try {
         const next = await apiGetIpFarmJob(pid, job.id);
         if (cancelled) return;
-        // The IP farm commits per address, so rows stream in as it goes.
-        reloadHosts();
+        // The IP farm commits per address, so rows stream in as it goes (throttled).
+        reloadHostsThrottled();
         if (isFarmJobInFlight(next.status)) {
           setStateRaw((s) => (s.ipFarmJob && s.ipFarmJob.id === next.id ? { ...s, ipFarmJob: next } : s));
         } else {
+          reloadHosts(); // финальное состояние — без дросселя
           setStateRaw((s) => (s.ipFarmJob && s.ipFarmJob.id === next.id ? { ...s, ipFarmJob: null } : s));
           if (next.status === "done" && next.result) {
             ipFarmDoneToast(next.result);
@@ -1643,11 +1668,12 @@ export function FrostApp() {
       try {
         const next = await apiGetJsScanJob(pid, job.id);
         if (cancelled) return;
-        // The scan commits per file, so found files stream in as it runs.
-        reloadJsFiles();
+        // The scan commits per file, so found files stream in as it runs (throttled).
+        reloadJsFilesThrottled();
         if (isFarmJobInFlight(next.status)) {
           setStateRaw((s) => (s.jsFarmJob && s.jsFarmJob.id === next.id ? { ...s, jsFarmJob: next } : s));
         } else {
+          reloadJsFiles(); // финальное состояние — без дросселя
           setStateRaw((s) => (s.jsFarmJob && s.jsFarmJob.id === next.id ? { ...s, jsFarmJob: null } : s));
           if (next.status === "done" && next.result) {
             pushToast(`${t("Scan done")} — ${next.result.files_scanned} JS, ${next.result.secrets_found} ${t("secrets")}, ${next.result.endpoints_found} ${t("paths")}`, "success");
@@ -1753,7 +1779,9 @@ export function FrostApp() {
   }, [state.view, isAdmin]);
 
   /** Hosts rendered by the whole Recon section. Backend-only — never the seed. */
-  const hosts: Host[] = state.apiHosts ?? [];
+  // Мемоизируем сам список: без этого `?? []` при apiHosts===null создаёт новый
+  // массив каждый рендер, и все зависящие от hosts мемо пересчитывались бы зря.
+  const hosts: Host[] = useMemo(() => state.apiHosts ?? [], [state.apiHosts]);
   const hostNameById = (id: number) => hosts.find((h) => h.id === id)?.host ?? "";
   /* Subdomains are not a stored field — they are simply the project's other hosts
      that live under this one's name (www.acme.com under acme.com). Derived here so
@@ -3818,7 +3846,11 @@ export function FrostApp() {
   const STATUS_FILTER_KEYS = ["up", "200", "301", "401", "403", "down"];
   /** Subdomains of a host, filtered by the active pills (empty = all). */
   const visibleSubdomainsOf = (h: Host): Host[] => subdomainsOf(h).filter(hostMatchesFilters);
-  const hostsList = hosts
+  // Мемоизация тяжёлых дериваций: раньше пересчитывались на КАЖДЫЙ рендер (а их
+  // много в секунду — тосты, тики поллинга, ввод в фильтрах), теперь только при
+  // смене входов (hosts/фильтры). Ключи — реальные срезы состояния, от которых
+  // зависит выход; хелперы (hostMatchesFilters/subdomainsOf/…) чисты над hosts.
+  const hostsList = useMemo(() => hosts
     .map((h, idx) => ({ h, idx }))
     .filter((x) => {
       const hq = state.hostQuery.trim().toLowerCase();
@@ -3829,7 +3861,9 @@ export function FrostApp() {
       const nestOk = flat || !isNestedSubdomain(x.h);
       const filterOk = hostMatchesFilters(x.h) || (!flat && visibleSubdomainsOf(x.h).length > 0);
       return !isIpFarmRow(x.h) && nameOk && nestOk && filterOk;
-    });
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hosts, state.hostQuery, state.hostFilters, state.hostCfFilter]);
 
   /* Каждый хост, реально показанный в таблице: корневые строки плюс раскрытые
      под ними поддомены, без дублей. Таблица держит поддомены вложенными, поэтому
@@ -3941,6 +3975,7 @@ export function FrostApp() {
       status: into.status !== "up" && h.status === "up" ? h.status : into.status,
     };
   };
+  const ipsRows = useMemo(() => {
   const ipRowsByAddr = new Map<
     string,
     { ip: string; hostIdx: number; names: IpRowNames; cloudflare: CfState; ipMeas: IpBucket | null; domainMeas: IpBucket | null }
@@ -3968,7 +4003,7 @@ export function FrostApp() {
       else acc.domainMeas = mergeBucket(acc.domainMeas, h);
     });
   });
-  const ipsRows = [...ipRowsByAddr.values()]
+  return [...ipRowsByAddr.values()]
     // Скрытые («удалённые» из списка) адреса не показываем — привязка к хостам при
     // этом сохранена на бэке, адрес просто не значится во вкладке IP.
     .filter((row0) => !state.hiddenIps.includes(row0.ip))
@@ -4014,16 +4049,18 @@ export function FrostApp() {
         askDelete("ip", i, row.ip);
       },
     }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hosts, state.hiddenIps, state.ipQuery, state.ipFilters, state.ipCfFilter]);
   /** The IP row whose detail card is open (looked up by address, like _hd by id). */
   const _ipd = state.openIp != null ? ipsRows.find((r) => r.ip === state.openIp) : undefined;
   /** Flat endpoint list, so a confirm dialog can address one by position. */
-  const endpointRows = hosts.flatMap((h) => h.endpoints.map((e) => ({ hostId: h.id, endpointId: e.id, host: h.host, label: `${e.m} ${e.p}` })));
+  const endpointRows = useMemo(() => hosts.flatMap((h) => h.endpoints.map((e) => ({ hostId: h.id, endpointId: e.id, host: h.host, label: `${e.m} ${e.p}` }))), [hosts]);
   /* Endpoints view filters: method pills (empty = all), plus separate searches for
      the host and the endpoint path — they are different questions ("everything on
      this host" vs "where is /login"), so one combined box would answer neither. */
   const epHostQ = state.epHostQuery.trim().toLowerCase();
   const epPathQ = state.epPathQuery.trim().toLowerCase();
-  const endpointGroups = hosts
+  const endpointGroups = useMemo(() => hosts
     .filter((h) => !epHostQ || h.host.toLowerCase().includes(epHostQ))
     .map((h) => ({
       hostId: h.id,
@@ -4034,7 +4071,9 @@ export function FrostApp() {
       expanded: state.epExpanded.includes(h.host),
     }))
     .filter((g) => g.endpoints.length > 0)
-    .map((g) => ({ ...g, count: g.endpoints.length }));
+    .map((g) => ({ ...g, count: g.endpoints.length })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hosts, state.epHostQuery, state.epPathQuery, state.epMethods, state.epExpanded]);
   // Counts what the filters actually left on screen.
   const endpointTotal = endpointGroups.reduce((s, g) => s + g.count, 0);
 
@@ -4042,7 +4081,7 @@ export function FrostApp() {
      grouped by the domain they were found on — the table mirrors the endpoints
      layout (a card per host, files expand to show their secrets + paths). */
   const jsQ = state.jsQuery.trim().toLowerCase();
-  const jsFiles: JsFileEntry[] = (state.apiJsFiles ?? []).map((f) => ({
+  const jsFiles = useMemo<JsFileEntry[]>(() => (state.apiJsFiles ?? []).map((f) => ({
     id: f.id,
     host: f.hostname || "—",
     hostId: f.host_id,
@@ -4051,22 +4090,35 @@ export function FrostApp() {
     size: f.size_bytes,
     secrets: f.secrets.map((s) => ({ kind: s.kind, match: s.match_preview, snippet: s.snippet, severity: s.severity })),
     endpoints: f.endpoints,
-  }));
-  const jsFilesFiltered = jsFiles.filter(
+  })), [state.apiJsFiles]);
+  const jsFilesFiltered = useMemo(() => jsFiles.filter(
     (f) =>
       (!jsQ || f.url.toLowerCase().includes(jsQ) || f.host.toLowerCase().includes(jsQ)) &&
       (!state.jsSecretsOnly || f.secrets.length > 0),
-  );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [jsFiles, state.jsQuery, state.jsSecretsOnly]);
   /** Открытая карточка JS-файла. Ищем по всему списку, а не по отфильтрованному:
    *  карточка не должна захлопываться, если фильтр списка перестал её пропускать. */
   const _jsd = state.openJsFileId != null ? jsFiles.find((f) => f.id === state.openJsFileId) : undefined;
   const openJsFile = (id: number) => setState({ openJsFileId: id });
   const closeJsFile = () => setState({ openJsFileId: null });
-  const jsGroups = [...new Set(jsFilesFiltered.map((f) => f.host))].map((host) => {
-    const files = jsFilesFiltered.filter((f) => f.host === host);
-    // Every file in a group shares one host, so its id names the archive scope.
-    return { host, hostId: files[0]?.hostId, files, count: files.length };
-  });
+  const jsGroups = useMemo(() => {
+    // Группируем за один проход (раньше было O(n²): для каждого хоста заново
+    // фильтровался весь список файлов).
+    const byHost = new Map<string, JsFileEntry[]>();
+    for (const f of jsFilesFiltered) {
+      const arr = byHost.get(f.host);
+      if (arr) arr.push(f);
+      else byHost.set(f.host, [f]);
+    }
+    return [...byHost.entries()].map(([host, files]) => ({
+      host,
+      // Every file in a group shares one host, so its id names the archive scope.
+      hostId: files[0]?.hostId,
+      files,
+      count: files.length,
+    }));
+  }, [jsFilesFiltered]);
 
   /* Домены, доступные JS-скану: ВСЕ домены проекта, кроме IP-строк фермы и
      IP-литералов (ферма ходит по именам, а не по адресам). Поддомены попадают
@@ -4110,10 +4162,21 @@ export function FrostApp() {
   const bulkHostItems: BulkDelItem[] = hosts
     .filter((h) => !isIpFarmRow(h))
     .map((h) => ({ key: h.id, label: h.host }));
-  const bulkIpItems: BulkDelItem[] = [...ipRowsByAddr.values()]
-    .filter((r) => !state.hiddenIps.includes(r.ip))
-    .map((r) => ({ key: r.ip, label: r.ip }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  // Все неспрятанные адреса (без учёта фильтров вкладки IP — модалка удаления
+  // должна показывать полный набор). Считаем прямо из hosts: ipRowsByAddr теперь
+  // живёт внутри мемо ipsRows, а ipsRows отфильтрован поиском/статусом.
+  const bulkIpItems: BulkDelItem[] = (() => {
+    const seen = new Set<string>();
+    const out: BulkDelItem[] = [];
+    for (const h of hosts) {
+      for (const e of h.ipEntries) {
+        if (!e.ip || e.ip === "—" || state.hiddenIps.includes(e.ip) || seen.has(e.ip)) continue;
+        seen.add(e.ip);
+        out.push({ key: e.ip, label: e.ip });
+      }
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  })();
   const bulkEndpointItems: BulkDelItem[] = endpointRows.map((e) => ({ key: e.endpointId, label: e.label, group: e.host }));
   const bulkJsItems: BulkDelItem[] = jsFiles.map((f) => ({ key: f.id, label: jsBasename(f.url), group: f.host }));
   /** Источник пикера для активного типа. */
