@@ -51,6 +51,12 @@ type Settings struct {
 	// Активный брут поддоменов dnsx в полном прогоне фермы (kind='farm_run').
 	DnsxBin          string
 	DnsxBruteTimeout time.Duration
+
+	// Стадия эндпоинтов полного прогона фермы: katana (краул) + gau + waybackurls.
+	KatanaBin        string
+	GauBin           string
+	WaybackurlsBin   string
+	EndpointsTimeout time.Duration
 }
 
 func (s Settings) maxConcurrency() int {

@@ -14,6 +14,15 @@ type FarmConfig struct {
 	PortScanScope string `json:"port_scan_scope"` // "top1000" | "all"
 	CrawlDepth    int    `json:"crawl_depth"`     // глубина краула (1..10)
 
+	// Stage toggles — пер-стадийное включение полного прогона (farm_run). Дефолт
+	// true у всех: пропущенная в сохранённом JSON стадия остаётся включённой (см.
+	// GetFarmConfig — оверлей поверх DefaultFarmConfig). stage_subdomains off →
+	// discovery пропускается, поздние стадии работают по СУЩЕСТВУЮЩИМ хостам проекта.
+	StageSubdomains bool `json:"stage_subdomains"`
+	StageEndpoints  bool `json:"stage_endpoints"`
+	StageJs         bool `json:"stage_js"`
+	StagePorts      bool `json:"stage_ports"`
+
 	// Subdomains — сбор поддоменов.
 	Subfinder         bool `json:"subfinder"`
 	Assetfinder       bool `json:"assetfinder"`
@@ -61,6 +70,11 @@ func DefaultFarmConfig() FarmConfig {
 		Concurrency:   10,
 		PortScanScope: "top1000",
 		CrawlDepth:    3,
+
+		StageSubdomains: true,
+		StageEndpoints:  true,
+		StageJs:         true,
+		StagePorts:      true,
 
 		Subfinder:         true,
 		Assetfinder:       true,

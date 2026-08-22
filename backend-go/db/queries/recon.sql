@@ -245,3 +245,70 @@ WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);
 -- Удаляет staged-строки одного прогона; возвращает число удалённых.
 DELETE FROM recon_farm_staged_hosts
 WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id');
+
+-- ─────────── стейджинг эндпоинтов прогона (recon_farm_staged_endpoints) ───────────
+-- Стадия эндпоинтов (katana/gau/waybackurls) складывает найденные URL сюда; импорт
+-- создаёт реальные endpoints проекта (по имени хоста). ports/hosts не трогаются.
+
+-- name: InsertStagedEndpoint :exec
+INSERT INTO recon_farm_staged_endpoints (project_id, job_id, host, url, method, source)
+VALUES (sqlc.arg('project_id'), sqlc.arg('job_id'), sqlc.arg('host'), sqlc.arg('url'),
+        sqlc.arg('method'), sqlc.arg('source'));
+
+-- name: ListStagedEndpoints :many
+-- Все staged-эндпоинты одного прогона (для отчёта), по возрастанию id.
+SELECT id, project_id, job_id, host, url, method, source, imported, created_at
+FROM recon_farm_staged_endpoints
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id')
+ORDER BY id;
+
+-- name: ListStagedEndpointsByIDs :many
+-- Выбранные staged-эндпоинты проекта по id (для импорта). Скоуп проекта обязателен.
+SELECT id, project_id, job_id, host, url, method, source, imported, created_at
+FROM recon_farm_staged_endpoints
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[])
+ORDER BY id;
+
+-- name: MarkStagedEndpointsImported :exec
+-- Помечает выбранные staged-эндпоинты импортированными (идемпотентно).
+UPDATE recon_farm_staged_endpoints SET imported = true
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);
+
+-- name: ClearStagedEndpoints :execrows
+-- Удаляет staged-эндпоинты одного прогона; возвращает число удалённых.
+DELETE FROM recon_farm_staged_endpoints
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id');
+
+-- ─────────── стейджинг JS-майнинга прогона (recon_farm_staged_js) ───────────
+-- Стадия JS (trufflehog + regex) складывает находки сюда: по строке на секрет
+-- (kind='secret', value=preview, severity) или эндпоинт (kind='endpoint', value=path).
+-- Импорт создаёт js_files/secrets проекта обычным persist-путём.
+
+-- name: InsertStagedJs :exec
+INSERT INTO recon_farm_staged_js (project_id, job_id, host, url, kind, value, severity)
+VALUES (sqlc.arg('project_id'), sqlc.arg('job_id'), sqlc.arg('host'), sqlc.arg('url'),
+        sqlc.arg('kind'), sqlc.arg('value'), sqlc.arg('severity'));
+
+-- name: ListStagedJs :many
+-- Все staged-находки JS одного прогона (для отчёта), по возрастанию id.
+SELECT id, project_id, job_id, host, url, kind, value, severity, imported, created_at
+FROM recon_farm_staged_js
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id')
+ORDER BY id;
+
+-- name: ListStagedJsByIDs :many
+-- Выбранные staged-находки JS проекта по id (для импорта). Скоуп проекта обязателен.
+SELECT id, project_id, job_id, host, url, kind, value, severity, imported, created_at
+FROM recon_farm_staged_js
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[])
+ORDER BY id;
+
+-- name: MarkStagedJsImported :exec
+-- Помечает выбранные staged-находки JS импортированными (идемпотентно).
+UPDATE recon_farm_staged_js SET imported = true
+WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);
+
+-- name: ClearStagedJs :execrows
+-- Удаляет staged-находки JS одного прогона; возвращает число удалённых.
+DELETE FROM recon_farm_staged_js
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id');

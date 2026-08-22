@@ -134,6 +134,12 @@ type Config struct {
 	PortscanTimeoutSeconds float64 `env:"PORTSCAN_TIMEOUT_SECONDS" envDefault:"300.0"`
 	PortscanMaxTargets     int     `env:"PORTSCAN_MAX_TARGETS" envDefault:"64"`
 
+	// --- Полный прогон фермы: стадия эндпоинтов (katana + gau + waybackurls) ---
+	ReconKatanaBin           string  `env:"RECON_KATANA_BIN" envDefault:"katana"`
+	ReconGauBin              string  `env:"RECON_GAU_BIN" envDefault:"gau"`
+	ReconWaybackurlsBin      string  `env:"RECON_WAYBACKURLS_BIN" envDefault:"waybackurls"`
+	ReconEndpointsTimeoutSec float64 `env:"RECON_ENDPOINTS_TIMEOUT_SECONDS" envDefault:"180.0"`
+
 	// --- Полный прогон фермы (kind='farm_run'): активный брут dnsx + словари ---
 	ReconDnsxBin              string  `env:"RECON_DNSX_BIN" envDefault:"dnsx"`
 	ReconDnsxBruteTimeoutSecs float64 `env:"RECON_DNSX_BRUTE_TIMEOUT_SECONDS" envDefault:"600.0"`

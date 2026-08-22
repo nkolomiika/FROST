@@ -227,14 +227,16 @@ type RunStep struct {
 // Percent 0..100, Stage — текущая стадия, Steps — активные шаги, плюс бегущие
 // счётчики найденного.
 type RunProgress struct {
-	Percent    int       `json:"percent"`
-	Stage      string    `json:"stage"`
-	Steps      []RunStep `json:"steps"`
-	SubsFound  int       `json:"subs_found"`
-	HostsFound int       `json:"hosts_found"`
-	PortsFound int       `json:"ports_found"`
-	Done       bool      `json:"done"`
-	Errors     []string  `json:"errors"`
+	Percent        int       `json:"percent"`
+	Stage          string    `json:"stage"`
+	Steps          []RunStep `json:"steps"`
+	SubsFound      int       `json:"subs_found"`
+	HostsFound     int       `json:"hosts_found"`
+	PortsFound     int       `json:"ports_found"`
+	EndpointsFound int       `json:"endpoints_found"`
+	JsFound        int       `json:"js_found"`
+	Done           bool      `json:"done"`
+	Errors         []string  `json:"errors"`
 }
 
 // FarmRunResult — итог полного прогона (job.result). Счётчики + список ошибок.
@@ -247,6 +249,8 @@ type FarmRunResult struct {
 	HostsCreated    int      `json:"hosts_created"`
 	HostsOnline     int      `json:"hosts_online"`
 	PortsFound      int      `json:"ports_found"`
+	EndpointsFound  int      `json:"endpoints_found"`
+	JsFound         int      `json:"js_found"`
 	SourcesUsed     []string `json:"sources_used"`
 	Errors          []string `json:"errors"`
 }
@@ -294,12 +298,64 @@ type StagedHostInput struct {
 	Ports     []StagedPort
 }
 
+// StagedEndpoint — одна staged-строка эндпоинта прогона (URL, найденный
+// katana/gau/waybackurls). Импорт создаёт реальный endpoint проекта.
+type StagedEndpoint struct {
+	ID       int32   `json:"id"`
+	Host     string  `json:"host"`
+	URL      string  `json:"url"`
+	Method   *string `json:"method"`
+	Source   string  `json:"source"`
+	Imported bool    `json:"imported"`
+}
+
+// StagedEndpointInput — вход вставки одной staged-строки эндпоинта.
+type StagedEndpointInput struct {
+	ProjectID int32
+	JobID     int32
+	Host      string
+	URL       string
+	Method    *string
+	Source    string
+}
+
+// StagedJs — одна staged-находка JS-майнинга прогона. Kind различает секрет
+// ("secret", Value=preview, Severity) и эндпоинт ("endpoint", Value=path).
+type StagedJs struct {
+	ID       int32   `json:"id"`
+	Host     string  `json:"host"`
+	URL      string  `json:"url"`
+	Kind     string  `json:"kind"`
+	Value    string  `json:"value"`
+	Severity *string `json:"severity"`
+	Imported bool    `json:"imported"`
+}
+
+// StagedJsInput — вход вставки одной staged-находки JS.
+type StagedJsInput struct {
+	ProjectID int32
+	JobID     int32
+	Host      string
+	URL       string
+	Kind      string
+	Value     string
+	Severity  *string
+}
+
+// Kind staged-находки JS.
+const (
+	stagedJsSecret   = "secret"
+	stagedJsEndpoint = "endpoint"
+)
+
 // FarmReportSummary — агрегаты отчёта прогона.
 type FarmReportSummary struct {
-	HostsTotal int `json:"hosts_total"`
-	Alive      int `json:"alive"`
-	PortsTotal int `json:"ports_total"`
-	Imported   int `json:"imported"`
+	HostsTotal     int `json:"hosts_total"`
+	Alive          int `json:"alive"`
+	PortsTotal     int `json:"ports_total"`
+	EndpointsTotal int `json:"endpoints_total"`
+	JsTotal        int `json:"js_total"`
+	Imported       int `json:"imported"`
 }
 
 // FarmReport — отчёт стейджинга прогона фермы (GET .../recon/farm/report).
@@ -309,6 +365,23 @@ type FarmReport struct {
 	GeneratedAt time.Time         `json:"generated_at"`
 	Summary     FarmReportSummary `json:"summary"`
 	Hosts       []StagedHost      `json:"hosts"`
+	Endpoints   []StagedEndpoint  `json:"endpoints"`
+	Js          []StagedJs        `json:"js"`
+}
+
+// FarmImportResult — итог импорта выбранных staged-строк в проект.
+type FarmImportResult struct {
+	ImportedHosts     int `json:"imported_hosts"`
+	ImportedEndpoints int `json:"imported_endpoints"`
+	ImportedJs        int `json:"imported_js"`
+}
+
+// EndpointImportInput — вход создания реального endpoint проекта из staged-строки.
+// Дедуп на (host_id, path, method) как в обычном добавлении эндпоинта.
+type EndpointImportInput struct {
+	HostID int32
+	Path   string
+	Method *string
 }
 
 // ─────────────────────────── job-структуры ───────────────────────────

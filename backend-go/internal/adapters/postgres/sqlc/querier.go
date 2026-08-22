@@ -30,8 +30,12 @@ type Querier interface {
 	// равном running/done (порт guard run_recon_job: повторную доставку не пробиваем).
 	ClaimReconJobRunning(ctx context.Context, id int32) (HostFarmJob, error)
 	ClearCommentMentions(ctx context.Context, commentID int32) error
+	// Удаляет staged-эндпоинты одного прогона; возвращает число удалённых.
+	ClearStagedEndpoints(ctx context.Context, arg ClearStagedEndpointsParams) (int64, error)
 	// Удаляет staged-строки одного прогона; возвращает число удалённых.
 	ClearStagedHosts(ctx context.Context, arg ClearStagedHostsParams) (int64, error)
+	// Удаляет staged-находки JS одного прогона; возвращает число удалённых.
+	ClearStagedJs(ctx context.Context, arg ClearStagedJsParams) (int64, error)
 	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
 	CountFileImagesForVuln(ctx context.Context, arg CountFileImagesForVulnParams) (int64, error)
 	CountHostAssetLinks(ctx context.Context, vulnerabilityID int32) (int64, error)
@@ -200,10 +204,19 @@ type Querier interface {
 	// ─────────────────────────── refresh_tokens ───────────────────────────
 	InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) (RefreshToken, error)
 	InsertService(ctx context.Context, arg InsertServiceParams) (Service, error)
+	// ─────────── стейджинг эндпоинтов прогона (recon_farm_staged_endpoints) ───────────
+	// Стадия эндпоинтов (katana/gau/waybackurls) складывает найденные URL сюда; импорт
+	// создаёт реальные endpoints проекта (по имени хоста). ports/hosts не трогаются.
+	InsertStagedEndpoint(ctx context.Context, arg InsertStagedEndpointParams) error
 	// ─────────── стейджинг полного прогона фермы (recon_farm_staged_hosts) ───────────
 	// Полный прогон (kind='farm_run') НЕ пишет в проект: находки складываются сюда, а
 	// пользователь импортирует выбранное вручную. ports — JSONB-массив портов.
 	InsertStagedHost(ctx context.Context, arg InsertStagedHostParams) error
+	// ─────────── стейджинг JS-майнинга прогона (recon_farm_staged_js) ───────────
+	// Стадия JS (trufflehog + regex) складывает находки сюда: по строке на секрет
+	// (kind='secret', value=preview, severity) или эндпоинт (kind='endpoint', value=path).
+	// Импорт создаёт js_files/secrets проекта обычным persist-путём.
+	InsertStagedJs(ctx context.Context, arg InsertStagedJsParams) error
 	InsertVuln(ctx context.Context, arg InsertVulnParams) (Vulnerability, error)
 	InsertVulnAsset(ctx context.Context, arg InsertVulnAssetParams) (VulnerabilityAsset, error)
 	InsertVulnComment(ctx context.Context, arg InsertVulnCommentParams) (Comment, error)
@@ -264,11 +277,19 @@ type Querier interface {
 	ListServicesForPort(ctx context.Context, portID int32) ([]Service, error)
 	ListServicesForPorts(ctx context.Context, portIds []int32) ([]Service, error)
 	ListSiblingNotes(ctx context.Context, arg ListSiblingNotesParams) ([]ListSiblingNotesRow, error)
+	// Все staged-эндпоинты одного прогона (для отчёта), по возрастанию id.
+	ListStagedEndpoints(ctx context.Context, arg ListStagedEndpointsParams) ([]ReconFarmStagedEndpoint, error)
+	// Выбранные staged-эндпоинты проекта по id (для импорта). Скоуп проекта обязателен.
+	ListStagedEndpointsByIDs(ctx context.Context, arg ListStagedEndpointsByIDsParams) ([]ReconFarmStagedEndpoint, error)
 	// Все staged-строки одного прогона (для отчёта), по возрастанию id.
 	ListStagedHosts(ctx context.Context, arg ListStagedHostsParams) ([]ReconFarmStagedHost, error)
 	// Выбранные staged-строки проекта по id (для импорта). Скоуп проекта обязателен —
 	// чужие строки не импортируем.
 	ListStagedHostsByIDs(ctx context.Context, arg ListStagedHostsByIDsParams) ([]ReconFarmStagedHost, error)
+	// Все staged-находки JS одного прогона (для отчёта), по возрастанию id.
+	ListStagedJs(ctx context.Context, arg ListStagedJsParams) ([]ReconFarmStagedJ, error)
+	// Выбранные staged-находки JS проекта по id (для импорта). Скоуп проекта обязателен.
+	ListStagedJsByIDs(ctx context.Context, arg ListStagedJsByIDsParams) ([]ReconFarmStagedJ, error)
 	ListStandaloneIPHostIDs(ctx context.Context, arg ListStandaloneIPHostIDsParams) ([]int32, error)
 	ListSubtreeFolders(ctx context.Context, path string) ([]ProjectFolder, error)
 	ListSubtreeProjects(ctx context.Context, folder string) ([]Project, error)
@@ -296,8 +317,12 @@ type Querier interface {
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (Notification, error)
 	MarkPasswordResetUsed(ctx context.Context, id int32) error
 	MarkReactivationUsed(ctx context.Context, id int32) error
+	// Помечает выбранные staged-эндпоинты импортированными (идемпотентно).
+	MarkStagedEndpointsImported(ctx context.Context, arg MarkStagedEndpointsImportedParams) error
 	// Помечает выбранные staged-строки импортированными (идемпотентно).
 	MarkStagedImported(ctx context.Context, arg MarkStagedImportedParams) error
+	// Помечает выбранные staged-находки JS импортированными (идемпотентно).
+	MarkStagedJsImported(ctx context.Context, arg MarkStagedJsImportedParams) error
 	MaxSiblingSortOrder(ctx context.Context, arg MaxSiblingSortOrderParams) (int32, error)
 	MoveNote(ctx context.Context, arg MoveNoteParams) error
 	PatchVulnStatus(ctx context.Context, arg PatchVulnStatusParams) (Vulnerability, error)

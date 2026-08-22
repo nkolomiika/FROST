@@ -36,6 +36,11 @@ func TestRunFarm_DryRun_StagesAndDoesNotPersist(t *testing.T) {
 	svc.farmScanner = func(_ context.Context, _ string, _ reconnet.NmapPhase) ([]reconnet.NmapPort, string) {
 		return []reconnet.NmapPort{{Port: 9100, Proto: "tcp", State: "open", Service: "jetdirect", Version: "HP"}}, ""
 	}
+	// Стадии эндпоинтов/JS герметично отключаем (без сети): проверяем только хосты.
+	svc.endpointScanner = func(context.Context, string, string, reconnet.EndpointToolConfig) ([]reconnet.EndpointHit, string) {
+		return nil, ""
+	}
+	svc.jsMiner = func(context.Context, string) ([]reconnet.ScannedFile, []string) { return nil, nil }
 
 	if err := svc.RunReconJob(context.Background(), 1); err != nil {
 		t.Fatalf("RunReconJob: %v", err)

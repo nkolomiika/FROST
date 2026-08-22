@@ -2,6 +2,7 @@ package recon
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ func (s *Service) resolveReportJobID(ctx context.Context, projectID int32, jobID
 // FarmReport собирает отчёт стейджинга прогона. Без jobID — по последнему прогону;
 // прогонов нет → пустой отчёт (0-summary, hosts=[]), не ошибка (эндпоинт отдаёт 200).
 func (s *Service) FarmReport(ctx context.Context, projectID int32, jobID *int32) (FarmReport, error) {
-	rep := FarmReport{GeneratedAt: time.Now(), Hosts: []StagedHost{}}
+	rep := FarmReport{GeneratedAt: time.Now(), Hosts: []StagedHost{}, Endpoints: []StagedEndpoint{}, Js: []StagedJs{}}
 	jid, ok, err := s.resolveReportJobID(ctx, projectID, jobID)
 	if err != nil {
 		return FarmReport{}, err
@@ -63,6 +64,26 @@ func (s *Service) FarmReport(ctx context.Context, projectID int32, jobID *int32)
 			rep.Summary.Imported++
 		}
 	}
+
+	eps, err := s.store.ListStagedEndpoints(ctx, projectID, jid)
+	if err != nil {
+		return FarmReport{}, err
+	}
+	if eps == nil {
+		eps = []StagedEndpoint{}
+	}
+	rep.Endpoints = eps
+	rep.Summary.EndpointsTotal = len(eps)
+
+	js, err := s.store.ListStagedJs(ctx, projectID, jid)
+	if err != nil {
+		return FarmReport{}, err
+	}
+	if js == nil {
+		js = []StagedJs{}
+	}
+	rep.Js = js
+	rep.Summary.JsTotal = len(js)
 	return rep, nil
 }
 
@@ -137,8 +158,178 @@ func stagedToPersistInput(projectID int32, h StagedHost) HostPersistInput {
 	return in
 }
 
-// ClearStagedReport чистит staged-строки прогона (по jobID либо последнего).
-// Прогонов нет → 0, не ошибка. Возвращает число удалённых строк.
+// ImportStagedReport импортирует в проект выбранные staged-строки трёх типов
+// (хосты/эндпоинты/JS) — что передано, то и импортируется. Возвращает по-типовые
+// счётчики импортированного.
+func (s *Service) ImportStagedReport(ctx context.Context, projectID, actorID int32, hostIDs, endpointIDs, jsIDs []int32) (FarmImportResult, error) {
+	var res FarmImportResult
+	nh, err := s.ImportStagedHosts(ctx, projectID, actorID, hostIDs)
+	if err != nil {
+		return FarmImportResult{}, err
+	}
+	res.ImportedHosts = nh
+	ne, err := s.ImportStagedEndpoints(ctx, projectID, actorID, endpointIDs)
+	if err != nil {
+		return FarmImportResult{}, err
+	}
+	res.ImportedEndpoints = ne
+	nj, err := s.ImportStagedJs(ctx, projectID, actorID, jsIDs)
+	if err != nil {
+		return FarmImportResult{}, err
+	}
+	res.ImportedJs = nj
+	return res, nil
+}
+
+// ImportStagedEndpoints создаёт реальные endpoints проекта из выбранных staged-строк
+// эндпоинтов, привязывая их к хосту по имени. Импортируются ТОЛЬКО эндпоинты, чей
+// хост уже есть в проекте; прочие пропускаются (скоуп проекта соблюдён). Дедуп на
+// (host,path,method) — как обычное добавление. Возвращает число импортированных.
+func (s *Service) ImportStagedEndpoints(ctx context.Context, projectID, actorID int32, ids []int32) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	rows, err := s.store.ListStagedEndpointsByIDs(ctx, projectID, ids)
+	if err != nil {
+		return 0, err
+	}
+	hostMap, err := s.store.ProjectOriginHostMap(ctx, projectID)
+	if err != nil {
+		return 0, err
+	}
+	imported := make([]int32, 0, len(rows))
+	skipped := 0
+	for _, e := range rows {
+		if e.Imported {
+			continue
+		}
+		hostID, ok := hostMap[strings.ToLower(e.Host)]
+		if !ok {
+			skipped++ // хоста нет в проекте — пропускаем
+			continue
+		}
+		if _, perr := s.store.ImportEndpoint(ctx, EndpointImportInput{HostID: hostID, Path: endpointPathFromURL(e.URL), Method: e.Method}); perr != nil {
+			s.log.Warn("farm import endpoint", "url", e.URL, "err", perr)
+			continue
+		}
+		imported = append(imported, e.ID)
+	}
+	if len(imported) > 0 {
+		if err := s.store.MarkStagedEndpointsImported(ctx, projectID, imported); err != nil {
+			return 0, err
+		}
+	}
+	if skipped > 0 {
+		s.log.Info("farm import endpoints: some hosts not in project", "skipped", skipped)
+	}
+	s.audit(ctx, actorID, "farm_import_endpoints", detailsFrom(FarmReportSummary{Imported: len(imported)}, projectID))
+	return len(imported), nil
+}
+
+// ImportStagedJs создаёт js_files/secrets проекта из выбранных staged-находок JS,
+// реюзя обычный persist-путь (PersistJSFile). Находки группируются по (host,url):
+// секреты → js_secrets, эндпоинты → js_files.endpoints. Импортируются только находки,
+// чей хост уже есть в проекте. Возвращает число импортированных staged-строк.
+func (s *Service) ImportStagedJs(ctx context.Context, projectID, actorID int32, ids []int32) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	rows, err := s.store.ListStagedJsByIDs(ctx, projectID, ids)
+	if err != nil {
+		return 0, err
+	}
+	hostMap, err := s.store.ProjectOriginHostMap(ctx, projectID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Группируем по URL (в порядке появления), запоминая хост и id строк группы.
+	type jsGroup struct {
+		host      string
+		endpoints []string
+		secrets   []JSSecretInput
+		ids       []int32
+	}
+	groups := map[string]*jsGroup{}
+	var urlOrder []string
+	for _, r := range rows {
+		if r.Imported {
+			continue
+		}
+		g, ok := groups[r.URL]
+		if !ok {
+			g = &jsGroup{host: r.Host}
+			groups[r.URL] = g
+			urlOrder = append(urlOrder, r.URL)
+		}
+		g.ids = append(g.ids, r.ID)
+		switch r.Kind {
+		case stagedJsEndpoint:
+			g.endpoints = append(g.endpoints, r.Value)
+		default: // secret
+			g.secrets = append(g.secrets, JSSecretInput{Kind: stagedJsSecret, MatchPreview: r.Value, Severity: jsSeverityOr(r.Severity)})
+		}
+	}
+
+	var imported []int32
+	skipped := 0
+	for _, u := range urlOrder {
+		g := groups[u]
+		hostID, ok := hostMap[strings.ToLower(g.host)]
+		if !ok {
+			skipped++
+			continue
+		}
+		in := JSFileInput{
+			ProjectID: projectID, HostID: hostID, URL: u, Status: "ok",
+			Endpoints: orEmpty(g.endpoints), SecretCount: int32(len(g.secrets)), EndpointCount: int32(len(g.endpoints)),
+			Secrets: g.secrets,
+		}
+		if perr := s.store.PersistJSFile(ctx, in); perr != nil {
+			s.log.Warn("farm import js", "url", u, "err", perr)
+			continue
+		}
+		imported = append(imported, g.ids...)
+	}
+	if len(imported) > 0 {
+		if err := s.store.MarkStagedJsImported(ctx, projectID, imported); err != nil {
+			return 0, err
+		}
+	}
+	if skipped > 0 {
+		s.log.Info("farm import js: some hosts not in project", "skipped_files", skipped)
+	}
+	s.audit(ctx, actorID, "farm_import_js", detailsFrom(FarmReportSummary{Imported: len(imported)}, projectID))
+	return len(imported), nil
+}
+
+// jsSeverityOr — severity staged-секрета либо "medium" по умолчанию (как find_secrets).
+func jsSeverityOr(sev *string) string {
+	if sev != nil && *sev != "" {
+		return *sev
+	}
+	return "medium"
+}
+
+// endpointPathFromURL достаёт path (+query) из URL для колонки endpoints.path. При
+// ошибке парсинга возвращает сам URL (лучше сохранить как есть, чем потерять).
+func endpointPathFromURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	p := u.EscapedPath()
+	if p == "" {
+		p = "/"
+	}
+	if u.RawQuery != "" {
+		p += "?" + u.RawQuery
+	}
+	return p
+}
+
+// ClearStagedReport чистит staged-строки прогона всех трёх типов (по jobID либо
+// последнего). Прогонов нет → 0, не ошибка. Возвращает суммарное число удалённых строк.
 func (s *Service) ClearStagedReport(ctx context.Context, projectID int32, jobID *int32) (int64, error) {
 	jid, ok, err := s.resolveReportJobID(ctx, projectID, jobID)
 	if err != nil {
@@ -147,5 +338,19 @@ func (s *Service) ClearStagedReport(ctx context.Context, projectID int32, jobID 
 	if !ok {
 		return 0, nil
 	}
-	return s.store.ClearStagedHosts(ctx, projectID, jid)
+	var total int64
+	n, err := s.store.ClearStagedHosts(ctx, projectID, jid)
+	if err != nil {
+		return 0, err
+	}
+	total += n
+	if n, err = s.store.ClearStagedEndpoints(ctx, projectID, jid); err != nil {
+		return 0, err
+	}
+	total += n
+	if n, err = s.store.ClearStagedJs(ctx, projectID, jid); err != nil {
+		return 0, err
+	}
+	total += n
+	return total, nil
 }

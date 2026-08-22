@@ -106,6 +106,31 @@ func (f *fakeStore) MarkStagedImported(context.Context, int32, []int32) error { 
 func (f *fakeStore) ClearStagedHosts(context.Context, int32, int32) (int64, error) {
 	return 0, nil
 }
+func (f *fakeStore) InsertStagedEndpoints(context.Context, []StagedEndpointInput) error { return nil }
+func (f *fakeStore) ListStagedEndpoints(context.Context, int32, int32) ([]StagedEndpoint, error) {
+	return nil, nil
+}
+func (f *fakeStore) ListStagedEndpointsByIDs(context.Context, int32, []int32) ([]StagedEndpoint, error) {
+	return nil, nil
+}
+func (f *fakeStore) MarkStagedEndpointsImported(context.Context, int32, []int32) error { return nil }
+func (f *fakeStore) ClearStagedEndpoints(context.Context, int32, int32) (int64, error) {
+	return 0, nil
+}
+func (f *fakeStore) ImportEndpoint(context.Context, EndpointImportInput) (bool, error) {
+	return false, nil
+}
+func (f *fakeStore) InsertStagedJs(context.Context, []StagedJsInput) error { return nil }
+func (f *fakeStore) ListStagedJs(context.Context, int32, int32) ([]StagedJs, error) {
+	return nil, nil
+}
+func (f *fakeStore) ListStagedJsByIDs(context.Context, int32, []int32) ([]StagedJs, error) {
+	return nil, nil
+}
+func (f *fakeStore) MarkStagedJsImported(context.Context, int32, []int32) error { return nil }
+func (f *fakeStore) ClearStagedJs(context.Context, int32, int32) (int64, error) {
+	return 0, nil
+}
 
 func testService(store Store) *Service {
 	return NewService(store, reconnet.Settings{FarmMaxTargets: 256, PortscanMaxTargets: 64}, Config{WorkerEnabled: true, MaxAttempts: 3}, nil)

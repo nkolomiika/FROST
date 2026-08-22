@@ -891,6 +891,18 @@ type ReconFarmConfig struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ReconFarmStagedEndpoint struct {
+	ID        int32              `json:"id"`
+	ProjectID int32              `json:"project_id"`
+	JobID     int32              `json:"job_id"`
+	Host      string             `json:"host"`
+	Url       string             `json:"url"`
+	Method    pgtype.Text        `json:"method"`
+	Source    pgtype.Text        `json:"source"`
+	Imported  bool               `json:"imported"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type ReconFarmStagedHost struct {
 	ID        int32              `json:"id"`
 	ProjectID int32              `json:"project_id"`
@@ -900,6 +912,19 @@ type ReconFarmStagedHost struct {
 	Alive     bool               `json:"alive"`
 	Source    pgtype.Text        `json:"source"`
 	Ports     []byte             `json:"ports"`
+	Imported  bool               `json:"imported"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type ReconFarmStagedJ struct {
+	ID        int32              `json:"id"`
+	ProjectID int32              `json:"project_id"`
+	JobID     int32              `json:"job_id"`
+	Host      string             `json:"host"`
+	Url       string             `json:"url"`
+	Kind      string             `json:"kind"`
+	Value     string             `json:"value"`
+	Severity  pgtype.Text        `json:"severity"`
 	Imported  bool               `json:"imported"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
