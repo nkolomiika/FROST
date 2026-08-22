@@ -417,6 +417,17 @@ type JobView struct {
 	CreatedAt    time.Time
 }
 
+// FarmRunListItem — элемент истории прогонов фермы (логи сканов): статус, конфиг
+// (raw JSON, с которым запущен прогон) и итог для перехода к отчёту/настройкам.
+type FarmRunListItem struct {
+	ID         int32
+	Status     string
+	CreatedAt  time.Time
+	FinishedAt *time.Time
+	Config     []byte // сырой JSON FarmConfig прогона
+	Result     []byte // сырой JSON итога (nil, если ещё нет)
+}
+
 // JobClaim — задача, взятая в работу воркером (после ClaimJobRunning).
 type JobClaim struct {
 	ID             int32

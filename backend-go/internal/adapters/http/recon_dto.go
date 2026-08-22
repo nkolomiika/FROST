@@ -108,3 +108,29 @@ func jsFileResponses(files []recon.JSFileView) []jsFileResponse {
 	}
 	return out
 }
+
+// farmRunListItemResponse — элемент истории прогонов фермы (логи сканов). config
+// и result отдаём как есть (фронт знает их форму: FarmConfig и FarmRunResult).
+type farmRunListItemResponse struct {
+	ID         int32           `json:"id"`
+	Status     string          `json:"status"`
+	CreatedAt  time.Time       `json:"created_at"`
+	FinishedAt *time.Time      `json:"finished_at"`
+	Config     json.RawMessage `json:"config"`
+	Result     json.RawMessage `json:"result"`
+}
+
+func farmRunListResponse(items []recon.FarmRunListItem) []farmRunListItemResponse {
+	out := make([]farmRunListItemResponse, 0, len(items))
+	for _, it := range items {
+		r := farmRunListItemResponse{ID: it.ID, Status: it.Status, CreatedAt: it.CreatedAt, FinishedAt: it.FinishedAt, Config: json.RawMessage("null"), Result: json.RawMessage("null")}
+		if len(it.Config) > 0 {
+			r.Config = json.RawMessage(it.Config)
+		}
+		if len(it.Result) > 0 {
+			r.Result = json.RawMessage(it.Result)
+		}
+		out = append(out, r)
+	}
+	return out
+}

@@ -69,6 +69,7 @@ func (h *ReconHandler) Register(r chi.Router) {
 		// полный прогон фермы (один клик — весь стек)
 		ar.With(pa).Post(base+"/recon/farm/run", h.startFarmRun)
 		ar.With(pa).Get(base+"/recon/farm/run/{job_id}", h.getFarmRun)
+		ar.With(pa).Get(base+"/recon/farm/runs", h.getFarmRuns)
 
 		// отмена прогона фермы (весь прогон / один шаг / все активные)
 		ar.With(pa).Post(base+"/recon/farm/run/cancel-all", h.cancelAllFarmRuns)
@@ -237,6 +238,20 @@ func optionalJobID(r *http.Request) (*int32, error) {
 
 // getFarmReport отдаёт отчёт стейджинга прогона (по ?job_id= либо последнего).
 // Прогонов нет → пустой отчёт (200). Только лид/админ.
+// getFarmRuns — история прогонов фермы проекта (логи сканов). Lead/admin.
+func (h *ReconHandler) getFarmRuns(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	runs, err := h.svc.ListFarmRuns(r.Context(), pid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, farmRunListResponse(runs))
+}
+
 func (h *ReconHandler) getFarmReport(w http.ResponseWriter, r *http.Request) {
 	if !h.requireLeadOrAdmin(w, r) {
 		return

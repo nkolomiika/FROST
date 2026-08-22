@@ -581,6 +581,11 @@ func (s *Service) GetFarmRun(ctx context.Context, projectID, jobID int32) (JobVi
 	return view, nil
 }
 
+// ListFarmRuns — история прогонов фермы проекта (логи сканов, новые сверху). До 100.
+func (s *Service) ListFarmRuns(ctx context.Context, projectID int32) ([]FarmRunListItem, error) {
+	return s.store.ListFarmRuns(ctx, projectID, 100)
+}
+
 // CancelFarmRun сигналит отмену ВСЕГО прогона (cancel_requested). Валидирует, что
 // задача — farm_run этого проекта (404 иначе); поллер воркера подхватит сигнал и
 // оборвёт прогон. Идемпотентно: повторный вызов на уже завершённой задаче безвреден.

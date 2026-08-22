@@ -528,6 +528,57 @@ func (q *Queries) LatestFarmRunJobID(ctx context.Context, projectID int32) (int3
 	return id, err
 }
 
+const listFarmRunJobs = `-- name: ListFarmRunJobs :many
+SELECT id, status, raw, result, finished_at, created_at
+FROM host_farm_jobs
+WHERE project_id = $1 AND kind = 'farm_run'
+ORDER BY id DESC
+LIMIT $2
+`
+
+type ListFarmRunJobsParams struct {
+	ProjectID int32 `json:"project_id"`
+	Lim       int32 `json:"lim"`
+}
+
+type ListFarmRunJobsRow struct {
+	ID         int32              `json:"id"`
+	Status     string             `json:"status"`
+	Raw        pgtype.Text        `json:"raw"`
+	Result     []byte             `json:"result"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+// История прогонов фермы проекта (новые сверху): статус, конфиг (raw) и итог
+// (result) для показа в логах и перехода к отчёту/настройкам конкретного скана.
+func (q *Queries) ListFarmRunJobs(ctx context.Context, arg ListFarmRunJobsParams) ([]ListFarmRunJobsRow, error) {
+	rows, err := q.db.Query(ctx, listFarmRunJobs, arg.ProjectID, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListFarmRunJobsRow{}
+	for rows.Next() {
+		var i ListFarmRunJobsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.Raw,
+			&i.Result,
+			&i.FinishedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectAllHostnames = `-- name: ListProjectAllHostnames :many
 SELECT hostname FROM hosts WHERE project_id = $1 AND hostname IS NOT NULL
 `

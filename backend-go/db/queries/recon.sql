@@ -312,3 +312,12 @@ WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);
 -- Удаляет staged-находки JS одного прогона; возвращает число удалённых.
 DELETE FROM recon_farm_staged_js
 WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id');
+
+-- name: ListFarmRunJobs :many
+-- История прогонов фермы проекта (новые сверху): статус, конфиг (raw) и итог
+-- (result) для показа в логах и перехода к отчёту/настройкам конкретного скана.
+SELECT id, status, raw, result, finished_at, created_at
+FROM host_farm_jobs
+WHERE project_id = sqlc.arg('project_id') AND kind = 'farm_run'
+ORDER BY id DESC
+LIMIT sqlc.arg('lim');

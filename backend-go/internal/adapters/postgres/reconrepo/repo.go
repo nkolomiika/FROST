@@ -820,6 +820,29 @@ func (r *Repo) ListStagedHostsByIDs(ctx context.Context, projectID int32, ids []
 	return out, nil
 }
 
+func (r *Repo) ListFarmRuns(ctx context.Context, projectID, limit int32) ([]recon.FarmRunListItem, error) {
+	rows, err := r.q.ListFarmRunJobs(ctx, sqlc.ListFarmRunJobsParams{ProjectID: projectID, Lim: limit})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.FarmRunListItem, 0, len(rows))
+	for _, row := range rows {
+		item := recon.FarmRunListItem{ID: row.ID, Status: row.Status, Result: row.Result}
+		if row.Raw.Valid {
+			item.Config = []byte(row.Raw.String)
+		}
+		if row.CreatedAt.Valid {
+			item.CreatedAt = row.CreatedAt.Time
+		}
+		if row.FinishedAt.Valid {
+			t := row.FinishedAt.Time
+			item.FinishedAt = &t
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
 func (r *Repo) LatestFarmRunJobID(ctx context.Context, projectID int32) (int32, bool, error) {
 	id, err := r.q.LatestFarmRunJobID(ctx, projectID)
 	if errors.Is(err, pgx.ErrNoRows) {

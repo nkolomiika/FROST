@@ -248,6 +248,9 @@ type Querier interface {
 	ListEndpointsForHost(ctx context.Context, hostID int32) ([]Endpoint, error)
 	ListEndpointsForHostOrdered(ctx context.Context, hostID int32) ([]Endpoint, error)
 	ListEndpointsForHosts(ctx context.Context, hostIds []int32) ([]Endpoint, error)
+	// История прогонов фермы проекта (новые сверху): статус, конфиг (raw) и итог
+	// (result) для показа в логах и перехода к отчёту/настройкам конкретного скана.
+	ListFarmRunJobs(ctx context.Context, arg ListFarmRunJobsParams) ([]ListFarmRunJobsRow, error)
 	// ─────────── folders ───────────
 	ListFolders(ctx context.Context) ([]ProjectFolder, error)
 	// ─────────── hidden ips ───────────
