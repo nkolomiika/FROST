@@ -111,6 +111,9 @@ type Config struct {
 	TrufflehogBin     string  `env:"TRUFFLEHOG_BIN" envDefault:"trufflehog"`
 	JSMineTimeoutSecs float64 `env:"JS_MINE_TIMEOUT_SECONDS" envDefault:"30.0"`
 
+	// --- GitHub secret-scan (trufflehog github) для контекста leaks ---
+	GithubScanTimeoutSecs float64 `env:"GITHUB_SCAN_TIMEOUT_SECONDS" envDefault:"300.0"`
+
 	// --- Определение технологий/CDN веб-порта ---
 	ServicesDetectEnabled        bool    `env:"SERVICES_DETECT_ENABLED" envDefault:"true"`
 	ServicesDetectEngine         string  `env:"SERVICES_DETECT_ENGINE" envDefault:"httpx"`

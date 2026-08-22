@@ -30,6 +30,8 @@ type Querier interface {
 	// равном running/done (порт guard run_recon_job: повторную доставку не пробиваем).
 	ClaimReconJobRunning(ctx context.Context, id int32) (HostFarmJob, error)
 	ClearCommentMentions(ctx context.Context, commentID int32) error
+	// Удаляет утечки проекта с необязательными фильтрами source/job_id; число удалённых.
+	ClearLeaks(ctx context.Context, arg ClearLeaksParams) (int64, error)
 	// Удаляет staged-эндпоинты одного прогона; возвращает число удалённых.
 	ClearStagedEndpoints(ctx context.Context, arg ClearStagedEndpointsParams) (int64, error)
 	// Удаляет staged-строки одного прогона; возвращает число удалённых.
@@ -70,6 +72,7 @@ type Querier interface {
 	DeleteHost(ctx context.Context, arg DeleteHostParams) error
 	DeleteHostByID(ctx context.Context, id int32) error
 	DeleteHostIP(ctx context.Context, id int32) error
+	DeleteIntegration(ctx context.Context, keyName string) error
 	DeleteJsFilesForHost(ctx context.Context, arg DeleteJsFilesForHostParams) error
 	DeleteJsSecretsForFile(ctx context.Context, jsFileID int32) error
 	DeleteMember(ctx context.Context, arg DeleteMemberParams) error
@@ -120,6 +123,9 @@ type Querier interface {
 	GetHostFarmJob(ctx context.Context, id int32) (HostFarmJob, error)
 	GetHostFarmJobForProject(ctx context.Context, arg GetHostFarmJobForProjectParams) (HostFarmJob, error)
 	GetHostIPForHost(ctx context.Context, arg GetHostIPForHostParams) (HostIpAddress, error)
+	// Контекст integrations: workspace-level API-ключи (зашифрованы Fernet, BYTEA).
+	// Секреты наружу не отдаём — только факт «configured» + updated_at.
+	GetIntegration(ctx context.Context, keyName string) (WorkspaceIntegration, error)
 	GetInvitationByID(ctx context.Context, id int32) (Invitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (Invitation, error)
 	// Контекст recon, ферма JS: js_files/js_secrets. Скан «в памяти» (файлы в БД не
@@ -188,6 +194,13 @@ type Querier interface {
 	InsertHostFarmJob(ctx context.Context, arg InsertHostFarmJobParams) (HostFarmJob, error)
 	InsertHostIP(ctx context.Context, arg InsertHostIPParams) (HostIpAddress, error)
 	InsertJsSecret(ctx context.Context, arg InsertJsSecretParams) error
+	// Контекст leaks: единое хранилище утечек (recon_leaks). Пишут разные источники
+	// (source=github|linkedin|hibp|…); чтение/импорт/очистка — по проекту с
+	// необязательными фильтрами source/job_id. Импорт создаёт project_notes.
+	InsertLeak(ctx context.Context, arg InsertLeakParams) error
+	// Лёгкий персист импорта: одна страница-заметка на утечку. title уникален (id
+	// утечки в заголовке), parent_id=NULL, sort_order — следующий на верхнем уровне.
+	InsertLeakNote(ctx context.Context, arg InsertLeakNoteParams) error
 	// Запросы контекста mail (outbox). Отправка — cmd/mail-worker.
 	// Модель статусов (порт mail_worker.py): pending→queued→processing→sent|failed.
 	// attempts инкрементится при ВЗЯТИИ в работу (MarkMailJobProcessing), не при провале.
@@ -243,10 +256,15 @@ type Querier interface {
 	ListHostIPs(ctx context.Context, hostID int32) ([]HostIpAddress, error)
 	ListHostIPsForHosts(ctx context.Context, hostIds []int32) ([]HostIpAddress, error)
 	ListHosts(ctx context.Context, arg ListHostsParams) ([]Host, error)
+	ListIntegrations(ctx context.Context) ([]ListIntegrationsRow, error)
 	ListJsFileURLsForHost(ctx context.Context, arg ListJsFileURLsForHostParams) ([]string, error)
 	ListJsFileURLsForProject(ctx context.Context, projectID int32) ([]string, error)
 	ListJsFilesForProject(ctx context.Context, projectID int32) ([]JsFile, error)
 	ListJsSecretsForFile(ctx context.Context, jsFileID int32) ([]JsSecret, error)
+	// Все утечки проекта с необязательными фильтрами source/job_id (NULL = не фильтруем).
+	ListLeaks(ctx context.Context, arg ListLeaksParams) ([]ReconLeak, error)
+	// Выбранные утечки проекта по id (для импорта). Скоуп проекта обязателен.
+	ListLeaksByIDs(ctx context.Context, arg ListLeaksByIDsParams) ([]ReconLeak, error)
 	ListMemberProjectIDs(ctx context.Context, userID int32) ([]int32, error)
 	ListMemberUserIDs(ctx context.Context, projectID int32) ([]int32, error)
 	// ─────────── members ───────────
@@ -309,6 +327,8 @@ type Querier interface {
 	ListVulnsForHost(ctx context.Context, arg ListVulnsForHostParams) ([]ListVulnsForHostRow, error)
 	MarkAllNotificationsRead(ctx context.Context, userID int32) error
 	MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error
+	// Помечает выбранные утечки импортированными (идемпотентно).
+	MarkLeaksImported(ctx context.Context, arg MarkLeaksImportedParams) error
 	MarkMailJobFailed(ctx context.Context, arg MarkMailJobFailedParams) error
 	MarkMailJobPending(ctx context.Context, arg MarkMailJobPendingParams) error
 	MarkMailJobProcessing(ctx context.Context, id int32) (MailJob, error)
@@ -408,6 +428,7 @@ type Querier interface {
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	UpdateVuln(ctx context.Context, arg UpdateVulnParams) (Vulnerability, error)
 	UpdateVulnComment(ctx context.Context, arg UpdateVulnCommentParams) error
+	UpsertIntegration(ctx context.Context, arg UpsertIntegrationParams) error
 	UpsertJsFile(ctx context.Context, arg UpsertJsFileParams) (int32, error)
 	UpsertReconFarmConfig(ctx context.Context, arg UpsertReconFarmConfigParams) error
 	UsernameExists(ctx context.Context, username string) (bool, error)

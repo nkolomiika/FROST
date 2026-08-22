@@ -26,6 +26,8 @@ type Deps struct {
 	Notifications *NotificationsHandler // nil до подключения notifications
 	Recon         *ReconHandler         // nil до подключения recon (ферма+scanner)
 	Reports       *ReportsHandler       // nil до подключения reports
+	Integrations  *IntegrationsHandler  // nil до подключения workspace-интеграций
+	Leaks         *LeaksHandler         // nil до подключения контекста leaks
 }
 
 // NewRouter собирает chi-роутер с базовыми middleware и служебными эндпоинтами.
@@ -73,6 +75,12 @@ func NewRouter(d Deps) http.Handler {
 	}
 	if d.Reports != nil {
 		d.Reports.Register(r)
+	}
+	if d.Integrations != nil {
+		d.Integrations.Register(r)
+	}
+	if d.Leaks != nil {
+		d.Leaks.Register(r)
 	}
 
 	return r

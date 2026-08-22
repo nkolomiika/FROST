@@ -929,6 +929,20 @@ type ReconFarmStagedJ struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type ReconLeak struct {
+	ID        int32              `json:"id"`
+	ProjectID int32              `json:"project_id"`
+	JobID     pgtype.Int4        `json:"job_id"`
+	Source    string             `json:"source"`
+	Kind      string             `json:"kind"`
+	Subject   pgtype.Text        `json:"subject"`
+	Value     pgtype.Text        `json:"value"`
+	Detail    []byte             `json:"detail"`
+	Verified  bool               `json:"verified"`
+	Imported  bool               `json:"imported"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type RefreshToken struct {
 	ID        int32              `json:"id"`
 	UserID    int32              `json:"user_id"`
@@ -996,4 +1010,11 @@ type VulnerabilityAsset struct {
 	VulnerabilityID int32     `json:"vulnerability_id"`
 	AssetType       AssetType `json:"asset_type"`
 	AssetID         int32     `json:"asset_id"`
+}
+
+type WorkspaceIntegration struct {
+	KeyName        string             `json:"key_name"`
+	ValueEncrypted []byte             `json:"value_encrypted"`
+	UpdatedBy      pgtype.Int4        `json:"updated_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }

@@ -32,6 +32,7 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 		JsluiceBin:        c.JsluiceBin,
 		TrufflehogBin:     c.TrufflehogBin,
 		JSMineTimeout:     secs(c.JSMineTimeoutSecs),
+		GithubScanTimeout: secs(c.GithubScanTimeoutSecs),
 
 		ServicesDetectEnabled:  c.ServicesDetectEnabled,
 		ServicesDetectEngine:   c.ServicesDetectEngine,

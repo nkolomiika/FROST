@@ -20,7 +20,13 @@ import (
 	"time"
 
 	"github.com/nkolomiika/frost/config"
+	"github.com/nkolomiika/frost/internal/adapters/leaksink"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/integrationsrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/leaksrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/reconrepo"
+	"github.com/nkolomiika/frost/internal/adapters/security"
+	"github.com/nkolomiika/frost/internal/app/integrations"
+	"github.com/nkolomiika/frost/internal/app/leaks"
 	"github.com/nkolomiika/frost/internal/app/recon"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
 	"github.com/nkolomiika/frost/internal/platform/postgres"
@@ -62,6 +68,16 @@ func run() error {
 	defer pool.Close()
 
 	svc := recon.NewService(reconrepo.New(pool), recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
+
+	// github secret-scan (kind=github_scan) на обычной дорожке пишет находки в
+	// единое хранилище утечек и резолвит github_token из workspace-интеграций.
+	cipher, err := security.NewSecretCipher(cfg.JWTSecretKey)
+	if err != nil {
+		return fmt.Errorf("cipher: %w", err)
+	}
+	integrationsSvc := integrations.NewService(integrationsrepo.New(pool), cipher)
+	leaksSvc := leaks.NewService(leaksrepo.New(pool))
+	svc.AttachLeaks(integrationsSvc, leaksink.New(leaksSvc))
 
 	logger.Info("recon-worker запущен", "regular_poll", regularPollInterval.String(), "farm_poll", farmPollInterval.String())
 

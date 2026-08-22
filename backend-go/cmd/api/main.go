@@ -25,10 +25,13 @@ import (
 	"github.com/nkolomiika/frost/config"
 	"github.com/nkolomiika/frost/db"
 	httpadapter "github.com/nkolomiika/frost/internal/adapters/http"
+	"github.com/nkolomiika/frost/internal/adapters/leaksink"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/agenttokenrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/authrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/integrationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/inventoryrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/leaksrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/notificationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/projectsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/reconrepo"
@@ -41,7 +44,9 @@ import (
 	"github.com/nkolomiika/frost/internal/app/agenttokens"
 	"github.com/nkolomiika/frost/internal/app/audit"
 	"github.com/nkolomiika/frost/internal/app/auth"
+	"github.com/nkolomiika/frost/internal/app/integrations"
 	"github.com/nkolomiika/frost/internal/app/inventory"
+	"github.com/nkolomiika/frost/internal/app/leaks"
 	"github.com/nkolomiika/frost/internal/app/notifications"
 	"github.com/nkolomiika/frost/internal/app/projects"
 	"github.com/nkolomiika/frost/internal/app/recon"
@@ -156,9 +161,18 @@ func run() error {
 	// Контекст notifications (лента уведомлений).
 	notificationsHandler := httpadapter.NewNotificationsHandler(notifications.NewService(notificationsrepo.New(pool)), authSvc, cfg.CSRFOrigins())
 
-	// Контекст recon (ферма + scanner + js-files).
+	// Контекст integrations (workspace-level API-ключи, admin-only) + leaks
+	// (единое хранилище утечек). Оба переиспользуют cipher project-кред.
+	integrationsSvc := integrations.NewService(integrationsrepo.New(pool), cipher)
+	integrationsHandler := httpadapter.NewIntegrationsHandler(integrationsSvc, authSvc, cfg.CSRFOrigins())
+	leaksSvc := leaks.NewService(leaksrepo.New(pool))
+
+	// Контекст recon (ферма + scanner + js-files). Подключаем резолвер интеграций
+	// и приёмник утечек — для github secret-scan (kind=github_scan).
 	reconSvc := recon.NewService(reconrepo.New(pool), recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
+	reconSvc.AttachLeaks(integrationsSvc, leaksink.New(leaksSvc))
 	reconHandler := httpadapter.NewReconHandler(reconSvc, projectsSvc, authSvc, cfg.CSRFOrigins(), cfg.FarmMaxRawBytes)
+	leaksHandler := httpadapter.NewLeaksHandler(reconSvc, leaksSvc, projectsSvc, authSvc, cfg.CSRFOrigins(), cfg.FarmMaxRawBytes)
 
 	// Контекст reports (Python-sidecar, интерим).
 	reportsHandler := httpadapter.NewReportsHandler(report.NewService(reportrepo.New(pool), fileStorage, cfg.ReportsSidecarURL, cfg.ReportsSidecarToken), projectsSvc, authSvc, cfg.CSRFOrigins())
@@ -172,7 +186,7 @@ func run() error {
 		}, nil),
 		authSvc, cfg.CSRFOrigins())
 
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler, Reports: reportsHandler})
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler, Reports: reportsHandler, Integrations: integrationsHandler, Leaks: leaksHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{
