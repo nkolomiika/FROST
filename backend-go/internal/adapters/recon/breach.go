@@ -97,6 +97,16 @@ type BreachSource interface {
 // HTTP-симом). Приоритетов нет — реестр прогона фильтрует их по Enabled(keys) и гоняет
 // все сконфигурированные.
 func AllBreachSources(keys BreachKeys, cfg BreachHTTPConfig) []BreachSource {
+	// ProxyNova COMB — БЕСПЛАТНЫЙ публичный API (ключ не нужен): активен всегда.
+	// Остальные источники платные и самопропускаются, пока не задан ключ (позже
+	// ключи зашьём в конфиг). Это даёт рабочий бесплатный domain/email-пробив «из
+	// коробки», не завися от интеграций.
+	proxynova := newThinBreachSource("proxynova", "", cfg, func(_ string, t BreachTarget) (*http.Request, error) {
+		q := url.Values{"query": {t.Value}}
+		return http.NewRequest(http.MethodGet, "https://api.proxynova.com/comb?"+q.Encode(), nil)
+	})
+	proxynova.keyless = true
+
 	return []BreachSource{
 		&hibpSource{key: keys.HIBP, cfg: cfg},
 		&dehashedSource{key: keys.Dehashed, cfg: cfg},
@@ -120,10 +130,7 @@ func AllBreachSources(keys BreachKeys, cfg BreachHTTPConfig) []BreachSource {
 			}
 			return req, err
 		}),
-		newThinBreachSource("proxynova", keys.ProxyNova, cfg, func(key string, t BreachTarget) (*http.Request, error) {
-			q := url.Values{"query": {t.Value}, "key": {key}}
-			return http.NewRequest(http.MethodGet, "https://api.proxynova.com/comb?"+q.Encode(), nil)
-		}),
+		proxynova,
 	}
 }
 
@@ -337,10 +344,13 @@ func splitBasic(key string) (string, string) {
 // через build, гоняет общий HTTP-путь и парсит обобщённый JSON-ответ. Без ключа
 // самопропускается (Enabled==false и Search возвращает пусто).
 type thinBreachSource struct {
-	name  string
-	key   string
-	cfg   BreachHTTPConfig
-	build func(key string, t BreachTarget) (*http.Request, error)
+	name string
+	key  string
+	cfg  BreachHTTPConfig
+	// keyless — источник работает БЕЗ ключа (бесплатный публичный API, напр. ProxyNova
+	// COMB): всегда активен и не самопропускается по пустому ключу.
+	keyless bool
+	build   func(key string, t BreachTarget) (*http.Request, error)
 }
 
 func newThinBreachSource(name, key string, cfg BreachHTTPConfig, build func(string, BreachTarget) (*http.Request, error)) *thinBreachSource {
@@ -350,6 +360,9 @@ func newThinBreachSource(name, key string, cfg BreachHTTPConfig, build func(stri
 func (s *thinBreachSource) Name() string { return s.name }
 
 func (s *thinBreachSource) Enabled(keys BreachKeys) bool {
+	if s.keyless {
+		return true // бесплатный источник — активен всегда
+	}
 	switch s.name {
 	case "intelx":
 		return strings.TrimSpace(keys.IntelX) != ""
@@ -364,7 +377,7 @@ func (s *thinBreachSource) Enabled(keys BreachKeys) bool {
 }
 
 func (s *thinBreachSource) Search(ctx context.Context, t BreachTarget) ([]BreachLeak, error) {
-	if strings.TrimSpace(s.key) == "" {
+	if !s.keyless && strings.TrimSpace(s.key) == "" {
 		return nil, nil // нет ключа → мягкий самопропуск
 	}
 	req, err := s.build(s.key, t)

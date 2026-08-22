@@ -111,6 +111,15 @@ func TestBreachSource_NoKeySelfSkips(t *testing.T) {
 		t.Fatalf("want 6 sources, got %d", len(sources))
 	}
 	for _, src := range sources {
+		if src.Name() == "proxynova" {
+			// ProxyNova COMB — бесплатный keyless источник: активен ВСЕГДА (без ключа),
+			// поэтому в «self-skip без ключа» не участвует (и его Search не дёргаем —
+			// он реально пошёл бы в сеть).
+			if !src.Enabled(BreachKeys{}) {
+				t.Fatalf("proxynova (free) must be enabled without a key")
+			}
+			continue
+		}
 		if src.Enabled(BreachKeys{}) {
 			t.Fatalf("source %s must be disabled without key", src.Name())
 		}

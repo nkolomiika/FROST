@@ -5789,9 +5789,17 @@ export function FrostApp() {
     // ─ Leaks: построчные textarea-ручки (GitHub / домены / e-mail) ─
     // Значение хранится как string[]; textarea показывает join("\n"), ввод
     // режется по строкам и триммится (пустые строки при вводе сохраняются).
-    const leaksArea = (key: "leaks_github" | "leaks_domains" | "leaks_emails", label: string, placeholder: string, last = false) => (
+    const leaksArea = (key: "leaks_github" | "leaks_domains" | "leaks_emails", label: string, placeholder: string, last = false, fill?: { label: string; onClick: () => void }) => (
       <div style={{ padding: "13px 0", borderBottom: last ? "none" : "1px solid var(--fr-divider)" }}>
-        <label className="flabel">{label}</label>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <label className="flabel">{label}</label>
+          {fill && (
+            <button type="button" className="clk" onClick={fill.onClick} style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 26, padding: "0 10px", border: "1px solid var(--fr-border)", borderRadius: 8, background: "var(--fr-surface)", font: "700 11px Inter,sans-serif", color: "var(--fr-accent-2)", cursor: "pointer" }}>
+              <Icon name="plus" size={12} color="var(--fr-accent-2)" sw={2.6} />
+              {fill.label}
+            </button>
+          )}
+        </div>
         <textarea
           className="finp mono"
           rows={3}
@@ -5969,7 +5977,21 @@ export function FrostApp() {
               )}
               {stage("idcard", t("Account search"), t("Breach/OSINT lookup by domain and email — activates when API keys are set in Integrations."), "stage_account_search",
                 <>
-                  {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"))}
+                  {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"), false, {
+                    label: t("Use project domains"),
+                    onClick: () => {
+                      // Корневые домены проекта (без IP-строк и вложенных поддоменов) —
+                      // это осмысленные цели domain-пробива утечек. Мёржим с уже введёнными.
+                      const roots = hosts
+                        .filter((h) => h.origin !== "ip" && !isNestedSubdomain(h))
+                        .map((h) => h.host.trim().toLowerCase())
+                        .filter(Boolean);
+                      const existing = ((cfg.leaks_domains as string[] | null) ?? []).map((s) => s.trim()).filter(Boolean);
+                      const merged = [...new Set([...existing, ...roots])];
+                      setFarmField("leaks_domains", merged);
+                      if (roots.length === 0) pushToast(t("No project domains yet — add hosts first."), "info");
+                    },
+                  })}
                   {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"), true)}
                 </>,
                 true
