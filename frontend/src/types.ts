@@ -454,8 +454,11 @@ export interface ReconFarmConfig {
   stage_endpoints: boolean;
   stage_js: boolean;
   stage_ports: boolean;
-  /** Стадия утечек: OSINT/breach-источники + GitHub-скан гоняются прямо прогоном. */
+  /** Стадия утечек: GitHub-скан (секреты/почты/домены) гоняется прямо прогоном. */
   stage_leaks: boolean;
+  /** Поиск учёток: breach/OSINT-пробив по доменам/почтам. Отдельный этап от Leaks,
+   *  но находки уходят в тот же Leaks-стор. */
+  stage_account_search: boolean;
   // Subdomains — внутренние флаги инструментов (UI их не показывает, но провод
   // их несёт, чтобы round-trip сохранял значения).
   subfinder: boolean;

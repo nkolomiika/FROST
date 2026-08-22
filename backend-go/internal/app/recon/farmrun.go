@@ -331,7 +331,7 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 
 	// ── стадия утечек: github secret-scan + breach-пробив по доменам/почтам
 	//    (gated: stage_leaks); находки → единое хранилище recon_leaks ──
-	if cfg.StageLeaks {
+	if cfg.StageLeaks || cfg.StageAccountSearch {
 		if canceled := s.runFarmLeaks(ctx, &runSvc, cfg, claim.ProjectID, claim.ID, prog, result, &wasCancelled); canceled {
 			return finalizeCancelled()
 		}

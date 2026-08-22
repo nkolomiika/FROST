@@ -68,10 +68,12 @@ func TestRunFarmLeaks_GithubAndBreachSources(t *testing.T) {
 	}
 
 	cfg := FarmConfig{
-		Concurrency:  4,
-		LeaksGithub:  []string{"https://github.com/owner/repo"},
-		LeaksDomains: []string{"b.com"},
-		LeaksEmails:  []string{"a@b.com"},
+		Concurrency:        4,
+		StageLeaks:         true,
+		StageAccountSearch: true,
+		LeaksGithub:        []string{"https://github.com/owner/repo"},
+		LeaksDomains:       []string{"b.com"},
+		LeaksEmails:        []string{"a@b.com"},
 	}
 	var was atomic.Bool
 	prog := newProgressTracker(nil)
@@ -173,7 +175,7 @@ func TestRunFarmLeaks_CancelReturnsTrue(t *testing.T) {
 	svc.breachSources = func(reconnet.BreachKeys) []reconnet.BreachSource {
 		return []reconnet.BreachSource{&fakeBreachSource{name: "hibp", enabled: true, block: true}}
 	}
-	cfg := FarmConfig{Concurrency: 2, LeaksDomains: []string{"b.com"}}
+	cfg := FarmConfig{Concurrency: 2, StageAccountSearch: true, LeaksDomains: []string{"b.com"}}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var was atomic.Bool

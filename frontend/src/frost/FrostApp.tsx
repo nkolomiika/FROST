@@ -1510,7 +1510,7 @@ export function FrostApp() {
     const pid = state.openProjectId;
     if (pid == null || state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")) return;
     const c = state.farmCfg;
-    if (!c || !(c.stage_subdomains || c.stage_endpoints || c.stage_js || c.stage_ports || c.stage_leaks)) {
+    if (!c || !(c.stage_subdomains || c.stage_endpoints || c.stage_js || c.stage_ports || c.stage_leaks || c.stage_account_search)) {
       pushToast(t("Select at least one stage to run"), "info");
       return;
     }
@@ -4903,7 +4903,7 @@ export function FrostApp() {
               {sec === "hosts" && rv === "farm" && !state.farmReportOpen && (() => {
                 const fcfg = state.farmCfg;
                 // Нельзя запустить прогон, пока не выбран ни один этап — кнопка бледная.
-                const noStage = !fcfg || !(fcfg.stage_subdomains || fcfg.stage_endpoints || fcfg.stage_js || fcfg.stage_ports || fcfg.stage_leaks);
+                const noStage = !fcfg || !(fcfg.stage_subdomains || fcfg.stage_endpoints || fcfg.stage_js || fcfg.stage_ports || fcfg.stage_leaks || fcfg.stage_account_search);
                 const disabled = state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") || noStage;
                 return (
                   <button
@@ -5841,6 +5841,7 @@ export function FrostApp() {
       if (c.stage_js) stages.push(t("js"));
       if (c.stage_ports) stages.push(t("ports"));
       if (c.stage_leaks) stages.push(t("leaks"));
+      if (c.stage_account_search) stages.push(t("accounts"));
       const stageStr = stages.length > 0 ? stages.join(", ") : t("no stages");
       return `${t(cap(c.mode))} · ${t(cap(c.wordlist_size))} · ${stageStr}`;
     };
@@ -5956,28 +5957,17 @@ export function FrostApp() {
               {stage("plug", t("Port scan"), t("Probe open ports on discovered hosts."), "stage_ports",
                 row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))), true)
               )}
+              {/* Leaks и Account search — ДВА независимых этапа со своими тумблерами,
+                  но оба пишут находки в единый Leaks-стор. */}
               {stage("lock", t("Leaks"), t("Scan GitHub repos/orgs — pulls secrets, emails and domains by default."), "stage_leaks",
-                leaksArea("leaks_github", t("GitHub URLs"), t("https://github.com/org or repo URL — one per line"), true),
-                !cfg.stage_leaks
+                leaksArea("leaks_github", t("GitHub URLs"), t("https://github.com/org or repo URL — one per line"), true)
               )}
-              {/* Поиск учёток — отдельная секция под стадией Leaks: брич/OSINT-лукап
-                  по доменам и почтам (домены имён здесь, не в GitHub-блоке). */}
-              {cfg.stage_leaks && (
-                <div style={{ padding: "16px 0", borderBottom: "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 9, background: "var(--fr-accent-soft)", flex: "none" }}>
-                      <Icon name="idcard" size={17} color="var(--fr-accent)" sw={2} />
-                    </span>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ font: "700 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Account search")}</div>
-                      <div style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, lineHeight: 1.4 }}>{t("Breach/OSINT lookup by domain and email — activates when API keys are set in Integrations.")}</div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 4, marginLeft: 46, paddingLeft: 14, borderLeft: "2px solid var(--fr-divider)" }}>
-                    {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"))}
-                    {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"), true)}
-                  </div>
-                </div>
+              {stage("idcard", t("Account search"), t("Breach/OSINT lookup by domain and email — activates when API keys are set in Integrations."), "stage_account_search",
+                <>
+                  {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"))}
+                  {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"), true)}
+                </>,
+                true
               )}
             </div>
           )}

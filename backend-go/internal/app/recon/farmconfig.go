@@ -42,11 +42,12 @@ type FarmConfig struct {
 	// true у всех: пропущенная в сохранённом JSON стадия остаётся включённой (см.
 	// GetFarmConfig — оверлей поверх DefaultFarmConfig). stage_subdomains off →
 	// discovery пропускается, поздние стадии работают по СУЩЕСТВУЮЩИМ хостам проекта.
-	StageSubdomains bool `json:"stage_subdomains"`
-	StageEndpoints  bool `json:"stage_endpoints"`
-	StageJs         bool `json:"stage_js"`
-	StagePorts      bool `json:"stage_ports"`
-	StageLeaks      bool `json:"stage_leaks"`
+	StageSubdomains    bool `json:"stage_subdomains"`
+	StageEndpoints     bool `json:"stage_endpoints"`
+	StageJs            bool `json:"stage_js"`
+	StagePorts         bool `json:"stage_ports"`
+	StageLeaks         bool `json:"stage_leaks"`
+	StageAccountSearch bool `json:"stage_account_search"`
 
 	// Leaks — входы стадии утечек (gated: stage_leaks). Github-URL'ы сканируются
 	// trufflehog'ом (секреты), домены/почты пробиваются по breach-источникам с
@@ -110,11 +111,12 @@ func DefaultFarmConfig() FarmConfig {
 		EndpointsWordlistID:   0,
 		EndpointsWordlistPath: "",
 
-		StageSubdomains: true,
-		StageEndpoints:  true,
-		StageJs:         true,
-		StagePorts:      true,
-		StageLeaks:      false, // стадия утечек по умолчанию выключена (доп. вход/ключи)
+		StageSubdomains:    true,
+		StageEndpoints:     true,
+		StageJs:            true,
+		StagePorts:         true,
+		StageLeaks:         false, // стадия утечек по умолчанию выключена (доп. вход/ключи)
+		StageAccountSearch: false, // поиск учёток — отдельная стадия, по умолчанию выключена
 
 		Subfinder:         true,
 		Assetfinder:       true,

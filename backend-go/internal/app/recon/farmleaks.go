@@ -35,13 +35,23 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 	keys := s.resolveBreachKeys(ctx)
 	sources := runSvc.breachSourcesFor(keys)
 
-	// Цели breach-пробива: домены + почты.
-	targets := make([]reconnet.BreachTarget, 0, len(cfg.LeaksDomains)+len(cfg.LeaksEmails))
-	for _, d := range cfg.LeaksDomains {
-		targets = append(targets, reconnet.BreachTarget{Kind: reconnet.BreachTargetDomain, Value: d})
+	// Leaks и Account search — ДВА независимых этапа с раздельными тумблерами, но
+	// общей плумбингой (единый recon_leaks, один прогресс-бэнд). Github-скан gated
+	// на StageLeaks, breach-пробив по доменам/почтам — на StageAccountSearch.
+	ghURLs := cfg.LeaksGithub
+	if !cfg.StageLeaks {
+		ghURLs = nil
 	}
-	for _, e := range cfg.LeaksEmails {
-		targets = append(targets, reconnet.BreachTarget{Kind: reconnet.BreachTargetEmail, Value: e})
+
+	// Цели breach-пробива: домены + почты (только если включён поиск учёток).
+	targets := make([]reconnet.BreachTarget, 0, len(cfg.LeaksDomains)+len(cfg.LeaksEmails))
+	if cfg.StageAccountSearch {
+		for _, d := range cfg.LeaksDomains {
+			targets = append(targets, reconnet.BreachTarget{Kind: reconnet.BreachTargetDomain, Value: d})
+		}
+		for _, e := range cfg.LeaksEmails {
+			targets = append(targets, reconnet.BreachTarget{Kind: reconnet.BreachTargetEmail, Value: e})
+		}
 	}
 
 	// Активные источники — только те, у кого есть ключ; для неактивных — мягкая
@@ -72,7 +82,7 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 
 	// Плавный рост процента по мере готовности единиц работы (band [pctLeaks..pctDone-1]).
 	// Каждый github-URL даёт ДВЕ единицы: секрет-скан + email-майнинг.
-	totalUnits := len(cfg.LeaksGithub)*2 + len(targets)*len(enabled)
+	totalUnits := len(ghURLs)*2 + len(targets)*len(enabled)
 	var doneUnits atomic.Int64
 	bump := func() {
 		d := int(doneUnits.Add(1))
@@ -90,7 +100,7 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 	eg.SetLimit(limit)
 
 	// ── github secret-scan по каждому URL (переиспользует github-сим скана) ──
-	for _, ghURL := range cfg.LeaksGithub {
+	for _, ghURL := range ghURLs {
 		ghURL := ghURL
 		eg.Go(func() error {
 			stepCtx, stepCancel := context.WithCancel(ctx)
