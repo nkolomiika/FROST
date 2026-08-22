@@ -34,7 +34,9 @@ func DNSXBruteArgs(root string, cfg DNSXBruteConfig) []string {
 // DNSXBrute гоняет `dnsx -d root -w <wordlist> -silent -rl -t` и возвращает
 // найденные поддомены в scope корня. Нет бинаря или словаря — пусто (не ошибка).
 func DNSXBrute(ctx context.Context, root string, cfg DNSXBruteConfig, s Settings) ([]string, string) {
-	if !lookPathOK(s.DnsxBin) || !WordlistExists(cfg.WordlistPath) {
+	// safeHost: root идёт в argv (-d root) — значение с ведущим '-' бинарь принял бы
+	// за флаг; такие корни пропускаем (не ошибка). Путь словаря — всегда серверный.
+	if !lookPathOK(s.DnsxBin) || !WordlistExists(cfg.WordlistPath) || !safeHost(root) {
 		return nil, ""
 	}
 	c, cancel := context.WithTimeout(ctx, s.DnsxBruteTimeout)

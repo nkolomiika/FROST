@@ -35,6 +35,10 @@ type Service struct {
 	// jsMiner — JS-майнинг одного хоста стадии JS (сид для тестов; nil → DiscoverAndScan).
 	jsMiner func(ctx context.Context, host string) ([]reconnet.ScannedFile, []string)
 
+	// wordlists — материализатор словарей (бандл-тир/кастомный из MinIO) для брута
+	// поддоменов (dnsx) и дир-фаззинга (ffuf). nil → fallback на бандл-тиры.
+	wordlists WordlistMaterializer
+
 	// integrations — резолвер workspace-ключей (github_token и т.п.) для сканов утечек.
 	integrations IntegrationResolver
 	// leakSink — приёмник находок утечек (пишет в единое хранилище recon_leaks).

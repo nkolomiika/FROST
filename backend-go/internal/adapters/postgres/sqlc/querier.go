@@ -87,6 +87,8 @@ type Querier interface {
 	DeleteVuln(ctx context.Context, id int32) error
 	DeleteVulnAsset(ctx context.Context, id int32) error
 	DeleteVulnComment(ctx context.Context, id int32) error
+	// Удаляет строку словаря по id; число удалённых (0 = не было).
+	DeleteWordlist(ctx context.Context, id int32) (int64, error)
 	DisableUserTotp(ctx context.Context, id int32) error
 	EmailExists(ctx context.Context, email string) (bool, error)
 	EnableUserTotp(ctx context.Context, id int32) error
@@ -168,6 +170,8 @@ type Querier interface {
 	GetVulnAssetLink(ctx context.Context, arg GetVulnAssetLinkParams) (VulnerabilityAsset, error)
 	GetVulnComment(ctx context.Context, arg GetVulnCommentParams) (Comment, error)
 	GetVulnTitleAndProject(ctx context.Context, id int32) (GetVulnTitleAndProjectRow, error)
+	// Один словарь по id (для материализации / удаления).
+	GetWordlist(ctx context.Context, id int32) (ReconWordlist, error)
 	HiddenIPExists(ctx context.Context, arg HiddenIPExistsParams) (bool, error)
 	// asset-in-project existence checks (polymorphic)
 	HostAssetInProject(ctx context.Context, arg HostAssetInProjectParams) (bool, error)
@@ -234,6 +238,11 @@ type Querier interface {
 	InsertVulnAsset(ctx context.Context, arg InsertVulnAssetParams) (VulnerabilityAsset, error)
 	InsertVulnComment(ctx context.Context, arg InsertVulnCommentParams) (Comment, error)
 	InsertVulnStatusNotification(ctx context.Context, arg InsertVulnStatusNotificationParams) error
+	// Контекст recon: пользовательские словари (recon_wordlists), workspace-level.
+	// object_key — серверный ключ MinIO ('wordlists/{uuid}'); name — ярлык (имя файла
+	// пользователя), в путь НЕ идёт. Читаются списком (GET), точечно по id (материализация
+	// / удаление), пишутся при загрузке, удаляются вместе с объектом MinIO.
+	InsertWordlist(ctx context.Context, arg InsertWordlistParams) (ReconWordlist, error)
 	IsProjectMember(ctx context.Context, arg IsProjectMemberParams) (bool, error)
 	// id последнего прогона фермы проекта (для отчёта без явного job_id).
 	LatestFarmRunJobID(ctx context.Context, projectID int32) (int32, error)
@@ -328,6 +337,8 @@ type Querier interface {
 	ListVulns(ctx context.Context, arg ListVulnsParams) ([]ListVulnsRow, error)
 	ListVulnsForActivity(ctx context.Context, ids []int32) ([]ListVulnsForActivityRow, error)
 	ListVulnsForHost(ctx context.Context, arg ListVulnsForHostParams) ([]ListVulnsForHostRow, error)
+	// Все кастомные словари workspace (новые сверху).
+	ListWordlists(ctx context.Context) ([]ReconWordlist, error)
 	MarkAllNotificationsRead(ctx context.Context, userID int32) error
 	MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error
 	// Помечает выбранные утечки импортированными (идемпотентно).

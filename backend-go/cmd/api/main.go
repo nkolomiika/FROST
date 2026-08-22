@@ -39,6 +39,7 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/sqlc"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/usersrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/vulnsrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/wordlistrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
 	"github.com/nkolomiika/frost/internal/adapters/storage"
 	"github.com/nkolomiika/frost/internal/app/agenttokens"
@@ -53,6 +54,7 @@ import (
 	"github.com/nkolomiika/frost/internal/app/report"
 	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
+	"github.com/nkolomiika/frost/internal/app/wordlists"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
 	"github.com/nkolomiika/frost/internal/platform/postgres"
 )
@@ -131,8 +133,10 @@ func run() error {
 	projectsSvc := projects.NewService(projectsrepo.New(pool), cipher, nil)
 	projectsHandler := httpadapter.NewProjectsHandler(projectsSvc, authSvc, cfg.CSRFOrigins())
 
-	// Объектное хранилище (MinIO) для файлов/аватаров; stub, если не сконфигурировано.
+	// Объектное хранилище (MinIO) для файлов/аватаров/словарей; stub, если не
+	// сконфигурировано. Один и тот же клиент реализует порты Storage всех контекстов.
 	var fileStorage vulns.Storage
+	var wlStorage wordlists.Storage
 	if cfg.MinioEndpoint != "" {
 		ms, err := storage.NewMinio(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucketName, cfg.MinioUseSSL)
 		if err != nil {
@@ -142,8 +146,10 @@ func run() error {
 			logger.Warn("minio bucket ensure failed", "err", err)
 		}
 		fileStorage = ms
+		wlStorage = ms
 	} else {
 		fileStorage = storage.Stub{}
+		wlStorage = storage.Stub{}
 		logger.Warn("MINIO_ENDPOINT пуст — файловое хранилище отключено (stub)")
 	}
 
@@ -172,6 +178,12 @@ func run() error {
 	reconSvc := recon.NewService(reconrepo.New(pool), recon.SettingsFromConfig(cfg), recon.ConfigFromConfig(cfg), logger)
 	reconSvc.AttachLeaks(integrationsSvc, leaksink.New(leaksSvc))
 	reconHandler := httpadapter.NewReconHandler(reconSvc, projectsSvc, authSvc, cfg.CSRFOrigins(), cfg.FarmMaxRawBytes)
+
+	// Контекст wordlists (кастомные словари фермы, workspace-level, файлы в MinIO).
+	// Материализатор словарей подключаем в recon — брут/ffuf получают путь через него.
+	wordlistsSvc := wordlists.NewService(wordlistrepo.New(pool), wlStorage)
+	reconSvc.AttachWordlists(wordlistsSvc)
+	wordlistHandler := httpadapter.NewWordlistHandler(wordlistsSvc, authSvc, cfg.CSRFOrigins())
 	leaksHandler := httpadapter.NewLeaksHandler(reconSvc, leaksSvc, projectsSvc, authSvc, cfg.CSRFOrigins(), cfg.FarmMaxRawBytes)
 
 	// Контекст reports (Python-sidecar, интерим).
@@ -186,7 +198,7 @@ func run() error {
 		}, nil),
 		authSvc, cfg.CSRFOrigins())
 
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler, Reports: reportsHandler, Integrations: integrationsHandler, Leaks: leaksHandler})
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler, Reports: reportsHandler, Integrations: integrationsHandler, Leaks: leaksHandler, Wordlists: wordlistHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{

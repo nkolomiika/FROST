@@ -77,6 +77,113 @@ func TestFarmConfigSanitize_HighLevelKnobs(t *testing.T) {
 	}
 }
 
+func TestFarmConfigDefaults_WordlistAndEndpointsMode(t *testing.T) {
+	c := DefaultFarmConfig()
+	if c.SubdomainWordlistID != 0 || c.EndpointsWordlistID != 0 {
+		t.Fatalf("default wordlist ids must be 0: %+v", c)
+	}
+	if c.EndpointsMode != "both" {
+		t.Fatalf("default endpoints_mode = %q, want both", c.EndpointsMode)
+	}
+}
+
+func TestFarmConfig_BackCompatMissingNewFields(t *testing.T) {
+	// Старый сохранённый блоб без новых ключей → дефолты доклеиваются.
+	cfg := DefaultFarmConfig()
+	if err := json.Unmarshal([]byte(`{"mode":"active"}`), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.EndpointsMode != "both" || cfg.SubdomainWordlistID != 0 || cfg.EndpointsWordlistID != 0 {
+		t.Fatalf("new fields not defaulted on old blob: %+v", cfg)
+	}
+}
+
+func TestFarmConfigSanitize_WordlistAndEndpointsMode(t *testing.T) {
+	c := FarmConfig{EndpointsMode: "bogus", SubdomainWordlistID: -3, EndpointsWordlistID: -1}
+	c.Sanitize()
+	if c.EndpointsMode != "both" {
+		t.Fatalf("endpoints_mode not normalized: %q", c.EndpointsMode)
+	}
+	if c.SubdomainWordlistID != 0 || c.EndpointsWordlistID != 0 {
+		t.Fatalf("negative ids not clamped: %+v", c)
+	}
+	// Валидные значения сохраняются.
+	ok := FarmConfig{EndpointsMode: "active", SubdomainWordlistID: 5, EndpointsWordlistID: 7}
+	ok.Sanitize()
+	if ok.EndpointsMode != "active" || ok.SubdomainWordlistID != 5 || ok.EndpointsWordlistID != 7 {
+		t.Fatalf("valid wordlist/mode values altered: %+v", ok)
+	}
+}
+
+func TestEndpointTools_ModeSelection(t *testing.T) {
+	base := FarmConfig{Katana: true, Gau: true, Waybackurls: true}
+
+	both := base
+	both.EndpointsMode = "both"
+	both.EndpointsWordlistID = 4
+	if got := endpointTools(both); !hasAll(got, "katana", "gau", "waybackurls", "ffuf") {
+		t.Fatalf("both mode tools wrong: %v", got)
+	}
+
+	passive := base
+	passive.EndpointsMode = "passive"
+	passive.EndpointsWordlistID = 4 // ffuf активный — в passive НЕ включается
+	got := endpointTools(passive)
+	if hasAny(got, "katana", "ffuf") || !hasAll(got, "gau", "waybackurls") {
+		t.Fatalf("passive mode tools wrong: %v", got)
+	}
+
+	active := base
+	active.EndpointsMode = "active"
+	active.EndpointsWordlistID = 4
+	got = endpointTools(active)
+	if hasAny(got, "gau", "waybackurls") || !hasAll(got, "katana", "ffuf") {
+		t.Fatalf("active mode tools wrong: %v", got)
+	}
+
+	// active без кастомного словаря эндпоинтов → ffuf пропускается (бандл-тиры не
+	// годятся для дир-фаззинга).
+	activeNoWL := base
+	activeNoWL.EndpointsMode = "active"
+	activeNoWL.EndpointsWordlistID = 0
+	if hasAny(endpointTools(activeNoWL), "ffuf") {
+		t.Fatalf("ffuf must be skipped without custom endpoints wordlist: %v", endpointTools(activeNoWL))
+	}
+
+	// Пустой mode (старый конфиг) → both.
+	empty := base
+	empty.EndpointsMode = ""
+	if !hasAll(endpointTools(empty), "katana", "gau", "waybackurls") {
+		t.Fatalf("empty mode should default to both: %v", endpointTools(empty))
+	}
+}
+
+func hasAll(got []string, want ...string) bool {
+	set := map[string]bool{}
+	for _, g := range got {
+		set[g] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
+}
+
+func hasAny(got []string, want ...string) bool {
+	set := map[string]bool{}
+	for _, g := range got {
+		set[g] = true
+	}
+	for _, w := range want {
+		if set[w] {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFarmConfigSanitizeClamps(t *testing.T) {
 	c := FarmConfig{
 		Mode:           "bogus",

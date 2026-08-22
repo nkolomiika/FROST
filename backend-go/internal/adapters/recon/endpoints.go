@@ -24,7 +24,11 @@ type EndpointHit struct {
 // EndpointToolConfig — высокоуровневые ручки прогона для инструментов эндпоинтов.
 type EndpointToolConfig struct {
 	CrawlDepth int // глубина краула katana (-d)
-	RateLimit  int // rps (katana -rl)
+	RateLimit  int // rps (katana -rl / ffuf -rate)
+	// ffuf (активный дир-фаззинг): СЕРВЕРНЫЙ путь словаря (temp/bundled) и конкурентность.
+	// Пусто → ffuf самопропускается (см. FfufDirFuzz). Путь всегда серверный, не имя файла.
+	FfufWordlist string
+	Threads      int // ffuf -t
 }
 
 // KatanaArgs собирает аргументы katana для краула одного хоста. Вынесено отдельно,
@@ -44,7 +48,9 @@ func KatanaArgs(host string, cfg EndpointToolConfig) []string {
 // KatanaURLs гоняет katana-краул по хосту и возвращает найденные URL. Нет бинаря →
 // пусто (не ошибка). Отмена — через ctx (per-step cancel рвёт процесс).
 func KatanaURLs(ctx context.Context, host string, cfg EndpointToolConfig, s Settings) ([]EndpointHit, string) {
-	if !lookPathOK(s.KatanaBin) {
+	// safeHost: host идёт в argv (-u https://host) — значение с ведущим '-' бинарь
+	// принял бы за флаг; такие хосты пропускаем (не ошибка).
+	if !lookPathOK(s.KatanaBin) || !safeHost(host) {
 		return nil, ""
 	}
 	c, cancel := context.WithTimeout(ctx, s.EndpointsTimeout)

@@ -3,6 +3,7 @@ package recon
 import (
 	"context"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -129,20 +130,49 @@ func (m scopeMatcher) match(rawURL string) (string, bool) {
 	return h, false
 }
 
-// endpointTools — включённые инструменты стадии эндпоинтов (по тем же тумблерам
-// конфига, что и раньше: Katana/Gau/Waybackurls).
+// endpointTools — включённые инструменты стадии эндпоинтов с учётом EndpointsMode:
+//
+//	passive → gau + waybackurls (пассивные архивы);
+//	active  → katana (краул) + ffuf (дир-фаззинг);
+//	both    → всё.
+//
+// Тумблеры Katana/Gau/Waybackurls остаются доп.фильтром внутри режима (back-compat).
+// ffuf добавляется только когда задан кастомный словарь эндпоинтов (>0): бандл-тиры —
+// словари ПОДДОМЕНОВ, для дир-фаззинга не годятся, поэтому при 0 ffuf пропускаем.
 func endpointTools(cfg FarmConfig) []string {
+	mode := cfg.EndpointsMode
+	switch mode {
+	case "passive", "active", "both":
+	default:
+		mode = "both"
+	}
+	passive := mode == "passive" || mode == "both"
+	active := mode == "active" || mode == "both"
+
 	var tools []string
-	if cfg.Katana {
+	if active && cfg.Katana {
 		tools = append(tools, "katana")
 	}
-	if cfg.Gau {
+	if passive && cfg.Gau {
 		tools = append(tools, "gau")
 	}
-	if cfg.Waybackurls {
+	if passive && cfg.Waybackurls {
 		tools = append(tools, "waybackurls")
 	}
+	if active && cfg.EndpointsWordlistID > 0 {
+		tools = append(tools, "ffuf")
+	}
 	return tools
+}
+
+// containsTool — есть ли инструмент в наборе.
+func containsTool(tools []string, name string) bool {
+	for _, t := range tools {
+		if t == name {
+			return true
+		}
+	}
+	return false
 }
 
 // scanEndpointTool — вызов одного инструмента эндпоинтов (сид endpointScanner в
@@ -158,6 +188,8 @@ func (s *Service) scanEndpointTool(ctx context.Context, tool, host string, cfg r
 		return reconnet.GauURLs(ctx, host, s.settings)
 	case "waybackurls":
 		return reconnet.WaybackURLs(ctx, host, s.settings)
+	case "ffuf":
+		return reconnet.FfufDirFuzz(ctx, host, cfg.FfufWordlist, reconnet.FfufConfig{RateLimit: cfg.RateLimit, Threads: cfg.Threads}, s.settings)
 	}
 	return nil, ""
 }
@@ -174,7 +206,23 @@ func (s *Service) runFarmEndpoints(ctx context.Context, runSvc *Service, cfg Far
 		return false
 	}
 	scope := newScopeMatcher(roots, hosts)
-	toolCfg := reconnet.EndpointToolConfig{CrawlDepth: cfg.CrawlDepth, RateLimit: cfg.RateLimit}
+	toolCfg := reconnet.EndpointToolConfig{CrawlDepth: cfg.CrawlDepth, RateLimit: cfg.RateLimit, Threads: cfg.Concurrency}
+
+	// ffuf-словарь материализуем ОДИН раз (общий для всех хостов) и чистим после.
+	// Кастомный (>0) стримится из MinIO во temp; при недоступности FfufDirFuzz
+	// самопропускается (словарь по пути не существует). Ярлык — без пути наружу.
+	ffufLabel := "custom#" + strconv.Itoa(cfg.EndpointsWordlistID)
+	ffufCleanup := func() {}
+	if containsTool(tools, "ffuf") {
+		path, cleanup, wlErr := s.resolveWordlist(ctx, cfg.EndpointsWordlistID, cfg.WordlistSize)
+		toolCfg.FfufWordlist = path
+		ffufCleanup = cleanup
+		if wlErr != "" {
+			result.Errors = append(result.Errors, wlErr)
+		}
+	}
+	defer ffufCleanup()
+
 	limit := cfg.Concurrency
 	if limit < 1 {
 		limit = 1
@@ -200,6 +248,9 @@ func (s *Service) runFarmEndpoints(ctx context.Context, runSvc *Service, cfg Far
 					argsDisp = "gau -subs"
 				case "waybackurls":
 					argsDisp = "waybackurls"
+				case "ffuf":
+					// Путь словаря не светим — только ярлык (custom#id).
+					argsDisp = "ffuf -w " + ffufLabel + " -u https://" + host + "/FUZZ -mc " + reconnet.FfufDefaultMatchCodes()
 				}
 				id := prog.addStep(RunStep{Tool: tool, Args: argsDisp + " (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
 				defer prog.removeStep(id)
