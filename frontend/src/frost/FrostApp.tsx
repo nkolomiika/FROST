@@ -4933,9 +4933,22 @@ export function FrostApp() {
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
               {sec === "hosts" && rv === "farm" && !state.farmReportOpen && (() => {
                 const fcfg = state.farmCfg;
+                // Во время прогона кнопка ПРЕВРАЩАЕТСЯ в «Stop run» (а не бледнеет).
+                if (isFarmJobInFlight(state.farmRunJob?.status ?? "")) {
+                  return (
+                    <button
+                      className="clk"
+                      onClick={stopFarmRun}
+                      disabled={state.farmCancelling}
+                      style={{ height: 42, padding: "0 20px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", opacity: state.farmCancelling ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}
+                    >
+                      <Icon name="close" size={15} color="var(--fr-danger)" sw={2.6} />{state.farmCancelling ? t("Stopping…") : t("Stop run")}
+                    </button>
+                  );
+                }
                 // Нельзя запустить прогон, пока не выбран ни один этап — кнопка бледная.
                 const noStage = !fcfg || !(fcfg.stage_subdomains || fcfg.stage_endpoints || fcfg.stage_js || fcfg.stage_ports || fcfg.stage_leaks || fcfg.stage_account_search);
-                const disabled = state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") || noStage;
+                const disabled = state.farmRunStarting || noStage;
                 return (
                   <button
                     className="clk"
@@ -6075,17 +6088,9 @@ export function FrostApp() {
         {/* Заголовок карточки слева, «Stop run» — в правом углу компонента (только
             во время прогона). Индикатор «Running…» убран — прогресс и так виден. */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          {/* «Stop run» живёт в шапке раздела (превращается из «Run recon»), здесь не
+              дублируем. */}
           {cardHeader("activity", t("Run the farm"), t("Runs subdomains, resolve, liveness and port scan across the project's root domains"))}
-          {runInFlight && (
-            <button
-              className="clk"
-              onClick={stopFarmRun}
-              disabled={state.farmCancelling}
-              style={{ flex: "none", height: 40, padding: "0 16px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: state.farmCancelling ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, opacity: state.farmCancelling ? 0.6 : 1 }}
-            >
-              <Icon name="close" size={15} color="var(--fr-danger)" sw={2.6} />{state.farmCancelling ? t("Stopping…") : t("Stop run")}
-            </button>
-          )}
         </div>
 
         {run && (

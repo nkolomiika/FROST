@@ -15,10 +15,11 @@ import (
 
 // JSMineConfig — настройки внешнего JS-майнинга.
 type JSMineConfig struct {
-	Enabled       bool
-	JsluiceBin    string
-	TrufflehogBin string
-	Timeout       time.Duration
+	Enabled          bool
+	JsluiceBin       string
+	TrufflehogBin    string
+	TrufflehogConfig string // --config (кастомные детекторы: UUID)
+	Timeout          time.Duration
 }
 
 func ready(enabled bool, bin string) bool {
@@ -73,7 +74,7 @@ func MineJS(ctx context.Context, text string, cfg JSMineConfig) (secrets []Secre
 		endpoints = append(endpoints, jsluiceURLs(c, cfg.JsluiceBin, path)...)
 	}
 	if thReady {
-		secrets = append(secrets, trufflehogSecrets(c, cfg.TrufflehogBin, path)...)
+		secrets = append(secrets, trufflehogSecrets(c, cfg.TrufflehogBin, cfg.TrufflehogConfig, path)...)
 	}
 	return dedupSecrets(secrets), dedupStrings(endpoints)
 }
@@ -138,10 +139,17 @@ func jsluiceURLs(ctx context.Context, bin, path string) []string {
 
 // ── trufflehog ──
 
-func trufflehogSecrets(ctx context.Context, bin, path string) []Secret {
+func trufflehogSecrets(ctx context.Context, bin, configPath, path string) []Secret {
 	// --no-update: не ходить за обновлениями; верификация включена — trufflehog
-	// подтверждает креды у провайдера (verified → критично).
-	out, err := exec.CommandContext(ctx, bin, "filesystem", path, "--json", "--no-update").Output()
+	// подтверждает креды у провайдера (verified → критично). --config: кастомные
+	// детекторы (UUID) — тот же yaml, что и в github-скане; только если файл есть.
+	args := []string{"filesystem", path, "--json", "--no-update"}
+	if configPath != "" {
+		if _, err := os.Stat(configPath); err == nil {
+			args = append(args, "--config="+configPath)
+		}
+	}
+	out, err := exec.CommandContext(ctx, bin, args...).Output()
 	if err != nil {
 		// trufflehog возвращает ненулевой код, когда нашёл секреты, — вывод всё равно валиден.
 		if len(out) == 0 {

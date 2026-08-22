@@ -357,8 +357,13 @@ func (s *Service) runFarmJS(ctx context.Context, runSvc *Service, cfg FarmConfig
 		eg.Go(func() error {
 			stepCtx, stepCancel := context.WithCancel(ctx)
 			defer stepCancel()
-			// Показываем реальные параметры запуска trufflehog; пути temp-файлов не светим.
-			id := prog.addStep(RunStep{Tool: "js-mine", Args: "trufflehog filesystem --json --no-update + regex (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
+			// Показываем реальные флаги запуска trufflehog (включая --config кастомных
+			// детекторов, когда он задан); пути temp-файлов не светим.
+			thArgs := "trufflehog filesystem --json --no-update"
+			if rs.TrufflehogConfig != "" {
+				thArgs += " --config=custom(uuid)"
+			}
+			id := prog.addStep(RunStep{Tool: "js-mine", Args: thArgs + " + regex (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
 			defer prog.removeStep(id)
 			files, errs := runSvc.mineHostJS(stepCtx, host, jsBudget)
 			mu.Lock()

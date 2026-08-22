@@ -87,9 +87,10 @@ func (s Settings) maxConcurrency() int {
 // jsMineConfig собирает конфиг внешнего JS-майнинга из Settings.
 func (s Settings) jsMineConfig() JSMineConfig {
 	return JSMineConfig{
-		Enabled:       s.JSMineEnabled,
-		JsluiceBin:    s.JsluiceBin,
-		TrufflehogBin: s.TrufflehogBin,
-		Timeout:       s.JSMineTimeout,
+		Enabled:          s.JSMineEnabled,
+		JsluiceBin:       s.JsluiceBin,
+		TrufflehogBin:    s.TrufflehogBin,
+		TrufflehogConfig: s.TrufflehogConfig,
+		Timeout:          s.JSMineTimeout,
 	}
 }
