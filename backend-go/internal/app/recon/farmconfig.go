@@ -14,6 +14,17 @@ type FarmConfig struct {
 	PortScanScope string `json:"port_scan_scope"` // "top1000" | "all"
 	CrawlDepth    int    `json:"crawl_depth"`     // глубина краула (1..10)
 
+	// Выбор словаря брута поддоменов: 0 → бандл-тир из WordlistSize; >0 → id
+	// кастомного словаря (recon_wordlists), материализуется в temp перед dnsx -w.
+	SubdomainWordlistID int `json:"subdomain_wordlist_id"`
+
+	// Стадия эндпоинтов: режим сбора и словарь дир-фаззинга (ffuf).
+	//   EndpointsMode "passive" → gau+waybackurls; "active" → katana+ffuf;
+	//   "both" (дефолт) → всё. Тумблеры Katana/Gau/Waybackurls остаются доп.фильтром.
+	//   EndpointsWordlistID: 0 → бандл-дефолт для ffuf (medium-тир); >0 → кастомный.
+	EndpointsMode       string `json:"endpoints_mode"`
+	EndpointsWordlistID int    `json:"endpoints_wordlist_id"`
+
 	// Stage toggles — пер-стадийное включение полного прогона (farm_run). Дефолт
 	// true у всех: пропущенная в сохранённом JSON стадия остаётся включённой (см.
 	// GetFarmConfig — оверлей поверх DefaultFarmConfig). stage_subdomains off →
@@ -70,6 +81,10 @@ func DefaultFarmConfig() FarmConfig {
 		Concurrency:   10,
 		PortScanScope: "top1000",
 		CrawlDepth:    3,
+
+		SubdomainWordlistID: 0,
+		EndpointsMode:       "both",
+		EndpointsWordlistID: 0,
 
 		StageSubdomains: true,
 		StageEndpoints:  true,
@@ -132,6 +147,18 @@ func (c *FarmConfig) Sanitize() {
 	}
 	if c.PortScanScope != "all" {
 		c.PortScanScope = "top1000"
+	}
+	switch c.EndpointsMode {
+	case "passive", "active", "both":
+	default:
+		c.EndpointsMode = "both"
+	}
+	// id словарей неотрицательны (0 = бандл-дефолт).
+	if c.SubdomainWordlistID < 0 {
+		c.SubdomainWordlistID = 0
+	}
+	if c.EndpointsWordlistID < 0 {
+		c.EndpointsWordlistID = 0
 	}
 	c.CrawlDepth = clampInt(c.CrawlDepth, 1, 10)
 	c.RateLimit = clampInt(c.RateLimit, 1, 500)

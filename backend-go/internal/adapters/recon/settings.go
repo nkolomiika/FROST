@@ -56,10 +56,12 @@ type Settings struct {
 	DnsxBin          string
 	DnsxBruteTimeout time.Duration
 
-	// Стадия эндпоинтов полного прогона фермы: katana (краул) + gau + waybackurls.
+	// Стадия эндпоинтов полного прогона фермы: katana (краул) + gau + waybackurls
+	// (пассив) + ffuf (активный дир-фаззинг).
 	KatanaBin        string
 	GauBin           string
 	WaybackurlsBin   string
+	FfufBin          string
 	EndpointsTimeout time.Duration
 }
 

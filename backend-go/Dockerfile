@@ -17,12 +17,13 @@ FROM projectdiscovery/subfinder:latest AS subfinder
 FROM projectdiscovery/httpx:latest AS httpx
 FROM projectdiscovery/katana:latest AS katana
 
-# gau и waybackurls не публикуют официальных образов — собираем их статически в
-# Go-стадии (оба чистый Go) и COPY-им бинари в recon-стейдж.
+# gau, waybackurls и ffuf не публикуют официальных образов — собираем их статически
+# в Go-стадии (все чистый Go) и COPY-им бинари в recon-стейдж.
 FROM golang:1.26-alpine AS endpoint-tools
 RUN apk add --no-cache git \
  && GOBIN=/out CGO_ENABLED=0 go install github.com/lc/gau/v2/cmd/gau@latest \
- && GOBIN=/out CGO_ENABLED=0 go install github.com/tomnomnom/waybackurls@latest
+ && GOBIN=/out CGO_ENABLED=0 go install github.com/tomnomnom/waybackurls@latest \
+ && GOBIN=/out CGO_ENABLED=0 go install github.com/ffuf/ffuf/v2@latest
 
 # Базовый рантайм для api и mail-worker — без инструментов разведки.
 FROM alpine:3.20 AS runtime
@@ -40,6 +41,7 @@ ENTRYPOINT ["/usr/local/bin/app"]
 #   katana      — активный краул URL (стадия эндпоинтов)
 #   gau         — архивные URL (стадия эндпоинтов)
 #   waybackurls — URL из Wayback Machine (стадия эндпоинтов)
+#   ffuf        — активный дир-фаззинг (стадия эндпоинтов, active/both режим)
 FROM runtime AS recon
 USER root
 # apk-зеркало Alpine на buildkit сервера периодически флапает ("temporary error").
@@ -57,6 +59,7 @@ COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd
 COPY --from=katana /usr/local/bin/katana /usr/local/bin/katana
 COPY --from=endpoint-tools /out/gau /usr/local/bin/gau
 COPY --from=endpoint-tools /out/waybackurls /usr/local/bin/waybackurls
+COPY --from=endpoint-tools /out/ffuf /usr/local/bin/ffuf
 # Тир-словари поддоменов (n0kovo_subdomains) для активного брута dnsx в полном
 # прогоне фермы. Три тира → small|medium|large (см. WordlistPath в Go). Каталог
 # переопределяется env RECON_WORDLIST_DIR (дефолт — этот).

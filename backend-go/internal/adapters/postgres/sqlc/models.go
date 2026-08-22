@@ -943,6 +943,16 @@ type ReconLeak struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type ReconWordlist struct {
+	ID         int32              `json:"id"`
+	Name       string             `json:"name"`
+	ObjectKey  string             `json:"object_key"`
+	SizeBytes  pgtype.Int8        `json:"size_bytes"`
+	Lines      pgtype.Int4        `json:"lines"`
+	UploadedBy pgtype.Int4        `json:"uploaded_by"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type RefreshToken struct {
 	ID        int32              `json:"id"`
 	UserID    int32              `json:"user_id"`

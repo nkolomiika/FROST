@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -380,13 +381,31 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 	passive := cfg.Mode == "passive" || cfg.Mode == "both"
 	active := cfg.Mode == "active" || cfg.Mode == "both"
 
-	wl := reconnet.WordlistPath(cfg.WordlistSize)
+	// Словарь брута: кастомный (SubdomainWordlistID>0) материализуется во ВРЕМЕННЫЙ
+	// серверный файл из MinIO, иначе — бандл-тир WordlistSize. resolveWordlist
+	// возвращает cleanup (удаляет temp), который зовём после eg.Wait() (defer).
 	var softErrs []string
-	if active && !reconnet.WordlistExists(wl) {
-		// Словарь тира не забандлен в образ — брут пропускаем, прогон не валим.
-		s.log.Warn("farm run: wordlist tier missing, active brute skipped", "size", cfg.WordlistSize, "path", wl)
-		softErrs = append(softErrs, "dnsx-брут пропущен: словарь тира '"+cfg.WordlistSize+"' недоступен в образе")
-		active = false
+	wl := reconnet.WordlistPath(cfg.WordlistSize)
+	wlCleanup := func() {}
+	if active {
+		var wlErr string
+		wl, wlCleanup, wlErr = s.resolveWordlist(ctx, cfg.SubdomainWordlistID, cfg.WordlistSize)
+		if wlErr != "" {
+			softErrs = append(softErrs, wlErr)
+		}
+		if !reconnet.WordlistExists(wl) {
+			// Словарь недоступен (нет бандл-тира в образе / пустой) — брут пропускаем,
+			// прогон не валим.
+			s.log.Warn("farm run: wordlist missing, active brute skipped", "size", cfg.WordlistSize, "custom_id", cfg.SubdomainWordlistID, "path", wl)
+			softErrs = append(softErrs, "dnsx-брут пропущен: словарь недоступен")
+			active = false
+		}
+	}
+	defer wlCleanup()
+	// Ярлык словаря для прогресса — БЕЗ пути (temp/бандл-путь не светим наружу).
+	wlLabel := cfg.WordlistSize
+	if cfg.SubdomainWordlistID > 0 {
+		wlLabel = "custom#" + strconv.Itoa(cfg.SubdomainWordlistID)
 	}
 	brute := reconnet.DNSXBruteConfig{WordlistPath: wl, RateLimit: cfg.RateLimit, Threads: cfg.Concurrency}
 
@@ -436,7 +455,7 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 			eg.Go(func() error {
 				stepCtx, stepCancel := context.WithCancel(ctx)
 				defer stepCancel()
-				id := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx " + strings.Join(reconnet.DNSXBruteArgs(root, brute), " "), Target: root, StartedAt: time.Now()}, stepCancel)
+				id := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx -d " + root + " -w " + wlLabel + " -silent", Target: root, StartedAt: time.Now()}, stepCancel)
 				defer prog.removeStep(id)
 				got, e := reconnet.DNSXBrute(stepCtx, root, brute, rs)
 				mu.Lock()

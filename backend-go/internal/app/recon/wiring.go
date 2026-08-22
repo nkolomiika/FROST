@@ -59,6 +59,7 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 		KatanaBin:        c.ReconKatanaBin,
 		GauBin:           c.ReconGauBin,
 		WaybackurlsBin:   c.ReconWaybackurlsBin,
+		FfufBin:          c.ReconFfufBin,
 		EndpointsTimeout: secs(c.ReconEndpointsTimeoutSec),
 	}
 }

@@ -24,10 +24,13 @@ import (
 	"github.com/nkolomiika/frost/internal/adapters/postgres/integrationsrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/leaksrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/reconrepo"
+	"github.com/nkolomiika/frost/internal/adapters/postgres/wordlistrepo"
 	"github.com/nkolomiika/frost/internal/adapters/security"
+	"github.com/nkolomiika/frost/internal/adapters/storage"
 	"github.com/nkolomiika/frost/internal/app/integrations"
 	"github.com/nkolomiika/frost/internal/app/leaks"
 	"github.com/nkolomiika/frost/internal/app/recon"
+	"github.com/nkolomiika/frost/internal/app/wordlists"
 	applog "github.com/nkolomiika/frost/internal/platform/log"
 	"github.com/nkolomiika/frost/internal/platform/postgres"
 	"log/slog"
@@ -78,6 +81,21 @@ func run() error {
 	integrationsSvc := integrations.NewService(integrationsrepo.New(pool), cipher)
 	leaksSvc := leaks.NewService(leaksrepo.New(pool))
 	svc.AttachLeaks(integrationsSvc, leaksink.New(leaksSvc))
+
+	// Материализатор словарей: кастомный словарь (SubdomainWordlistID/EndpointsWordlistID)
+	// стримится из MinIO во temp перед dnsx -w / ffuf -w. Без MinIO — только бандл-тиры
+	// (fallback внутри resolveWordlist), кастомные id молча деградируют.
+	var wlStorage wordlists.Storage = storage.Stub{}
+	if cfg.MinioEndpoint != "" {
+		ms, err := storage.NewMinio(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucketName, cfg.MinioUseSSL)
+		if err != nil {
+			return fmt.Errorf("minio: %w", err)
+		}
+		wlStorage = ms
+	} else {
+		logger.Warn("MINIO_ENDPOINT пуст — кастомные словари фермы недоступны (только бандл-тиры)")
+	}
+	svc.AttachWordlists(wordlists.NewService(wordlistrepo.New(pool), wlStorage))
 
 	logger.Info("recon-worker запущен", "regular_poll", regularPollInterval.String(), "farm_poll", farmPollInterval.String())
 
