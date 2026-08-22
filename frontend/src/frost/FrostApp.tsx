@@ -2559,8 +2559,9 @@ export function FrostApp() {
   const closeHostDetail = () => setState({ openHostId: null });
   const openIpDetail = (ip: string) => setState({ openIp: ip });
   const closeIpDetail = () => setState({ openIp: null });
-  const toggleReconMenu = () => setState((s) => ({ reconMenuOpen: !s.reconMenuOpen }));
-  const toggleVaultMenu = () => setState((s) => ({ vaultMenuOpen: !s.vaultMenuOpen }));
+  // Открытие одного дропдауна закрывает другой — два меню не висят одновременно.
+  const toggleReconMenu = () => setState((s) => ({ reconMenuOpen: !s.reconMenuOpen, vaultMenuOpen: false }));
+  const toggleVaultMenu = () => setState((s) => ({ vaultMenuOpen: !s.vaultMenuOpen, reconMenuOpen: false }));
 
   const toggleEpGroup = (host: string) =>
     setState((s) => ({ epExpanded: s.epExpanded.includes(host) ? s.epExpanded.filter((x) => x !== host) : [...s.epExpanded, host] }));
