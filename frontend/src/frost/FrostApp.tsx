@@ -857,6 +857,7 @@ function pathFor(s: {
   openNoteId: number | null;
   openHostId: number | null;
   openIp: string | null;
+  openJsFileId: number | null;
   exportPageOpen: boolean;
   exportScope: ExportScope;
   farmReportOpen: boolean;
@@ -881,6 +882,9 @@ function pathFor(s: {
       // (an IP carries dots but stays a single segment — encode it to be safe).
       if (s.reconView === "hosts" && s.openHostId != null) return `${base}/hosts/${s.openHostId}`;
       if (s.reconView === "ips" && s.openIp != null) return `${base}/ips/${encodeURIComponent(s.openIp)}`;
+      // Открытая карточка JS-файла — последний сегмент, чтобы файл был deep-linkable
+      // (можно скинуть ссылку на конкретный файл).
+      if (s.reconView === "js" && s.openJsFileId != null) return `${base}/js/${s.openJsFileId}`;
       return `${base}/${s.reconView}`;
     }
     if (s.section === "vulns" && s.openVulnId != null) return `${base}/vulns/${s.openVulnId}`;
@@ -909,6 +913,7 @@ function navStateFromPath(path: string): Partial<FrostState> {
       openNoteId: null,
       openHostId: null,
       openIp: null,
+      openJsFileId: null,
       exportPageOpen: false,
       farmReportOpen: false,
       farmReportJobId: null,
@@ -942,7 +947,9 @@ function navStateFromPath(path: string): Partial<FrostState> {
     }
     // /projects/{id}/farm/report — страница отчёта фермы со своим URL.
     if (seg === "farm" && parts[3] === "report") return { ...base, section: "hosts", reconView: "farm", farmReportOpen: true };
-    if (seg === "endpoints" || seg === "js" || seg === "farm") return { ...base, section: "hosts", reconView: seg };
+    // /projects/{id}/js/{fileId} — deep link на карточку конкретного JS-файла.
+    if (seg === "js") return { ...base, section: "hosts", reconView: "js", openJsFileId: entityId() };
+    if (seg === "endpoints" || seg === "farm") return { ...base, section: "hosts", reconView: seg };
     // /projects/{id}/vulns/{vulnId} and /projects/{id}/notes/{noteId} — deep links.
     if (seg === "vulns") return { ...base, section: "vulns", openVulnId: entityId() };
     if (seg === "notes") return { ...base, section: "notes", openNoteId: entityId() };
@@ -2069,6 +2076,7 @@ export function FrostApp() {
       openNoteId: state.openNoteId,
       openHostId: state.openHostId,
       openIp: state.openIp,
+      openJsFileId: state.openJsFileId,
       exportPageOpen: state.exportPageOpen,
       exportScope: state.exportScope,
       farmReportOpen: state.farmReportOpen,
@@ -2076,7 +2084,7 @@ export function FrostApp() {
     });
     if (p !== location.pathname) navigate(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.vaultView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.exportPageOpen, state.exportScope, state.farmReportOpen, state.bulkDelOpen, location.pathname]);
+  }, [state.view, state.nav, state.openProjectId, state.section, state.reconView, state.vaultView, state.profileTab, state.openVulnId, state.openNoteId, state.openHostId, state.openIp, state.openJsFileId, state.exportPageOpen, state.exportScope, state.farmReportOpen, state.bulkDelOpen, location.pathname]);
   /* Loaded as soon as the project opens, like every other collection — the tab's
      counter has to be right before the tab is ever visited. Entering the tab
      re-fetches, since the feed is a shared audit trail that others add to. */
