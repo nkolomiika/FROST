@@ -788,8 +788,8 @@ export async function saveReconFarmConfig(projectId: number, cfg: ReconFarmConfi
 
 /** Запускает полный прогон фермы. useDefaults — гнать с дефолтами, иначе с
  *  сохранённым конфигом проекта. Возвращает задачу с начальным прогрессом. */
-export async function startFarmRun(projectId: number, useDefaults: boolean): Promise<FarmRunJob> {
-  const { data } = await api.post<FarmRunJob>(`/projects/${projectId}/recon/farm/run`, { use_defaults: useDefaults });
+export async function startFarmRun(projectId: number, useDefaults: boolean, domains?: string[]): Promise<FarmRunJob> {
+  const { data } = await api.post<FarmRunJob>(`/projects/${projectId}/recon/farm/run`, { use_defaults: useDefaults, domains: domains ?? [] });
   return data;
 }
 

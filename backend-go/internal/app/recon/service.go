@@ -554,7 +554,7 @@ func (s *Service) DeleteJSFilesBulk(ctx context.Context, projectID int32, ids []
 // StartFarmRun ставит задачу полного прогона фермы (kind='farm_run'). useDefaults
 // — гнать с DefaultFarmConfig, иначе с сохранённым конфигом проекта. Выбранный
 // конфиг сериализуется в raw задачи, чтобы раннер не зависел от гонок с сохранением.
-func (s *Service) StartFarmRun(ctx context.Context, projectID, actorID int32, useDefaults bool) (JobView, error) {
+func (s *Service) StartFarmRun(ctx context.Context, projectID, actorID int32, useDefaults bool, domains []string) (JobView, error) {
 	cfg := DefaultFarmConfig()
 	if !useDefaults {
 		saved, err := s.store.GetFarmConfig(ctx, projectID)
@@ -563,9 +563,12 @@ func (s *Service) StartFarmRun(ctx context.Context, projectID, actorID int32, us
 		}
 		cfg = saved
 	}
+	// Выбранные домены прогона (пусто → все корневые домены проекта). Sanitize
+	// нормализует/дедупит их; в raw задачи они уедут, а раннер прочтёт cfg.RunDomains.
+	cfg.RunDomains = domains
 	cfg.Sanitize()
 
-	roots, err := s.subsRoots(ctx, projectID, "")
+	roots, err := s.subsRoots(ctx, projectID, strings.Join(cfg.RunDomains, "\n"))
 	if err != nil {
 		return JobView{}, err
 	}

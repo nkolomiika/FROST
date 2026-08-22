@@ -299,6 +299,7 @@ interface FrostState {
   confirmProjectId: number | null;
   /** Удаляемый пользователь на странице /members (там нет открытого проекта). */
   confirmUserId: number | null;
+  confirmScanId: number | null;
   /* ---- project detail: every collection below is backend-backed ----
      `null` = not loaded yet, `[]` = loaded and empty. Each has a `*Tick`
      counter that its loader effect watches, so a mutation reloads it. */
@@ -358,6 +359,8 @@ interface FrostState {
   /** Полный прогон фермы: задача с живым прогрессом. Держится и после done,
    *  чтобы показать сводку, пока пользователь не закроет панель. */
   farmRunJob: ApiFarmRunJob | null;
+  /** Выбранные домены для прогона фермы (пусто → все корневые домены проекта). */
+  farmRunDomains: string[];
   farmRunStarting: boolean;
   farmCancelling: boolean;
   /** Отчёт фермы открыт как полная страница (как экспорт) — ревью застейдженных
@@ -599,6 +602,7 @@ const initialState: FrostState = {
   projEditId: null,
   confirmProjectId: null,
   confirmUserId: null,
+  confirmScanId: null,
   activity: null,
   activityLoading: false,
   activityError: null,
@@ -643,6 +647,7 @@ const initialState: FrostState = {
   ipFilters: [],
   hostFarmJob: null,
   farmRunJob: null,
+  farmRunDomains: [],
   farmRunStarting: false,
   farmCancelling: false,
   farmReportOpen: false,
@@ -1485,7 +1490,8 @@ export function FrostApp() {
     if (pid == null || state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")) return;
     setState({ farmRunStarting: true });
     try {
-      const job = await apiStartFarmRun(pid, useDefaults);
+      // Пустой выбор доменов → бэкенд гонит по всем корневым доменам проекта.
+      const job = await apiStartFarmRun(pid, useDefaults, state.farmRunDomains);
       setState({ farmRunJob: job, farmRunStarting: false });
     } catch (e) {
       setState({ farmRunStarting: false });
@@ -2368,25 +2374,10 @@ export function FrostApp() {
       pushToast(getApiErrorMessage(e, t("Couldn't load the scan history")), "error");
     }
   };
-  // Удаление прогона из истории сканов (с подтверждением): убираем строку локально,
-  // затем перезагружаем историю. Открытый отчёт этого прогона закрываем.
-  const deleteFarmRunConfirm = (jobId: number) => {
-    const pid = state.openProjectId;
-    if (pid == null) return;
-    if (!window.confirm(t("Delete this scan from history? This removes its staged results too."))) return;
-    void (async () => {
-      try {
-        await apiDeleteFarmRun(pid, jobId);
-        setState((s) => ({
-          farmRuns: (s.farmRuns ?? []).filter((r) => r.id !== jobId),
-          ...(s.farmReportJobId === jobId ? { farmReportOpen: false, farmReportJobId: null } : {}),
-        }));
-        pushToast(t("Scan deleted"), "success");
-      } catch (e) {
-        pushToast(getApiErrorMessage(e, t("Couldn't delete the scan")), "error");
-      }
-    })();
-  };
+  // Удаление прогона из истории — через стандартный confirm-модал (как везде):
+  // ставим confirmScanId + подпись, дальше confirmDelete дёргает API.
+  const deleteFarmRunConfirm = (jobId: number, label: string) =>
+    setState({ confirmOpen: true, confirmType: null, confirmScanId: jobId, confirmLabel: label, confirmProjectId: null, confirmUserId: null });
   // Открытие только выставляет флаг + чей прогон открыт + сбрасывает выбор;
   // загрузку делает эффект ниже (он же ловит прямую ссылку /farm/report и «Назад»).
   // jobId задаёт конкретный прогон из истории; без него открывается последний.
@@ -3190,7 +3181,7 @@ export function FrostApp() {
   // ================= delete confirm =================
   const askDelete = (type: EditorType, index: number, label: string) =>
     setState({ confirmOpen: true, confirmType: type, confirmIndex: index, confirmLabel: label, confirmProjectId: null, confirmUserId: null });
-  const closeConfirm = () => setState({ confirmOpen: false, confirmProjectId: null, confirmUserId: null });
+  const closeConfirm = () => setState({ confirmOpen: false, confirmProjectId: null, confirmUserId: null, confirmScanId: null });
   const confirmDelete = async () => {
     if (state.confirmProjectId) {
       const id = state.confirmProjectId;
@@ -3216,10 +3207,27 @@ export function FrostApp() {
       }
       return;
     }
-    const { confirmType: t, confirmIndex: i } = state;
+    // Удаление скана из истории — как проект/пользователь, до общей index-ветки.
+    if (state.confirmScanId != null && state.openProjectId != null) {
+      const pid = state.openProjectId;
+      const jobId = state.confirmScanId;
+      setState({ confirmOpen: false, confirmScanId: null });
+      try {
+        await apiDeleteFarmRun(pid, jobId);
+        setState((s) => ({
+          farmRuns: (s.farmRuns ?? []).filter((r) => r.id !== jobId),
+          ...(s.farmReportJobId === jobId ? { farmReportOpen: false, farmReportJobId: null } : {}),
+        }));
+        pushToast(t("Scan deleted"), "success");
+      } catch (e) {
+        pushToast(getApiErrorMessage(e, t("Couldn't delete the scan")), "error");
+      }
+      return;
+    }
+    const { confirmType: t2, confirmIndex: i } = state;
     const pid = state.openProjectId;
     setState({ confirmOpen: false });
-    if (!t || pid == null) return;
+    if (!t2 || pid == null) return;
     // Every collection is backend-backed: delete through the API, then reload.
     const targets: Record<EditorType, { id: number | undefined; call: (id: number) => Promise<void>; reload: () => void; err: string }> = {
       host: { id: hosts[i]?.id, call: (id) => apiDeleteHost(pid, id), reload: reloadHosts, err: "Couldn't delete host" },
@@ -3251,7 +3259,7 @@ export function FrostApp() {
         err: "Couldn't remove member",
       },
     };
-    const target = targets[t];
+    const target = targets[t2];
     if (target.id == null) return;
     try {
       await target.call(target.id);
@@ -5922,7 +5930,7 @@ export function FrostApp() {
       if (c.stage_account_search) tags.push(t("accounts"));
       return tags;
     };
-    const historyGrid = "84px 172px 1fr 88px";
+    const historyGrid = "112px 172px 1fr 88px";
 
     const scanHistoryCard = card("clock", t("Scan history"), t("Every past farm run — click one to open its report and the settings it ran with"),
       (() => {
@@ -5932,23 +5940,12 @@ export function FrostApp() {
         }
         return (
           <div>
-            {/* Refresh — маленький аффорданс в правом верхнем углу карточки. */}
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: runs && runs.length > 0 ? 6 : 0 }}>
-              <button
-                className="clk"
-                onClick={() => void loadFarmRuns()}
-                disabled={state.farmRunsLoading}
-                style={{ height: 28, padding: "0 11px", border: "1px solid var(--fr-divider)", borderRadius: 8, background: "transparent", color: "var(--fr-text-2)", font: "700 11.5px Inter,sans-serif", cursor: state.farmRunsLoading ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, opacity: state.farmRunsLoading ? 0.6 : 1 }}
-              >
-                <Icon name="activity" size={13} sw={2} />{state.farmRunsLoading ? t("Refreshing…") : t("Refresh")}
-              </button>
-            </div>
             {runs === null || runs.length === 0 ? (
               <div style={{ padding: "22px 2px", textAlign: "center", fontSize: 13, color: "var(--fr-text-faint)" }}>{t("No runs yet")}</div>
             ) : (
               <div>
                 {/* Заголовок таблицы: статус · дата · какие сканы · действия. */}
-                <div style={{ display: "grid", gridTemplateColumns: historyGrid, gap: 12, alignItems: "center", padding: "10px 8px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: historyGrid, gap: 12, alignItems: "center", textAlign: "center", padding: "10px 8px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>
                   <div>{t("Status")}</div>
                   <div>{t("Date")}</div>
                   <div>{t("Scans")}</div>
@@ -5959,9 +5956,9 @@ export function FrostApp() {
                   const tags = runStageTags(run.config);
                   return (
                     <div key={run.id} style={{ display: "grid", gridTemplateColumns: historyGrid, gap: 12, alignItems: "center", padding: "12px 8px", borderBottom: "1px solid var(--fr-divider)", minWidth: 0 }}>
-                      <span style={{ justifySelf: "start", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 10px", borderRadius: 999, background: meta.bg, color: meta.color, font: "700 11px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".4px" }}>{meta.label}</span>
-                      <div className="mono" title={run.created_at} style={{ fontSize: 12.5, color: "var(--fr-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtRunTime(run.created_at)}</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, minWidth: 0 }}>
+                      <span style={{ justifySelf: "center", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 10px", borderRadius: 999, background: meta.bg, color: meta.color, font: "700 11px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".4px" }}>{meta.label}</span>
+                      <div className="mono" title={run.created_at} style={{ fontSize: 12.5, color: "var(--fr-text)", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtRunTime(run.created_at)}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 5, minWidth: 0 }}>
                         {tags.length === 0
                           ? <span style={{ fontSize: 11.5, color: "var(--fr-text-faint)" }}>{t("no stages")}</span>
                           : tags.map((tag) => (
@@ -5970,7 +5967,7 @@ export function FrostApp() {
                       </div>
                       <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: 4 }}>
                         <div className="actbtn clk" title={t("View report")} onClick={() => openFarmReport(run.id)} style={{ cursor: "pointer" }}><Icon name="eye" size={15} /></div>
-                        <div className="actbtn clk" title={t("Delete scan")} onClick={() => deleteFarmRunConfirm(run.id)} style={{ cursor: "pointer" }}><Icon name="trash" size={15} color="var(--fr-danger)" /></div>
+                        <div className="actbtn clk" title={t("Delete scan")} onClick={() => deleteFarmRunConfirm(run.id, fmtRunTime(run.created_at))} style={{ cursor: "pointer" }}><Icon name="trash" size={15} color="var(--fr-danger)" /></div>
                       </div>
                     </div>
                   );
@@ -5985,6 +5982,23 @@ export function FrostApp() {
     return (
       <div className="route">
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Domains — выбор корневых доменов для ЭТОГО прогона (чипы-тумблеры).
+              Пусто → прогон по всем корневым доменам проекта. */}
+          {(() => {
+            const roots = [...new Set(hosts.filter((h) => h.origin !== "ip" && !isNestedSubdomain(h)).map((h) => h.host.trim().toLowerCase()).filter(Boolean))].sort();
+            if (roots.length === 0) return null;
+            const sel = state.farmRunDomains;
+            const chip = (on: boolean): CSSProperties => ({ padding: "6px 12px", borderRadius: 999, border: `1px solid ${on ? "var(--fr-accent)" : "var(--fr-border)"}`, background: on ? "var(--fr-accent)" : "var(--fr-surface)", color: on ? "var(--fr-on-accent)" : "var(--fr-text-2)", font: "700 12.5px Inter,sans-serif", cursor: "pointer" });
+            const toggle = (d: string) => setState((s) => ({ farmRunDomains: s.farmRunDomains.includes(d) ? s.farmRunDomains.filter((x) => x !== d) : [...s.farmRunDomains, d] }));
+            return card("globe2", t("Domains"), t("Pick which root domains this run covers — none selected runs all of them."),
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingTop: 4 }}>
+                <span className="clk" onClick={() => setState({ farmRunDomains: [] })} style={chip(sel.length === 0)}>{t("All")}</span>
+                {roots.map((d) => (
+                  <span key={d} className="clk mono" onClick={() => toggle(d)} style={{ ...chip(sel.includes(d)), fontFamily: "'JetBrains Mono',monospace" }}>{d}</span>
+                ))}
+              </div>
+            );
+          })()}
           {/* Stages — тумблер на каждую стадию прогона, под каждым вложены только
               относящиеся к ней ручки. Выключенная стадия прячет свои ручки. */}
           {card("layout", t("Stages"), t("Toggle each stage of the run and tune what it does"),

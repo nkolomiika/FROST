@@ -220,7 +220,7 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 	}
 
 	// roots нужны и для стадии поддоменов, и как scope-фильтр стадии эндпоинтов.
-	roots, err := s.subsRoots(ctx, claim.ProjectID, "")
+	roots, err := s.subsRoots(ctx, claim.ProjectID, strings.Join(cfg.RunDomains, "\n"))
 	if err != nil {
 		if wasCancelled.Load() {
 			return finalizeCancelled()

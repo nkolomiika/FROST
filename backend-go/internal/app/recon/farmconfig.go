@@ -59,6 +59,10 @@ type FarmConfig struct {
 	LeaksEmails    []string `json:"leaks_emails"`
 	LeaksCompanies []string `json:"leaks_companies"`
 
+	// RunDomains — выбранные домены для ЭТОГО прогона (пусто → все корневые домены
+	// проекта). Транзиентно: живёт в raw задачи, в сохранённый конфиг не пишется UI.
+	RunDomains []string `json:"run_domains"`
+
 	// Subdomains — сбор поддоменов.
 	Subfinder         bool `json:"subfinder"`
 	Assetfinder       bool `json:"assetfinder"`
@@ -211,6 +215,7 @@ func (c *FarmConfig) Sanitize() {
 	c.LeaksDomains = sanitizeStrList(c.LeaksDomains, leaksInputCap, normalizeDomainInput)
 	c.LeaksEmails = sanitizeStrList(c.LeaksEmails, leaksInputCap, normalizeEmailInput)
 	c.LeaksCompanies = sanitizeStrList(c.LeaksCompanies, leaksInputCap, normalizeCompanyInput)
+	c.RunDomains = sanitizeStrList(c.RunDomains, leaksInputCap, normalizeDomainInput)
 }
 
 // leaksInputCap — верхняя граница числа входов на каждый список leaks (защита от

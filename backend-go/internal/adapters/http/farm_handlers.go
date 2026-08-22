@@ -134,7 +134,8 @@ func (h *ReconHandler) startFarmRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		UseDefaults bool `json:"use_defaults"`
+		UseDefaults bool     `json:"use_defaults"`
+		Domains     []string `json:"domains"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, err)
@@ -142,7 +143,7 @@ func (h *ReconHandler) startFarmRun(w http.ResponseWriter, r *http.Request) {
 	}
 	pid := projectFromContext(r.Context()).ID
 	actor := actorFrom(r).ID
-	view, err := h.svc.StartFarmRun(r.Context(), pid, actor, req.UseDefaults)
+	view, err := h.svc.StartFarmRun(r.Context(), pid, actor, req.UseDefaults, req.Domains)
 	if err != nil {
 		writeError(w, err)
 		return
