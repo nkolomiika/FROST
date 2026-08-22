@@ -62,6 +62,11 @@ html, body, #root {
 .frost .finp { width: 100%; border: 1px solid var(--fr-border); border-radius: 11px; padding: 11px 13px; font: 500 14px Inter, sans-serif; color: var(--fr-text); background: var(--fr-surface); outline: none; resize: none; }
 .frost .finp::placeholder { color: var(--fr-text-faint); }
 .frost .finp:focus { border-color: var(--fr-focus-border); box-shadow: 0 0 0 3px var(--fr-focus-ring); }
+/* Прячем нативные стрелки-спиннеры у number-инпутов (RPS/Concurrency/Crawl depth):
+   инлайн-appearance их не убирает в WebKit — нужны псевдоэлементы. */
+.frost .finp[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.frost .finp[type="number"]::-webkit-inner-spin-button,
+.frost .finp[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
 
 .frost .flabel { font: 600 12.5px Inter, sans-serif; color: var(--fr-text-2); margin: 0 0 7px; display: block; }
 
