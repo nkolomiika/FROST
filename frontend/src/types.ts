@@ -448,6 +448,12 @@ export interface ReconFarmConfig {
   concurrency: number;
   port_scan_scope: "top1000" | "all";
   crawl_depth: number;
+  // Stage toggles — какие стадии полного прогона включены. Все по умолчанию true.
+  // Выключенная стадия пропускается прогоном, а её под-ручки прячутся в UI.
+  stage_subdomains: boolean;
+  stage_endpoints: boolean;
+  stage_js: boolean;
+  stage_ports: boolean;
   // Subdomains — внутренние флаги инструментов (UI их не показывает, но провод
   // их несёт, чтобы round-trip сохранял значения).
   subfinder: boolean;
@@ -548,6 +554,27 @@ export interface StagedHost {
   ports: StagedPort[];
 }
 
+/** Эндпоинт, застейдженный прогоном фермы (краул/JS-майнинг): ждёт импорта. */
+export interface StagedEndpoint {
+  id: number;
+  host: string;
+  url: string;
+  method: string | null;
+  source: string;
+  imported: boolean;
+}
+
+/** JS-находка, застейдженная прогоном фермы (секрет либо добытый эндпоинт). */
+export interface StagedJs {
+  id: number;
+  host: string;
+  url: string;
+  kind: string;
+  value: string;
+  severity: string | null;
+  imported: boolean;
+}
+
 /** Отчёт фермы: результаты прогона на ревью перед ручным импортом. */
 export interface FarmReport {
   job_id: number;
@@ -558,8 +585,12 @@ export interface FarmReport {
     alive: number;
     ports_total: number;
     imported: number;
+    endpoints_total: number;
+    js_total: number;
   };
   hosts: StagedHost[];
+  endpoints: StagedEndpoint[];
+  js: StagedJs[];
 }
 
 export interface Service {

@@ -134,6 +134,8 @@ import type {
   FarmReport as ApiFarmReport,
   StagedHost as ApiStagedHost,
   StagedPort as ApiStagedPort,
+  StagedEndpoint as ApiStagedEndpoint,
+  StagedJs as ApiStagedJs,
   Port as ApiPort,
   Service as ApiService,
   Vulnerability as ApiVulnerability,
@@ -341,6 +343,12 @@ interface FrostState {
   farmReportBusy: boolean;
   /** Выбранные для импорта застейдженные хосты (по staged id). */
   farmReportSel: number[];
+  /** Выбранные для импорта застейдженные эндпоинты (по staged id). */
+  farmReportEndpointSel: number[];
+  /** Выбранные для импорта застейдженные JS-находки (по staged id). */
+  farmReportJsSel: number[];
+  /** Активная вкладка отчёта: хосты / эндпоинты / JS. */
+  farmReportTab: "hosts" | "endpoints" | "js";
   /** Фильтры отчёта: поиск по имени, источник, «только живые», «только с портами». */
   farmReportQuery: string;
   farmReportSource: string;
@@ -577,6 +585,9 @@ const initialState: FrostState = {
   farmReportLoading: false,
   farmReportBusy: false,
   farmReportSel: [],
+  farmReportEndpointSel: [],
+  farmReportJsSel: [],
+  farmReportTab: "hosts",
   farmReportQuery: "",
   farmReportSource: "",
   farmReportAliveOnly: false,
@@ -2005,21 +2016,32 @@ export function FrostApp() {
   };
   // Открытие только выставляет флаг + сбрасывает выбор; загрузку делает эффект
   // ниже (он же ловит прямую ссылку /farm/report и кнопку «Назад»).
-  const openFarmReport = () => setState({ farmReportOpen: true, farmReportSel: [] });
-  const closeFarmReport = () => setState({ farmReportOpen: false, farmReportSel: [] });
-  // Импорт выбранных застейдженных хостов. По успеху: тост, сброс выбора, перечит.
-  const importFarmSelected = async (hostIds: number[]) => {
+  const openFarmReport = () => setState({ farmReportOpen: true, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
+  const closeFarmReport = () => setState({ farmReportOpen: false, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
+  // Импорт выбранного из отчёта: хосты + эндпоинты + JS одним запросом. По успеху:
+  // тост с суммарными счётчиками по категориям, сброс выбора и перечит отчёта.
+  const importFarmSelected = async (hostIds: number[], endpointIds: number[], jsIds: number[]) => {
     const pid = state.openProjectId;
-    if (pid == null || hostIds.length === 0 || state.farmReportBusy) return;
+    if (pid == null || state.farmReportBusy) return;
+    if (hostIds.length === 0 && endpointIds.length === 0 && jsIds.length === 0) return;
     setState({ farmReportBusy: true });
     try {
-      const imported = await apiImportFarmReport(pid, hostIds);
-      setState({ farmReportBusy: false, farmReportSel: [] });
-      pushToast(`${imported} ${t("imported")}`, "success");
+      const res = await apiImportFarmReport(pid, {
+        host_ids: hostIds.length ? hostIds : undefined,
+        endpoint_ids: endpointIds.length ? endpointIds : undefined,
+        js_ids: jsIds.length ? jsIds : undefined,
+      });
+      setState({ farmReportBusy: false, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
+      // Собираем тост только из непустых категорий: «3 hosts, 5 endpoints imported».
+      const parts: string[] = [];
+      if (res.imported_hosts) parts.push(`${res.imported_hosts} ${t("hosts")}`);
+      if (res.imported_endpoints) parts.push(`${res.imported_endpoints} ${t("endpoints")}`);
+      if (res.imported_js) parts.push(`${res.imported_js} ${t("JS")}`);
+      pushToast(parts.length ? `${parts.join(", ")} ${t("imported")}` : t("Nothing imported"), "success");
       void loadFarmReport();
     } catch (e) {
       setState({ farmReportBusy: false });
-      pushToast(getApiErrorMessage(e, t("Couldn't import the selected hosts")), "error");
+      pushToast(getApiErrorMessage(e, t("Couldn't import the selected results")), "error");
     }
   };
   // Очистка всего отчёта — с подтверждением (действие необратимо).
@@ -2030,7 +2052,7 @@ export function FrostApp() {
     setState({ farmReportBusy: true });
     try {
       const cleared = await apiClearFarmReport(pid);
-      setState({ farmReportBusy: false, farmReportSel: [] });
+      setState({ farmReportBusy: false, farmReportSel: [], farmReportEndpointSel: [], farmReportJsSel: [] });
       pushToast(`${cleared} ${t("cleared")}`, "info");
       void loadFarmReport();
     } catch (e) {
@@ -4301,10 +4323,10 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
-                  {bulkDelButton("hosts")}
                   <button className="addbtn clk" onClick={openHostImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add hosts")}
                   </button>
+                  {bulkDelButton("hosts")}
                 </>
               )}
               {/* On the open card the primary action becomes "Edit host" — it takes
@@ -4321,10 +4343,10 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("ips")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
-                  {bulkDelButton("ips")}
                   <button className="addbtn clk" onClick={openIpImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add IPs")}
                   </button>
+                  {bulkDelButton("ips")}
                 </>
               )}
               {/* The IP card edits the host the address belongs to. */}
@@ -4338,10 +4360,10 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
-                  {bulkDelButton("endpoints")}
                   <button className="addbtn clk" onClick={openEpImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add endpoints")}
                   </button>
+                  {bulkDelButton("endpoints")}
                 </>
               )}
               {/* Opens the domain picker rather than scanning straight away, so the
@@ -4356,10 +4378,10 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("js-secrets")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export secrets")}
                   </button>
-                  {bulkDelButton("js")}
                   <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
                     <Icon name="search" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Select domains & scan")}
                   </button>
+                  {bulkDelButton("js")}
                 </>
               )}
               {sec === "vulns" && state.openVulnId == null && (
@@ -4701,9 +4723,11 @@ export function FrostApp() {
      редактирование проекта и непустом списке объектов этого типа. */
   const bulkDelButton = (kind: "hosts" | "ips" | "endpoints" | "js") => {
     if (!canEditProject || bulkDelItemsFor(kind).length === 0) return null;
+    // IP-строки не удаляются, а скрываются — потому у них своя подпись в тултипе.
+    const title = kind === "ips" ? t("Hide objects") : t("Delete objects");
     return (
-      <button className="clk" onClick={() => openBulkDelete(kind)} style={{ height: 42, padding: "0 16px", border: "1px solid var(--st-border)", borderRadius: 10, background: "var(--st-surface)", font: "700 13px Inter,sans-serif", color: "var(--st-danger)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-        <Icon name="trash" size={15} sw={2.2} color="var(--st-danger)" />{t("Delete objects")}
+      <button className="clk" title={title} aria-label={title} onClick={() => openBulkDelete(kind)} style={{ width: 42, height: 42, flex: "none", padding: 0, border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", color: "var(--fr-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <Icon name="trash" size={16} sw={2.2} color="var(--fr-danger)" />
       </button>
     );
   };
@@ -4968,28 +4992,95 @@ export function FrostApp() {
       </div>
     );
 
+    // On/off переключатель в тему — для пер-стадийных тумблеров. Во время прогона
+    // настройки не рендерятся вовсе, но флаг runLocked уважаем на всякий случай.
+    const switchCtl = (on: boolean, onToggle: () => void) => (
+      <div
+        className={runLocked ? "" : "clk"}
+        role="switch"
+        aria-checked={on}
+        onClick={runLocked ? undefined : onToggle}
+        style={{ width: 42, height: 24, borderRadius: 999, padding: 3, background: on ? "var(--fr-accent)" : "var(--fr-border-strong)", transition: "background .15s", cursor: runLocked ? "default" : "pointer", opacity: runLocked ? 0.6 : 1, flex: "none", boxSizing: "border-box" }}
+      >
+        <div style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--fr-on-accent)", transform: on ? "translateX(18px)" : "translateX(0)", transition: "transform .15s" }} />
+      </div>
+    );
+
+    // Группа-стадия: иконка + заголовок + тумблер в шапке, под ней — вложенные
+    // ручки, показанные только пока стадия включена (иначе они и не нужны).
+    const stage = (
+      icon: Parameters<typeof Icon>[0]["name"],
+      title: string,
+      sub: string,
+      key: BoolFarmKey,
+      knobs: ReactNode,
+      last = false,
+    ) => {
+      const on = cfg[key] as boolean;
+      return (
+        <div style={{ padding: "16px 0", borderBottom: last ? "none" : "1px solid var(--fr-divider)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 9, background: on ? "var(--fr-accent-soft)" : "var(--fr-elevated)", flex: "none" }}>
+              <Icon name={icon} size={17} color={on ? "var(--fr-accent)" : "var(--fr-text-faint)"} sw={2} />
+            </span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ font: "700 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{title}</div>
+              <div style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, lineHeight: 1.4 }}>{sub}</div>
+            </div>
+            {switchCtl(on, () => setFarmField(key, !on))}
+          </div>
+          {/* Под-ручки — под левым бордюром, с отступом под иконку. */}
+          {on && knobs && (
+            <div style={{ marginTop: 4, marginLeft: 46, paddingLeft: 14, borderLeft: "2px solid var(--fr-divider)" }}>{knobs}</div>
+          )}
+        </div>
+      );
+    };
+
+    // Во время прогона форма настроек скрыта целиком: показываем только диспетчер
+    // процессов (renderFarmRun). В покое — наоборот: только настройки, без карты
+    // «Run the farm» (запуск идёт кнопкой [Run] в шапке).
+    if (runLocked) {
+      return (
+        <div className="route">
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>{renderFarmRun()}</div>
+        </div>
+      );
+    }
+
     return (
       <div className="route">
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* Run — the headline action: one click runs the whole stack. While a run
-              is in flight this panel is the live process manager (kill per-process /
-              stop-run / progress). */}
-          {renderFarmRun()}
+          {/* Stages — тумблер на каждую стадию прогона, под каждым вложены только
+              относящиеся к ней ручки. Выключенная стадия прячет свои ручки. */}
+          {card("layout", t("Stages"), t("Toggle each stage of the run and tune what it does"),
+            <div>
+              {stage("globe", t("Subdomains"), t("Discover subdomains of the scope roots."), "stage_subdomains",
+                <>
+                  {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
+                  {row(t("Wordlist size"), t("Bigger lists find more subdomains but take longer — FROST maps this to a bundled list."), seg(cfg.wordlist_size, ["small", "medium", "large"] as const, (s) => setFarmField("wordlist_size", s)), true)}
+                </>
+              )}
+              {stage("link", t("Endpoints"), t("Crawl each host for URLs and endpoints."), "stage_endpoints",
+                numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)
+              )}
+              {stage("doc", t("JS mining"), t("Mine JavaScript for secrets and hidden endpoints."), "stage_js",
+                <div style={{ padding: "13px 0", fontSize: 12.5, color: "var(--fr-text-3)", lineHeight: 1.5 }}>{t("Scans linked scripts for secrets and endpoints — no extra settings.")}</div>
+              )}
+              {stage("plug", t("Port scan"), t("Probe open ports on discovered hosts."), "stage_ports",
+                row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))), true),
+                true
+              )}
+            </div>
+          )}
 
-          {/* Global — the only knobs the user touches; tools are chosen by FROST.
-              Во время прогона карточка настроек скрыта целиком: панель выше
-              становится диспетчером запущенных процессов, а не формой настроек. */}
-          {!runLocked &&
-            card("settings", t("Run settings"), t("How the run behaves — FROST picks the tools and wordlists for you"),
-              <div>
-                {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
-                {row(t("Wordlist size"), t("Bigger lists find more subdomains but take longer — FROST maps this to a bundled list."), seg(cfg.wordlist_size, ["small", "medium", "large"] as const, (s) => setFarmField("wordlist_size", s)))}
-                {numRow("rate_limit", t("Rate limit"), t("Requests per second"), 1, 500)}
-                {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100)}
-                {row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))))}
-                {numRow("crawl_depth", t("Crawl depth"), t("How deep to crawl each host"), 1, 10, true)}
-              </div>
-            )}
+          {/* Global — ручки, действующие на весь прогон, вне зависимости от стадий. */}
+          {card("settings", t("Global"), t("Applies across every stage of the run"),
+            <div>
+              {numRow("rate_limit", t("Rate limit"), t("Requests per second"), 1, 500)}
+              {numRow("concurrency", t("Concurrency"), t("Parallel workers"), 1, 100, true)}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -5156,14 +5247,17 @@ export function FrostApp() {
     const report = state.farmReport;
     const loading = state.farmReportLoading;
     const busy = state.farmReportBusy;
-    const summary = report?.summary ?? { hosts_total: 0, alive: 0, ports_total: 0, imported: 0 };
+    const summary = report?.summary ?? { hosts_total: 0, alive: 0, ports_total: 0, imported: 0, endpoints_total: 0, js_total: 0 };
     const allHosts: ApiStagedHost[] = report?.hosts ?? [];
-    // Набор источников выводим из данных — фильтр по источнику всегда точно
-    // соответствует тому, что реально пришло в отчёте.
-    const sources = Array.from(new Set(allHosts.map((h) => h.source).filter(Boolean))).sort();
+    const allEndpoints: ApiStagedEndpoint[] = report?.endpoints ?? [];
+    const allJs: ApiStagedJs[] = report?.js ?? [];
+    const tab = state.farmReportTab;
+    const totalItems = allHosts.length + allEndpoints.length + allJs.length;
 
     const q = state.farmReportQuery.trim().toLowerCase();
-    const filtered = allHosts.filter((h) => {
+    // Пер-вкладочные фильтры. Поиск и «только не импортированные» действуют на всех
+    // вкладках; source — на хостах и эндпоинтах; alive/ports — только на хостах.
+    const filteredHosts = allHosts.filter((h) => {
       if (q && !(h.hostname.toLowerCase().includes(q) || (h.ip ?? "").toLowerCase().includes(q))) return false;
       if (state.farmReportSource && h.source !== state.farmReportSource) return false;
       if (state.farmReportAliveOnly && !h.alive) return false;
@@ -5171,28 +5265,61 @@ export function FrostApp() {
       if (state.farmReportUnimportedOnly && h.imported) return false;
       return true;
     });
+    const filteredEndpoints = allEndpoints.filter((e) => {
+      if (q && !(e.url.toLowerCase().includes(q) || e.host.toLowerCase().includes(q) || (e.method ?? "").toLowerCase().includes(q))) return false;
+      if (state.farmReportSource && e.source !== state.farmReportSource) return false;
+      if (state.farmReportUnimportedOnly && e.imported) return false;
+      return true;
+    });
+    const filteredJs = allJs.filter((j) => {
+      if (q && !(j.url.toLowerCase().includes(q) || j.host.toLowerCase().includes(q) || j.kind.toLowerCase().includes(q) || j.value.toLowerCase().includes(q))) return false;
+      if (state.farmReportUnimportedOnly && j.imported) return false;
+      return true;
+    });
 
-    // Выбирать можно только ещё не импортированные строки текущего фильтра.
-    const selectable = filtered.filter((h) => !h.imported);
-    const selSet = new Set(state.farmReportSel);
-    const selectedInView = selectable.filter((h) => selSet.has(h.id)).length;
-    const allSelected = selectable.length > 0 && selectedInView === selectable.length;
-    const selCount = state.farmReportSel.length;
+    // Источники для пилюль берём из данных активной вкладки (JS без источника).
+    const sourceRows: { source: string }[] = tab === "hosts" ? allHosts : tab === "endpoints" ? allEndpoints : [];
+    const sources = Array.from(new Set(sourceRows.map((x) => x.source).filter(Boolean))).sort();
 
-    const toggleRow = (id: number) =>
-      setState((s) => ({ farmReportSel: s.farmReportSel.includes(id) ? s.farmReportSel.filter((x) => x !== id) : [...s.farmReportSel, id] }));
-    // Select-all уважает текущий фильтр и не трогает уже импортированные.
-    const toggleAll = () => {
-      const ids = selectable.map((h) => h.id);
-      if (allSelected) {
-        const drop = new Set(ids);
-        setState((s) => ({ farmReportSel: s.farmReportSel.filter((x) => !drop.has(x)) }));
-      } else {
-        setState((s) => ({ farmReportSel: Array.from(new Set([...s.farmReportSel, ...ids])) }));
-      }
+    // Выбор по каждой категории отдельно; импорт уносит всё выбранное разом.
+    const hostSel = state.farmReportSel, epSel = state.farmReportEndpointSel, jsSel = state.farmReportJsSel;
+    const totalSel = hostSel.length + epSel.length + jsSel.length;
+
+    // ─ Хосты: select-all уважает фильтр и не трогает уже импортированные ─
+    const hostSelectable = filteredHosts.filter((h) => !h.imported);
+    const hostSelSet = new Set(hostSel);
+    const hostAllSel = hostSelectable.length > 0 && hostSelectable.every((h) => hostSelSet.has(h.id));
+    const toggleHost = (id: number) => setState((s) => ({ farmReportSel: toggleIn(s.farmReportSel, id) }));
+    const toggleAllHosts = () => {
+      const ids = hostSelectable.map((h) => h.id);
+      if (hostAllSel) { const drop = new Set(ids); setState((s) => ({ farmReportSel: s.farmReportSel.filter((x) => !drop.has(x)) })); }
+      else setState((s) => ({ farmReportSel: Array.from(new Set([...s.farmReportSel, ...ids])) }));
+    };
+    // ─ Эндпоинты ─
+    const epSelectable = filteredEndpoints.filter((e) => !e.imported);
+    const epSelSet = new Set(epSel);
+    const epAllSel = epSelectable.length > 0 && epSelectable.every((e) => epSelSet.has(e.id));
+    const toggleEp = (id: number) => setState((s) => ({ farmReportEndpointSel: toggleIn(s.farmReportEndpointSel, id) }));
+    const toggleAllEps = () => {
+      const ids = epSelectable.map((e) => e.id);
+      if (epAllSel) { const drop = new Set(ids); setState((s) => ({ farmReportEndpointSel: s.farmReportEndpointSel.filter((x) => !drop.has(x)) })); }
+      else setState((s) => ({ farmReportEndpointSel: Array.from(new Set([...s.farmReportEndpointSel, ...ids])) }));
+    };
+    // ─ JS ─
+    const jsSelectable = filteredJs.filter((j) => !j.imported);
+    const jsSelSet = new Set(jsSel);
+    const jsAllSel = jsSelectable.length > 0 && jsSelectable.every((j) => jsSelSet.has(j.id));
+    const toggleJs = (id: number) => setState((s) => ({ farmReportJsSel: toggleIn(s.farmReportJsSel, id) }));
+    const toggleAllJs = () => {
+      const ids = jsSelectable.map((j) => j.id);
+      if (jsAllSel) { const drop = new Set(ids); setState((s) => ({ farmReportJsSel: s.farmReportJsSel.filter((x) => !drop.has(x)) })); }
+      else setState((s) => ({ farmReportJsSel: Array.from(new Set([...s.farmReportJsSel, ...ids])) }));
     };
 
-    const grid = "30px minmax(0,1.25fr) minmax(0,1.7fr) 128px 108px";
+    const hostsGrid = "30px minmax(0,1.25fr) minmax(0,1.7fr) 128px 108px";
+    const epGrid = "30px 78px minmax(0,0.9fr) minmax(0,2fr) 104px";
+    const jsGrid = "30px 132px minmax(0,0.85fr) minmax(0,2fr) 104px";
+
     const stat = (label: string, n: number) => (
       <div key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 7, padding: "6px 14px", borderRadius: 20, background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)" }}>
         <span className="mono" style={{ fontSize: 15, fontWeight: 800, color: "var(--fr-text)" }}>{n}</span>
@@ -5200,11 +5327,60 @@ export function FrostApp() {
       </div>
     );
 
+    // Одна вкладка отчёта: подпись + счётчик; активная подчёркнута акцентом.
+    const tabBtn = (id: "hosts" | "endpoints" | "js", label: string, n: number) => {
+      const on = tab === id;
+      return (
+        <div key={id} className="clk" onClick={() => setState({ farmReportTab: id })} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 4px", cursor: "pointer", borderBottom: on ? "2px solid var(--fr-accent)" : "2px solid transparent", font: "700 13px Inter,sans-serif", color: on ? "var(--fr-text)" : "var(--fr-text-3)" }}>
+          {label}
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, borderRadius: 10, padding: "1px 8px", background: on ? "var(--fr-accent-soft)" : "var(--fr-elevated)", color: on ? "var(--fr-accent)" : "var(--fr-text-faint)" }}>{n}</span>
+        </div>
+      );
+    };
+
+    // Значок «уже импортировано» — общий для всех трёх списков.
+    const importedBadge = (imported: boolean) =>
+      imported ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 9px", background: "var(--fr-success-soft)", color: "var(--fr-success)" }}><Icon name="check" size={12} color="var(--fr-success)" sw={2.6} />{t("imported")}</span> : null;
+
+    const sourcePill = (src: string) =>
+      src ? <span className="mono" style={{ display: "inline-block", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)" }}>{src}</span> : <span style={{ color: "var(--fr-text-faint)" }}>—</span>;
+
+    // Цвет пилюли важности JS-находки.
+    const sevColor = (sev: string | null) => {
+      const s = (sev ?? "").toLowerCase();
+      if (s === "critical" || s === "high") return "var(--fr-danger)";
+      if (s === "medium") return "var(--fr-accent-2)";
+      return "var(--fr-text-3)";
+    };
+
+    // Общая шапка списка с чекбоксом select-all под конкретную вкладку.
+    const listHeader = (gridCols: string, allSel: boolean, onAll: () => void, canAll: boolean, cells: ReactNode) => (
+      <div style={{ display: "grid", gridTemplateColumns: gridCols, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
+        <input type="checkbox" checked={allSel} onChange={onAll} disabled={!canEditProject || !canAll} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: canAll ? "pointer" : "default" }} />
+        {cells}
+      </div>
+    );
+
+    const emptySection = (msg: string) => (
+      <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{msg}</div>
+    );
+
+    // Полностью пустой отчёт (ни хостов, ни эндпоинтов, ни JS).
+    const overallEmpty = (
+      <div style={{ padding: "56px 40px", textAlign: "center" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 12, background: "var(--fr-accent-soft)", marginBottom: 14 }}>
+          <Icon name="server" size={22} color="var(--fr-accent)" sw={2} />
+        </div>
+        <div style={{ font: "800 16px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{t("No farm results yet")}</div>
+        <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 440, margin: "0 auto", lineHeight: 1.5 }}>{t("Run the farm to collect subdomains, hosts, endpoints and JS findings here for review.")}</div>
+      </div>
+    );
+
     return (
       <div className="route">
-        {/* Фильтры — тот же ряд, что у списка хостов: поиск слева, пилюли справа. */}
+        {/* Фильтры — поиск слева, пилюли справа. Набор пилюль зависит от вкладки. */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
-          {searchBox(t("Filter by hostname or IP…"), state.farmReportQuery, (v) => setState({ farmReportQuery: v }))}
+          {searchBox(tab === "hosts" ? t("Filter by hostname or IP…") : tab === "endpoints" ? t("Filter by URL, host or method…") : t("Filter by URL, host or kind…"), state.farmReportQuery, (v) => setState({ farmReportQuery: v }))}
           <div style={{ flex: 1 }} />
           {sources.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -5214,8 +5390,8 @@ export function FrostApp() {
             </div>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {filterPill(t("Alive only"), state.farmReportAliveOnly, () => toggle("farmReportAliveOnly"))}
-            {filterPill(t("Has ports"), state.farmReportPortsOnly, () => toggle("farmReportPortsOnly"))}
+            {tab === "hosts" && filterPill(t("Alive only"), state.farmReportAliveOnly, () => toggle("farmReportAliveOnly"))}
+            {tab === "hosts" && filterPill(t("Has ports"), state.farmReportPortsOnly, () => toggle("farmReportPortsOnly"))}
             {filterPill(t("Not imported"), state.farmReportUnimportedOnly, () => toggle("farmReportUnimportedOnly"))}
           </div>
         </div>
@@ -5231,44 +5407,39 @@ export function FrostApp() {
             </button>
           </div>
 
-          {/* Сводка отчёта — маленькие статы. */}
+          {/* Сводка отчёта — маленькие статы по всем категориям. */}
           <div style={{ flex: "none", display: "flex", gap: 10, flexWrap: "wrap", padding: "14px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
             {stat(t("Hosts"), summary.hosts_total)}
             {stat(t("Alive"), summary.alive)}
             {stat(t("Ports"), summary.ports_total)}
+            {stat(t("Endpoints"), summary.endpoints_total)}
+            {stat(t("JS"), summary.js_total)}
             {stat(t("Imported"), summary.imported)}
           </div>
 
-          {/* Список застейдженных хостов (прокручивается внутри карточки). */}
+          {/* Вкладки: Hosts / Endpoints / JS со счётчиками. */}
+          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 22, padding: "0 22px", borderBottom: "1px solid var(--fr-divider)" }}>
+            {tabBtn("hosts", t("Hosts"), allHosts.length)}
+            {tabBtn("endpoints", t("Endpoints"), allEndpoints.length)}
+            {tabBtn("js", t("JS"), allJs.length)}
+          </div>
+
+          {/* Список активной вкладки (прокручивается внутри карточки). */}
           <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-            {loading && allHosts.length === 0 ? (
+            {loading && totalItems === 0 ? (
               <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading the farm report…")}</div>
-            ) : allHosts.length === 0 ? (
-              <div style={{ padding: "56px 40px", textAlign: "center" }}>
-                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 12, background: "var(--fr-accent-soft)", marginBottom: 14 }}>
-                  <Icon name="server" size={22} color="var(--fr-accent)" sw={2} />
-                </div>
-                <div style={{ font: "800 16px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{t("No farm results yet")}</div>
-                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 420, margin: "0 auto", lineHeight: 1.5 }}>{t("Run the farm to collect subdomains, hosts and ports here for review.")}</div>
-              </div>
-            ) : (
+            ) : totalItems === 0 ? (
+              overallEmpty
+            ) : tab === "hosts" ? (
               <>
-                {/* Заголовок таблицы с select-all (уважает фильтр, пропускает импортированные). */}
-                <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
-                  <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={!canEditProject || selectable.length === 0} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectable.length === 0 ? "default" : "pointer" }} />
-                  <div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Source")}</div><div />
-                </div>
-                {filtered.map((h) => {
-                  const on = selSet.has(h.id);
+                {listHeader(hostsGrid, hostAllSel, toggleAllHosts, hostSelectable.length > 0, (
+                  <><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Source")}</div><div /></>
+                ))}
+                {filteredHosts.map((h) => {
                   const selectableRow = !h.imported && canEditProject;
                   return (
-                    <div
-                      key={h.id}
-                      className={selectableRow ? "prow clk" : "prow"}
-                      onClick={selectableRow ? () => toggleRow(h.id) : undefined}
-                      style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: h.imported ? 0.55 : 1 }}
-                    >
-                      <input type="checkbox" checked={on} disabled={h.imported || !canEditProject} onChange={() => toggleRow(h.id)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
+                    <div key={h.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleHost(h.id) : undefined} style={{ display: "grid", gridTemplateColumns: hostsGrid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: h.imported ? 0.55 : 1 }}>
+                      <input type="checkbox" checked={hostSelSet.has(h.id)} disabled={h.imported || !canEditProject} onChange={() => toggleHost(h.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
                           <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: h.alive ? "var(--fr-success)" : "var(--fr-danger)" }} />
@@ -5277,30 +5448,70 @@ export function FrostApp() {
                         {h.ip && <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)", marginTop: 3, marginLeft: 15 }}>{h.ip}</div>}
                       </div>
                       <div style={{ minWidth: 0 }}>{stagedPortPills(h.ports)}</div>
-                      <div style={{ minWidth: 0 }}>
-                        {h.source ? <span className="mono" style={{ display: "inline-block", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)" }}>{h.source}</span> : <span style={{ color: "var(--fr-text-faint)" }}>—</span>}
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                        {h.imported && <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 9px", background: "var(--fr-success-soft)", color: "var(--fr-success)" }}><Icon name="check" size={12} color="var(--fr-success)" sw={2.6} />{t("imported")}</span>}
-                      </div>
+                      <div style={{ minWidth: 0 }}>{sourcePill(h.source)}</div>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(h.imported)}</div>
                     </div>
                   );
                 })}
-                {filtered.length === 0 && (
-                  <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No staged hosts match these filters.")}</div>
-                )}
+                {filteredHosts.length === 0 && emptySection(allHosts.length === 0 ? t("No staged hosts.") : t("No staged hosts match these filters."))}
+              </>
+            ) : tab === "endpoints" ? (
+              <>
+                {listHeader(epGrid, epAllSel, toggleAllEps, epSelectable.length > 0, (
+                  <><div>{t("Method")}</div><div>{t("Host")}</div><div>{t("URL")}</div><div /></>
+                ))}
+                {filteredEndpoints.map((e) => {
+                  const selectableRow = !e.imported && canEditProject;
+                  return (
+                    <div key={e.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleEp(e.id) : undefined} style={{ display: "grid", gridTemplateColumns: epGrid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: e.imported ? 0.55 : 1 }}>
+                      <input type="checkbox" checked={epSelSet.has(e.id)} disabled={e.imported || !canEditProject} onChange={() => toggleEp(e.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
+                      <div style={{ minWidth: 0 }}>
+                        {e.method ? <span className="mono" style={{ display: "inline-block", fontSize: 10.5, fontWeight: 800, letterSpacing: ".4px", borderRadius: 6, padding: "3px 8px", background: "var(--fr-accent-soft)", color: "var(--fr-accent)" }}>{e.method.toUpperCase()}</span> : <span style={{ color: "var(--fr-text-faint)" }}>—</span>}
+                      </div>
+                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.host}</div>
+                      <div className="mono" title={e.url} style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.url}</div>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(e.imported)}</div>
+                    </div>
+                  );
+                })}
+                {filteredEndpoints.length === 0 && emptySection(allEndpoints.length === 0 ? t("No staged endpoints.") : t("No staged endpoints match these filters."))}
+              </>
+            ) : (
+              <>
+                {listHeader(jsGrid, jsAllSel, toggleAllJs, jsSelectable.length > 0, (
+                  <><div>{t("Kind")}</div><div>{t("Host")}</div><div>{t("Value")}</div><div /></>
+                ))}
+                {filteredJs.map((j) => {
+                  const selectableRow = !j.imported && canEditProject;
+                  return (
+                    <div key={j.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleJs(j.id) : undefined} style={{ display: "grid", gridTemplateColumns: jsGrid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: j.imported ? 0.55 : 1 }}>
+                      <input type="checkbox" checked={jsSelSet.has(j.id)} disabled={j.imported || !canEditProject} onChange={() => toggleJs(j.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
+                      <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span className="mono" style={{ fontSize: 10.5, fontWeight: 800, borderRadius: 6, padding: "3px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)" }}>{j.kind}</span>
+                        {j.severity && <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 7px", background: "var(--fr-surface)", border: `1px solid ${sevColor(j.severity)}`, color: sevColor(j.severity) }}>{j.severity}</span>}
+                      </div>
+                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.host}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.value}</div>
+                        {j.url && <div className="mono" title={j.url} style={{ fontSize: 11, color: "var(--fr-text-faint)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.url}</div>}
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(j.imported)}</div>
+                    </div>
+                  );
+                })}
+                {filteredJs.length === 0 && emptySection(allJs.length === 0 ? t("No staged JS findings.") : t("No staged JS findings match these filters."))}
               </>
             )}
           </div>
 
           {/* Действия: очистить отчёт (слева, danger) и импортировать выбранное (справа). */}
           <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "14px 22px", borderTop: "1px solid var(--fr-divider)" }}>
-            <button className="clk" onClick={() => void clearFarmReport()} disabled={busy || allHosts.length === 0} style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: busy || allHosts.length === 0 ? "not-allowed" : "pointer", opacity: busy || allHosts.length === 0 ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <button className="clk" onClick={() => void clearFarmReport()} disabled={busy || totalItems === 0} style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: busy || totalItems === 0 ? "not-allowed" : "pointer", opacity: busy || totalItems === 0 ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}>
               <Icon name="trash" size={15} color="var(--fr-danger)" sw={2.2} />{t("Clear report")}
             </button>
             <div style={{ flex: 1 }} />
-            {selCount > 0 && <span style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-3)" }}>{selCount} {t("selected")}</span>}
-            <button className="clk" onClick={() => void importFarmSelected(state.farmReportSel)} disabled={busy || selCount === 0 || !canEditProject} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: busy || selCount === 0 || !canEditProject ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: busy || selCount === 0 || !canEditProject ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            {totalSel > 0 && <span style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-3)" }}>{totalSel} {t("selected")}</span>}
+            <button className="clk" onClick={() => void importFarmSelected(hostSel, epSel, jsSel)} disabled={busy || totalSel === 0 || !canEditProject} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: busy || totalSel === 0 || !canEditProject ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: busy || totalSel === 0 || !canEditProject ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
               <Icon name="download" size={15} color="var(--fr-on-accent)" sw={2.4} />{t("Import selected")}
             </button>
           </div>
