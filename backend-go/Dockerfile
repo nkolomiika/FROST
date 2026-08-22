@@ -15,6 +15,14 @@ FROM trufflesecurity/trufflehog:latest AS trufflehog
 FROM projectdiscovery/dnsx:latest AS dnsx
 FROM projectdiscovery/subfinder:latest AS subfinder
 FROM projectdiscovery/httpx:latest AS httpx
+FROM projectdiscovery/katana:latest AS katana
+
+# gau и waybackurls не публикуют официальных образов — собираем их статически в
+# Go-стадии (оба чистый Go) и COPY-им бинари в recon-стейдж.
+FROM golang:1.26-alpine AS endpoint-tools
+RUN apk add --no-cache git \
+ && GOBIN=/out CGO_ENABLED=0 go install github.com/lc/gau/v2/cmd/gau@latest \
+ && GOBIN=/out CGO_ENABLED=0 go install github.com/tomnomnom/waybackurls@latest
 
 # Базовый рантайм для api и mail-worker — без инструментов разведки.
 FROM alpine:3.20 AS runtime
@@ -29,6 +37,9 @@ ENTRYPOINT ["/usr/local/bin/app"]
 #   httpx-pd    — детект живости/технологий на портах (config: SERVICES_HTTPX_BIN=httpx-pd)
 #   dnsx        — резолв
 #   trufflehog  — verified-секреты в JS
+#   katana      — активный краул URL (стадия эндпоинтов)
+#   gau         — архивные URL (стадия эндпоинтов)
+#   waybackurls — URL из Wayback Machine (стадия эндпоинтов)
 FROM runtime AS recon
 USER root
 # apk-зеркало Alpine на buildkit сервера периодически флапает ("temporary error").
@@ -43,6 +54,9 @@ COPY --from=trufflehog /usr/bin/trufflehog /usr/local/bin/trufflehog
 COPY --from=dnsx /usr/local/bin/dnsx /usr/local/bin/dnsx
 COPY --from=subfinder /usr/local/bin/subfinder /usr/local/bin/subfinder
 COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd
+COPY --from=katana /usr/local/bin/katana /usr/local/bin/katana
+COPY --from=endpoint-tools /out/gau /usr/local/bin/gau
+COPY --from=endpoint-tools /out/waybackurls /usr/local/bin/waybackurls
 # Тир-словари поддоменов (n0kovo_subdomains) для активного брута dnsx в полном
 # прогоне фермы. Три тира → small|medium|large (см. WordlistPath в Go). Каталог
 # переопределяется env RECON_WORDLIST_DIR (дефолт — этот).

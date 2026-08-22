@@ -47,6 +47,25 @@ func (q *Queries) ClaimReconJobRunning(ctx context.Context, id int32) (HostFarmJ
 	return i, err
 }
 
+const clearStagedEndpoints = `-- name: ClearStagedEndpoints :execrows
+DELETE FROM recon_farm_staged_endpoints
+WHERE project_id = $1 AND job_id = $2
+`
+
+type ClearStagedEndpointsParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+// Удаляет staged-эндпоинты одного прогона; возвращает число удалённых.
+func (q *Queries) ClearStagedEndpoints(ctx context.Context, arg ClearStagedEndpointsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearStagedEndpoints, arg.ProjectID, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearStagedHosts = `-- name: ClearStagedHosts :execrows
 DELETE FROM recon_farm_staged_hosts
 WHERE project_id = $1 AND job_id = $2
@@ -60,6 +79,25 @@ type ClearStagedHostsParams struct {
 // Удаляет staged-строки одного прогона; возвращает число удалённых.
 func (q *Queries) ClearStagedHosts(ctx context.Context, arg ClearStagedHostsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, clearStagedHosts, arg.ProjectID, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearStagedJs = `-- name: ClearStagedJs :execrows
+DELETE FROM recon_farm_staged_js
+WHERE project_id = $1 AND job_id = $2
+`
+
+type ClearStagedJsParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+// Удаляет staged-находки JS одного прогона; возвращает число удалённых.
+func (q *Queries) ClearStagedJs(ctx context.Context, arg ClearStagedJsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearStagedJs, arg.ProjectID, arg.JobID)
 	if err != nil {
 		return 0, err
 	}
@@ -377,6 +415,37 @@ func (q *Queries) InsertHostFarmJob(ctx context.Context, arg InsertHostFarmJobPa
 	return i, err
 }
 
+const insertStagedEndpoint = `-- name: InsertStagedEndpoint :exec
+
+INSERT INTO recon_farm_staged_endpoints (project_id, job_id, host, url, method, source)
+VALUES ($1, $2, $3, $4,
+        $5, $6)
+`
+
+type InsertStagedEndpointParams struct {
+	ProjectID int32       `json:"project_id"`
+	JobID     int32       `json:"job_id"`
+	Host      string      `json:"host"`
+	Url       string      `json:"url"`
+	Method    pgtype.Text `json:"method"`
+	Source    pgtype.Text `json:"source"`
+}
+
+// ─────────── стейджинг эндпоинтов прогона (recon_farm_staged_endpoints) ───────────
+// Стадия эндпоинтов (katana/gau/waybackurls) складывает найденные URL сюда; импорт
+// создаёт реальные endpoints проекта (по имени хоста). ports/hosts не трогаются.
+func (q *Queries) InsertStagedEndpoint(ctx context.Context, arg InsertStagedEndpointParams) error {
+	_, err := q.db.Exec(ctx, insertStagedEndpoint,
+		arg.ProjectID,
+		arg.JobID,
+		arg.Host,
+		arg.Url,
+		arg.Method,
+		arg.Source,
+	)
+	return err
+}
+
 const insertStagedHost = `-- name: InsertStagedHost :exec
 
 INSERT INTO recon_farm_staged_hosts (project_id, job_id, hostname, ip, alive, source, ports)
@@ -406,6 +475,40 @@ func (q *Queries) InsertStagedHost(ctx context.Context, arg InsertStagedHostPara
 		arg.Alive,
 		arg.Source,
 		arg.Ports,
+	)
+	return err
+}
+
+const insertStagedJs = `-- name: InsertStagedJs :exec
+
+INSERT INTO recon_farm_staged_js (project_id, job_id, host, url, kind, value, severity)
+VALUES ($1, $2, $3, $4,
+        $5, $6, $7)
+`
+
+type InsertStagedJsParams struct {
+	ProjectID int32       `json:"project_id"`
+	JobID     int32       `json:"job_id"`
+	Host      string      `json:"host"`
+	Url       string      `json:"url"`
+	Kind      string      `json:"kind"`
+	Value     string      `json:"value"`
+	Severity  pgtype.Text `json:"severity"`
+}
+
+// ─────────── стейджинг JS-майнинга прогона (recon_farm_staged_js) ───────────
+// Стадия JS (trufflehog + regex) складывает находки сюда: по строке на секрет
+// (kind='secret', value=preview, severity) или эндпоинт (kind='endpoint', value=path).
+// Импорт создаёт js_files/secrets проекта обычным persist-путём.
+func (q *Queries) InsertStagedJs(ctx context.Context, arg InsertStagedJsParams) error {
+	_, err := q.db.Exec(ctx, insertStagedJs,
+		arg.ProjectID,
+		arg.JobID,
+		arg.Host,
+		arg.Url,
+		arg.Kind,
+		arg.Value,
+		arg.Severity,
 	)
 	return err
 }
@@ -590,6 +693,92 @@ func (q *Queries) ListProjectScanTargets(ctx context.Context, projectID int32) (
 	return items, nil
 }
 
+const listStagedEndpoints = `-- name: ListStagedEndpoints :many
+SELECT id, project_id, job_id, host, url, method, source, imported, created_at
+FROM recon_farm_staged_endpoints
+WHERE project_id = $1 AND job_id = $2
+ORDER BY id
+`
+
+type ListStagedEndpointsParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+// Все staged-эндпоинты одного прогона (для отчёта), по возрастанию id.
+func (q *Queries) ListStagedEndpoints(ctx context.Context, arg ListStagedEndpointsParams) ([]ReconFarmStagedEndpoint, error) {
+	rows, err := q.db.Query(ctx, listStagedEndpoints, arg.ProjectID, arg.JobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedEndpoint{}
+	for rows.Next() {
+		var i ReconFarmStagedEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Host,
+			&i.Url,
+			&i.Method,
+			&i.Source,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStagedEndpointsByIDs = `-- name: ListStagedEndpointsByIDs :many
+SELECT id, project_id, job_id, host, url, method, source, imported, created_at
+FROM recon_farm_staged_endpoints
+WHERE project_id = $1 AND id = ANY($2::int[])
+ORDER BY id
+`
+
+type ListStagedEndpointsByIDsParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Выбранные staged-эндпоинты проекта по id (для импорта). Скоуп проекта обязателен.
+func (q *Queries) ListStagedEndpointsByIDs(ctx context.Context, arg ListStagedEndpointsByIDsParams) ([]ReconFarmStagedEndpoint, error) {
+	rows, err := q.db.Query(ctx, listStagedEndpointsByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedEndpoint{}
+	for rows.Next() {
+		var i ReconFarmStagedEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Host,
+			&i.Url,
+			&i.Method,
+			&i.Source,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStagedHosts = `-- name: ListStagedHosts :many
 SELECT id, project_id, job_id, hostname, ip, alive, source, ports, imported, created_at
 FROM recon_farm_staged_hosts
@@ -679,6 +868,110 @@ func (q *Queries) ListStagedHostsByIDs(ctx context.Context, arg ListStagedHostsB
 	return items, nil
 }
 
+const listStagedJs = `-- name: ListStagedJs :many
+SELECT id, project_id, job_id, host, url, kind, value, severity, imported, created_at
+FROM recon_farm_staged_js
+WHERE project_id = $1 AND job_id = $2
+ORDER BY id
+`
+
+type ListStagedJsParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+// Все staged-находки JS одного прогона (для отчёта), по возрастанию id.
+func (q *Queries) ListStagedJs(ctx context.Context, arg ListStagedJsParams) ([]ReconFarmStagedJ, error) {
+	rows, err := q.db.Query(ctx, listStagedJs, arg.ProjectID, arg.JobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedJ{}
+	for rows.Next() {
+		var i ReconFarmStagedJ
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Host,
+			&i.Url,
+			&i.Kind,
+			&i.Value,
+			&i.Severity,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStagedJsByIDs = `-- name: ListStagedJsByIDs :many
+SELECT id, project_id, job_id, host, url, kind, value, severity, imported, created_at
+FROM recon_farm_staged_js
+WHERE project_id = $1 AND id = ANY($2::int[])
+ORDER BY id
+`
+
+type ListStagedJsByIDsParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Выбранные staged-находки JS проекта по id (для импорта). Скоуп проекта обязателен.
+func (q *Queries) ListStagedJsByIDs(ctx context.Context, arg ListStagedJsByIDsParams) ([]ReconFarmStagedJ, error) {
+	rows, err := q.db.Query(ctx, listStagedJsByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedJ{}
+	for rows.Next() {
+		var i ReconFarmStagedJ
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Host,
+			&i.Url,
+			&i.Kind,
+			&i.Value,
+			&i.Severity,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markStagedEndpointsImported = `-- name: MarkStagedEndpointsImported :exec
+UPDATE recon_farm_staged_endpoints SET imported = true
+WHERE project_id = $1 AND id = ANY($2::int[])
+`
+
+type MarkStagedEndpointsImportedParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Помечает выбранные staged-эндпоинты импортированными (идемпотентно).
+func (q *Queries) MarkStagedEndpointsImported(ctx context.Context, arg MarkStagedEndpointsImportedParams) error {
+	_, err := q.db.Exec(ctx, markStagedEndpointsImported, arg.ProjectID, arg.Ids)
+	return err
+}
+
 const markStagedImported = `-- name: MarkStagedImported :exec
 UPDATE recon_farm_staged_hosts SET imported = true
 WHERE project_id = $1 AND id = ANY($2::int[])
@@ -692,6 +985,22 @@ type MarkStagedImportedParams struct {
 // Помечает выбранные staged-строки импортированными (идемпотентно).
 func (q *Queries) MarkStagedImported(ctx context.Context, arg MarkStagedImportedParams) error {
 	_, err := q.db.Exec(ctx, markStagedImported, arg.ProjectID, arg.Ids)
+	return err
+}
+
+const markStagedJsImported = `-- name: MarkStagedJsImported :exec
+UPDATE recon_farm_staged_js SET imported = true
+WHERE project_id = $1 AND id = ANY($2::int[])
+`
+
+type MarkStagedJsImportedParams struct {
+	ProjectID int32   `json:"project_id"`
+	Ids       []int32 `json:"ids"`
+}
+
+// Помечает выбранные staged-находки JS импортированными (идемпотентно).
+func (q *Queries) MarkStagedJsImported(ctx context.Context, arg MarkStagedJsImportedParams) error {
+	_, err := q.db.Exec(ctx, markStagedJsImported, arg.ProjectID, arg.Ids)
 	return err
 }
 

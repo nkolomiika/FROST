@@ -29,6 +29,11 @@ type Service struct {
 	farmScanner reconnet.NmapServiceScanner
 	// dryProber — dry-пробив стейджинга фермы (сид для тестов; nil → реальная цепочка).
 	dryProber func(ctx context.Context, raw string) ([]dryHost, []string)
+	// endpointScanner — вызов одного инструмента стадии эндпоинтов (katana|gau|
+	// waybackurls) по хосту (сид для тестов; nil → реальный бинарь).
+	endpointScanner func(ctx context.Context, tool, host string, cfg reconnet.EndpointToolConfig) ([]reconnet.EndpointHit, string)
+	// jsMiner — JS-майнинг одного хоста стадии JS (сид для тестов; nil → DiscoverAndScan).
+	jsMiner func(ctx context.Context, host string) ([]reconnet.ScannedFile, []string)
 }
 
 // NewService собирает сервис рекона.

@@ -849,6 +849,187 @@ func orEmptyPorts(p []recon.StagedPort) []recon.StagedPort {
 	return p
 }
 
+// ─────────────────────────── стейджинг эндпоинтов прогона ───────────────────────────
+
+func mapStagedEndpoint(row sqlc.ReconFarmStagedEndpoint) recon.StagedEndpoint {
+	return recon.StagedEndpoint{
+		ID:       row.ID,
+		Host:     row.Host,
+		URL:      row.Url,
+		Method:   pgconv.TextValPtr(row.Method),
+		Source:   pgconv.TextVal(row.Source),
+		Imported: row.Imported,
+	}
+}
+
+func (r *Repo) InsertStagedEndpoints(ctx context.Context, eps []recon.StagedEndpointInput) error {
+	if len(eps) == 0 {
+		return nil
+	}
+	return r.tx(ctx, func(q *sqlc.Queries) error {
+		for _, e := range eps {
+			if err := q.InsertStagedEndpoint(ctx, sqlc.InsertStagedEndpointParams{
+				ProjectID: e.ProjectID,
+				JobID:     e.JobID,
+				Host:      e.Host,
+				Url:       e.URL,
+				Method:    pgconv.TextPtr(e.Method),
+				Source:    pgconv.Text(e.Source),
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *Repo) ListStagedEndpoints(ctx context.Context, projectID, jobID int32) ([]recon.StagedEndpoint, error) {
+	rows, err := r.q.ListStagedEndpoints(ctx, sqlc.ListStagedEndpointsParams{ProjectID: projectID, JobID: jobID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedEndpoint, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedEndpoint(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) ListStagedEndpointsByIDs(ctx context.Context, projectID int32, ids []int32) ([]recon.StagedEndpoint, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.q.ListStagedEndpointsByIDs(ctx, sqlc.ListStagedEndpointsByIDsParams{ProjectID: projectID, Ids: ids})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedEndpoint, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedEndpoint(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) MarkStagedEndpointsImported(ctx context.Context, projectID int32, ids []int32) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.q.MarkStagedEndpointsImported(ctx, sqlc.MarkStagedEndpointsImportedParams{ProjectID: projectID, Ids: ids})
+}
+
+func (r *Repo) ClearStagedEndpoints(ctx context.Context, projectID, jobID int32) (int64, error) {
+	return r.q.ClearStagedEndpoints(ctx, sqlc.ClearStagedEndpointsParams{ProjectID: projectID, JobID: jobID})
+}
+
+// ImportEndpoint создаёт реальный endpoint проекта из staged-строки, реюзя тот же
+// find-dup→insert путь, что и обычное добавление эндпоинта (inventoryrepo). Дедуп
+// на (host_id, path, method): дубль → created=false (идемпотентно, апдейт не нужен —
+// у staged-эндпоинта нет тела/заголовков).
+func (r *Repo) ImportEndpoint(ctx context.Context, in recon.EndpointImportInput) (bool, error) {
+	_, err := r.q.FindEndpointByPathMethod(ctx, sqlc.FindEndpointByPathMethodParams{
+		HostID: in.HostID, Path: in.Path, Method: nullHTTPMethod(in.Method), ExcludeID: 0,
+	})
+	if err == nil {
+		return false, nil // дубль уже есть
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return false, err
+	}
+	if _, err := r.q.InsertEndpoint(ctx, sqlc.InsertEndpointParams{
+		HostID:         in.HostID,
+		Path:           in.Path,
+		Method:         nullHTTPMethod(in.Method),
+		QueryParams:    []byte("[]"),
+		RequestHeaders: []byte("[]"),
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// nullHTTPMethod: пустой/nil метод → NULL http_method (staged-эндпоинты обычно
+// приходят URL-ами без метода).
+func nullHTTPMethod(m *string) sqlc.NullHttpMethod {
+	if m == nil || *m == "" {
+		return sqlc.NullHttpMethod{}
+	}
+	return sqlc.NullHttpMethod{HttpMethod: sqlc.HttpMethod(*m), Valid: true}
+}
+
+// ─────────────────────────── стейджинг JS-майнинга прогона ───────────────────────────
+
+func mapStagedJs(row sqlc.ReconFarmStagedJ) recon.StagedJs {
+	return recon.StagedJs{
+		ID:       row.ID,
+		Host:     row.Host,
+		URL:      row.Url,
+		Kind:     row.Kind,
+		Value:    row.Value,
+		Severity: pgconv.TextValPtr(row.Severity),
+		Imported: row.Imported,
+	}
+}
+
+func (r *Repo) InsertStagedJs(ctx context.Context, rows []recon.StagedJsInput) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	return r.tx(ctx, func(q *sqlc.Queries) error {
+		for _, j := range rows {
+			if err := q.InsertStagedJs(ctx, sqlc.InsertStagedJsParams{
+				ProjectID: j.ProjectID,
+				JobID:     j.JobID,
+				Host:      j.Host,
+				Url:       j.URL,
+				Kind:      j.Kind,
+				Value:     j.Value,
+				Severity:  pgconv.TextPtr(j.Severity),
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *Repo) ListStagedJs(ctx context.Context, projectID, jobID int32) ([]recon.StagedJs, error) {
+	rows, err := r.q.ListStagedJs(ctx, sqlc.ListStagedJsParams{ProjectID: projectID, JobID: jobID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedJs, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedJs(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) ListStagedJsByIDs(ctx context.Context, projectID int32, ids []int32) ([]recon.StagedJs, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.q.ListStagedJsByIDs(ctx, sqlc.ListStagedJsByIDsParams{ProjectID: projectID, Ids: ids})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedJs, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedJs(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) MarkStagedJsImported(ctx context.Context, projectID int32, ids []int32) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.q.MarkStagedJsImported(ctx, sqlc.MarkStagedJsImportedParams{ProjectID: projectID, Ids: ids})
+}
+
+func (r *Repo) ClearStagedJs(ctx context.Context, projectID, jobID int32) (int64, error) {
+	return r.q.ClearStagedJs(ctx, sqlc.ClearStagedJsParams{ProjectID: projectID, JobID: jobID})
+}
+
 // ─────────────────────────── js-файлы ───────────────────────────
 
 func (r *Repo) ListJsFiles(ctx context.Context, projectID int32) ([]recon.JSFileView, error) {

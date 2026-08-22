@@ -77,6 +77,33 @@ type Store interface {
 	// ClearStagedHosts удаляет staged-строки одного прогона; возвращает число удалённых.
 	ClearStagedHosts(ctx context.Context, projectID, jobID int32) (int64, error)
 
+	// ─── стейджинг эндпоинтов прогона (recon_farm_staged_endpoints) ───
+	// InsertStagedEndpoints вставляет staged-эндпоинты прогона (по строке на URL).
+	InsertStagedEndpoints(ctx context.Context, eps []StagedEndpointInput) error
+	// ListStagedEndpoints — все staged-эндпоинты одного прогона (для отчёта).
+	ListStagedEndpoints(ctx context.Context, projectID, jobID int32) ([]StagedEndpoint, error)
+	// ListStagedEndpointsByIDs — выбранные staged-эндпоинты проекта по id (для импорта).
+	ListStagedEndpointsByIDs(ctx context.Context, projectID int32, ids []int32) ([]StagedEndpoint, error)
+	// MarkStagedEndpointsImported помечает выбранные staged-эндпоинты импортированными.
+	MarkStagedEndpointsImported(ctx context.Context, projectID int32, ids []int32) error
+	// ClearStagedEndpoints удаляет staged-эндпоинты одного прогона; возвращает число удалённых.
+	ClearStagedEndpoints(ctx context.Context, projectID, jobID int32) (int64, error)
+	// ImportEndpoint создаёт реальный endpoint проекта (дедуп на host_id/path/method,
+	// как обычное добавление). created=false → уже существовал (идемпотентно).
+	ImportEndpoint(ctx context.Context, in EndpointImportInput) (created bool, err error)
+
+	// ─── стейджинг JS-майнинга прогона (recon_farm_staged_js) ───
+	// InsertStagedJs вставляет staged-находки JS прогона (по строке на секрет/эндпоинт).
+	InsertStagedJs(ctx context.Context, rows []StagedJsInput) error
+	// ListStagedJs — все staged-находки JS одного прогона (для отчёта).
+	ListStagedJs(ctx context.Context, projectID, jobID int32) ([]StagedJs, error)
+	// ListStagedJsByIDs — выбранные staged-находки JS проекта по id (для импорта).
+	ListStagedJsByIDs(ctx context.Context, projectID int32, ids []int32) ([]StagedJs, error)
+	// MarkStagedJsImported помечает выбранные staged-находки JS импортированными.
+	MarkStagedJsImported(ctx context.Context, projectID int32, ids []int32) error
+	// ClearStagedJs удаляет staged-находки JS одного прогона; возвращает число удалённых.
+	ClearStagedJs(ctx context.Context, projectID, jobID int32) (int64, error)
+
 	// ─── js-файлы (эндпоинты списка/архива) ───
 	ListJsFiles(ctx context.Context, projectID int32) ([]JSFileView, error)
 	JSFileURLs(ctx context.Context, projectID int32, hostID *int32) ([]string, error)

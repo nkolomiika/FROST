@@ -255,14 +255,17 @@ func (h *ReconHandler) getFarmReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rep)
 }
 
-// importFarmReport создаёт реальные хосты проекта из выбранных staged-строк и
-// помечает их imported. Возвращает {"imported":n}. Только лид/админ.
+// importFarmReport создаёт реальные объекты проекта из выбранных staged-строк
+// (хосты/эндпоинты/JS — что передано) и помечает их imported. Возвращает
+// {"imported_hosts","imported_endpoints","imported_js"}. Только лид/админ.
 func (h *ReconHandler) importFarmReport(w http.ResponseWriter, r *http.Request) {
 	if !h.requireLeadOrAdmin(w, r) {
 		return
 	}
 	var req struct {
-		HostIDs []int32 `json:"host_ids"`
+		HostIDs     []int32 `json:"host_ids"`
+		EndpointIDs []int32 `json:"endpoint_ids"`
+		JsIDs       []int32 `json:"js_ids"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, err)
@@ -270,12 +273,12 @@ func (h *ReconHandler) importFarmReport(w http.ResponseWriter, r *http.Request) 
 	}
 	pid := projectFromContext(r.Context()).ID
 	actor := actorFrom(r).ID
-	n, err := h.svc.ImportStagedHosts(r.Context(), pid, actor, req.HostIDs)
+	res, err := h.svc.ImportStagedReport(r.Context(), pid, actor, req.HostIDs, req.EndpointIDs, req.JsIDs)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"imported": n})
+	writeJSON(w, http.StatusOK, res)
 }
 
 // deleteFarmReport чистит staged-строки прогона (по ?job_id= либо последнего).

@@ -54,6 +54,11 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 
 		DnsxBin:          c.ReconDnsxBin,
 		DnsxBruteTimeout: secs(c.ReconDnsxBruteTimeoutSecs),
+
+		KatanaBin:        c.ReconKatanaBin,
+		GauBin:           c.ReconGauBin,
+		WaybackurlsBin:   c.ReconWaybackurlsBin,
+		EndpointsTimeout: secs(c.ReconEndpointsTimeoutSec),
 	}
 }
 

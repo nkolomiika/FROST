@@ -34,6 +34,20 @@ type stubStore struct {
 	clearedStaged  [][2]int32             // (project, job) очистки
 	clearStagedN   int64
 
+	// стейджинг эндпоинтов/JS прогона
+	stagedEndpointInserts []StagedEndpointInput
+	stagedEndpointsByJob  map[int32][]StagedEndpoint
+	stagedEndpointsByID   map[int32]StagedEndpoint
+	markedEndpointsImp    []int32
+	clearEndpointsN       int64
+	importEndpointFn      func(EndpointImportInput) (bool, error)
+	importEndpointCalls   int
+	stagedJsInserts       []StagedJsInput
+	stagedJsByJob         map[int32][]StagedJs
+	stagedJsByID          map[int32]StagedJs
+	markedJsImp           []int32
+	clearJsN              int64
+
 	// захваты
 	captured       *NewJob
 	jsFiles        []JSFileInput
@@ -150,6 +164,71 @@ func (s *stubStore) MarkStagedImported(_ context.Context, _ int32, ids []int32) 
 func (s *stubStore) ClearStagedHosts(_ context.Context, projectID, jobID int32) (int64, error) {
 	s.clearedStaged = append(s.clearedStaged, [2]int32{projectID, jobID})
 	return s.clearStagedN, nil
+}
+
+// ─── стейджинг эндпоинтов прогона ───
+
+func (s *stubStore) InsertStagedEndpoints(_ context.Context, eps []StagedEndpointInput) error {
+	s.stagedEndpointInserts = append(s.stagedEndpointInserts, eps...)
+	return nil
+}
+func (s *stubStore) ListStagedEndpoints(_ context.Context, _ int32, jobID int32) ([]StagedEndpoint, error) {
+	if s.stagedEndpointsByJob != nil {
+		return s.stagedEndpointsByJob[jobID], nil
+	}
+	return []StagedEndpoint{}, nil
+}
+func (s *stubStore) ListStagedEndpointsByIDs(_ context.Context, _ int32, ids []int32) ([]StagedEndpoint, error) {
+	out := make([]StagedEndpoint, 0, len(ids))
+	for _, id := range ids {
+		if e, ok := s.stagedEndpointsByID[id]; ok {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+func (s *stubStore) MarkStagedEndpointsImported(_ context.Context, _ int32, ids []int32) error {
+	s.markedEndpointsImp = append(s.markedEndpointsImp, ids...)
+	return nil
+}
+func (s *stubStore) ClearStagedEndpoints(context.Context, int32, int32) (int64, error) {
+	return s.clearEndpointsN, nil
+}
+func (s *stubStore) ImportEndpoint(_ context.Context, in EndpointImportInput) (bool, error) {
+	s.importEndpointCalls++
+	if s.importEndpointFn != nil {
+		return s.importEndpointFn(in)
+	}
+	return true, nil
+}
+
+// ─── стейджинг JS прогона ───
+
+func (s *stubStore) InsertStagedJs(_ context.Context, rows []StagedJsInput) error {
+	s.stagedJsInserts = append(s.stagedJsInserts, rows...)
+	return nil
+}
+func (s *stubStore) ListStagedJs(_ context.Context, _ int32, jobID int32) ([]StagedJs, error) {
+	if s.stagedJsByJob != nil {
+		return s.stagedJsByJob[jobID], nil
+	}
+	return []StagedJs{}, nil
+}
+func (s *stubStore) ListStagedJsByIDs(_ context.Context, _ int32, ids []int32) ([]StagedJs, error) {
+	out := make([]StagedJs, 0, len(ids))
+	for _, id := range ids {
+		if j, ok := s.stagedJsByID[id]; ok {
+			out = append(out, j)
+		}
+	}
+	return out, nil
+}
+func (s *stubStore) MarkStagedJsImported(_ context.Context, _ int32, ids []int32) error {
+	s.markedJsImp = append(s.markedJsImp, ids...)
+	return nil
+}
+func (s *stubStore) ClearStagedJs(context.Context, int32, int32) (int64, error) {
+	return s.clearJsN, nil
 }
 func (s *stubStore) PersistIP(_ context.Context, in IPPersistInput) (IPPersistOutcome, error) {
 	if s.persistIPFn != nil {

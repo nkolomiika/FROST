@@ -32,8 +32,10 @@ var farmCancelPollInterval = 2 * time.Second
 // проценты-вехи стадий (грубые, для прогресс-бара).
 const (
 	pctSubdomains = 5
-	pctResolve    = 45
-	pctPorts      = 80
+	pctResolve    = 35
+	pctPorts      = 60
+	pctEndpoints  = 75
+	pctJS         = 90
 	pctDone       = 100
 )
 
@@ -201,8 +203,7 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		return result, errFarmCancelled
 	}
 
-	prog.update(func(p *RunProgress) { p.Stage = "subdomains"; p.Percent = pctSubdomains })
-
+	// roots нужны и для стадии поддоменов, и как scope-фильтр стадии эндпоинтов.
 	roots, err := s.subsRoots(ctx, claim.ProjectID, "")
 	if err != nil {
 		if wasCancelled.Load() {
@@ -210,85 +211,75 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		}
 		return nil, err
 	}
-	if len(roots) == 0 {
-		result.Errors = append(result.Errors, "В проекте нет корневых доменов для прогона фермы")
-		prog.update(func(p *RunProgress) { p.Stage = "done"; p.Percent = pctDone; p.Done = true; p.Errors = result.Errors })
-		return result, nil
-	}
-	result.RootsScanned = len(roots)
 
-	// ── стадия 1: поддомены (пассив ‖ актив одновременно) ──
-	subs, sources, subErrs := s.runSubdomains(ctx, &runSvc, cfg, rs, roots, prog)
-	capped := reconnet.SortedCapped(subs, rs.SubsMaxResults)
-	result.SubdomainsFound = len(capped)
-	result.SourcesUsed = sortedSet(mapFromSlice(sources))
-	result.Errors = append(result.Errors, subErrs...)
-	if wasCancelled.Load() {
-		return finalizeCancelled()
-	}
-	prog.update(func(p *RunProgress) { p.SubsFound = len(capped); p.Stage = "resolve"; p.Percent = pctResolve })
-
-	// ── стадия 2: резолв + liveness (dnsx resolve → httpx-pd) БЕЗ персиста ──
-	// Прогон фермы ничего не пишет в проект: находки уходят в стейджинг. Здесь мы
-	// только собираем по каждому новому поддомену резолв IP, живость и веб-порты
-	// (http_status), а persist заменён на вставку staged-строк в конце стадии 3.
-	newSubs := s.filterNewSubs(ctx, claim.ProjectID, capped)
-	result.SubdomainsNew = len(newSubs)
-	if len(newSubs) > rs.FarmMaxTargets {
-		result.Errors = append(result.Errors, "Поддоменов больше лимита пробива — часть не резолвилась")
-		newSubs = newSubs[:rs.FarmMaxTargets]
-	}
 	// accums — накопитель staged-хостов по имени; order хранит порядок открытия.
+	// Наполняется стадией поддоменов (свежие живые хосты) ИЛИ, если она выключена,
+	// существующими хостами проекта — чтобы поздние стадии (порты/эндпоинты/JS)
+	// работали по известным хостам (пере-скан).
 	accums := map[string]*stagedHostAccum{}
 	var order []string
-	if len(newSubs) > 0 {
-		// dnsx-резолв и httpx-liveness — единый dry-вызов, но во фронте это два
-		// видимых шага; оба вешаем на один stepCtx, чтобы cancel любого оборвал вызов.
-		stepCtx, stepCancel := context.WithCancel(ctx)
-		resolveID := prog.addStep(RunStep{Tool: "dnsx", Args: "dnsx -resp -silent (resolve)", Target: "новые поддомены", StartedAt: time.Now()}, stepCancel)
-		httpxID := prog.addStep(RunStep{Tool: "httpx-pd", Args: "httpx-pd -json -td -cdn (liveness)", Target: "resolved", StartedAt: time.Now()}, stepCancel)
-		dryHosts, dryErrs := runSvc.probeHostsDry(stepCtx, strings.Join(newSubs, "\n"))
-		prog.removeStep(resolveID)
-		prog.removeStep(httpxID)
-		stepCancel()
-		result.Errors = append(result.Errors, dryErrs...)
+
+	if cfg.StageSubdomains {
+		prog.update(func(p *RunProgress) { p.Stage = "subdomains"; p.Percent = pctSubdomains })
+		if len(roots) == 0 {
+			result.Errors = append(result.Errors, "В проекте нет корневых доменов для прогона фермы")
+			prog.update(func(p *RunProgress) { p.Stage = "done"; p.Percent = pctDone; p.Done = true; p.Errors = result.Errors })
+			return result, nil
+		}
+		result.RootsScanned = len(roots)
+
+		// ── стадия 1: поддомены (пассив ‖ актив одновременно) ──
+		subs, sources, subErrs := s.runSubdomains(ctx, &runSvc, cfg, rs, roots, prog)
+		capped := reconnet.SortedCapped(subs, rs.SubsMaxResults)
+		result.SubdomainsFound = len(capped)
+		result.SourcesUsed = sortedSet(mapFromSlice(sources))
+		result.Errors = append(result.Errors, subErrs...)
 		if wasCancelled.Load() {
 			return finalizeCancelled()
 		}
-		if stepCtx.Err() != nil {
-			// per-step cancel: шаг оборван, но прогон НЕ валим — мягкая пометка.
-			result.Errors = append(result.Errors, "процесс отменён: dnsx/httpx-pd новые поддомены")
+		prog.update(func(p *RunProgress) { p.SubsFound = len(capped); p.Stage = "resolve"; p.Percent = pctResolve })
+
+		// ── стадия 2: резолв + liveness (dnsx resolve → httpx-pd) БЕЗ персиста ──
+		newSubs := s.filterNewSubs(ctx, claim.ProjectID, capped)
+		result.SubdomainsNew = len(newSubs)
+		if len(newSubs) > rs.FarmMaxTargets {
+			result.Errors = append(result.Errors, "Поддоменов больше лимита пробива — часть не резолвилась")
+			newSubs = newSubs[:rs.FarmMaxTargets]
 		}
-		alive := 0
-		for _, dh := range dryHosts {
-			a := &stagedHostAccum{hostname: dh.hostname, isIP: dh.isIP, ip: dh.ip, alive: dh.alive, source: stagedSourceSub, ports: map[int]StagedPort{}}
-			for _, p := range dh.ports {
-				a.ports[p.port] = StagedPort{Port: p.port, Proto: "tcp", State: strings.ToLower(p.state), Service: strOrNil(p.service), Version: p.version, HTTPStatus: p.httpStatus}
-			}
-			accums[dh.hostname] = a
-			order = append(order, dh.hostname)
-			if dh.alive {
-				alive++
-			}
+		if canceled := s.stageResolve(ctx, &runSvc, newSubs, stagedSourceSub, "новые поддомены", accums, &order, prog, result, &wasCancelled); canceled {
+			return finalizeCancelled()
 		}
-		result.HostsCreated = len(order)
-		result.HostsOnline = alive
-		prog.update(func(p *RunProgress) { p.HostsFound = len(order) })
+	} else {
+		// Стадия поддоменов выключена: работаем по существующим хостам проекта.
+		prog.update(func(p *RunProgress) { p.Stage = "resolve"; p.Percent = pctResolve })
+		existing, herr := s.store.ProjectAllHostnames(ctx, claim.ProjectID)
+		if herr != nil {
+			if wasCancelled.Load() {
+				return finalizeCancelled()
+			}
+			return nil, herr
+		}
+		existing = dedup(existing)
+		if len(existing) > rs.FarmMaxTargets {
+			existing = existing[:rs.FarmMaxTargets]
+		}
+		if canceled := s.stageResolve(ctx, &runSvc, existing, stagedSourceProject, "хосты проекта", accums, &order, prog, result, &wasCancelled); canceled {
+			return finalizeCancelled()
+		}
 	}
 	if wasCancelled.Load() {
 		return finalizeCancelled()
 	}
-	prog.update(func(p *RunProgress) { p.Stage = "ports"; p.Percent = pctPorts })
 
-	// ── стадия 3: прогрессивный скан портов (nmap -sV) над открытыми хостами ──
-	// Не бьём -p- по всему сразу: идём фазами (top-100 → top-1000 → опц. весь
-	// диапазон), КАЖДАЯ с -sV, чтобы сервисы опознавались. Внутри фазы — bounded
-	// errgroup по хостам (быстрые фазы вперёд). Порты объединяются по хосту.
-	if canceled := s.runFarmPorts(ctx, &runSvc, cfg, rs, accums, order, prog, result, &wasCancelled); canceled {
-		return finalizeCancelled()
+	// ── стадия портов: прогрессивный nmap -sV (gated: stage_ports) ──
+	prog.update(func(p *RunProgress) { p.Stage = "ports"; p.Percent = pctPorts })
+	if cfg.StagePorts {
+		if canceled := s.runFarmPorts(ctx, &runSvc, cfg, rs, accums, order, prog, result, &wasCancelled); canceled {
+			return finalizeCancelled()
+		}
 	}
 
-	// ── вставка staged-строк (по строке на каждый открытый хост) ──
+	// ── вставка staged-строк хостов (по строке на каждый открытый хост) ──
 	totalPorts := 0
 	inputs := make([]StagedHostInput, 0, len(order))
 	for _, hn := range order {
@@ -307,6 +298,26 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 	}
 	result.PortsFound = totalPorts
 	prog.update(func(p *RunProgress) { p.PortsFound = totalPorts })
+	if wasCancelled.Load() {
+		return finalizeCancelled()
+	}
+
+	// ── стадия эндпоинтов: katana + gau + waybackurls (gated: stage_endpoints) ──
+	if cfg.StageEndpoints {
+		if canceled := s.runFarmEndpoints(ctx, &runSvc, cfg, rs, roots, accums, order, claim.ProjectID, claim.ID, prog, result, &wasCancelled); canceled {
+			return finalizeCancelled()
+		}
+	}
+	if wasCancelled.Load() {
+		return finalizeCancelled()
+	}
+
+	// ── стадия JS-майнинга: trufflehog + regex по живым хостам (gated: stage_js) ──
+	if cfg.StageJs {
+		if canceled := s.runFarmJS(ctx, &runSvc, cfg, rs, accums, order, claim.ProjectID, claim.ID, prog, result, &wasCancelled); canceled {
+			return finalizeCancelled()
+		}
+	}
 	if wasCancelled.Load() {
 		return finalizeCancelled()
 	}
