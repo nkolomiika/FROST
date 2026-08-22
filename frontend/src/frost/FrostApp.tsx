@@ -6529,14 +6529,15 @@ export function FrostApp() {
                 : renderNoAccessPage("The Members section is admin-only — this is where users are created and roles assigned."))}
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
-            {/* Копирайт — в общем потоке в самом низу main: скроллится вместе с
-                контентом и уходит за экран, а не залипает поверх. */}
-            <footer style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "24px 16px 8px", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
-              <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
-            </footer>
           </main>
         </div>
       </div>
+
+      {/* Копирайт зафиксирован по центру ВСЕГО экрана у самого низа (во всю ширину,
+          не смещён сайдбаром). pointer-events:none — не перехватывает клики. */}
+      <footer style={{ position: "fixed", left: 0, right: 0, bottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap", pointerEvents: "none", zIndex: 5 }}>
+        <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+      </footer>
 
       {/* ===== modals ===== */}
       {/* workspace user editor */}
