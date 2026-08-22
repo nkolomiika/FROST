@@ -88,7 +88,7 @@ const ACT_NOUN: Record<string, [string, string]> = {
 /** Entity types the feed never shows: ports are too noisy to be worth a row. */
 const ACT_HIDDEN = new Set(["port"]);
 /** Entity types that are always their own card, never merged with siblings. */
-const ACT_STANDALONE = new Set(["vulnerability", "project", "host_farm", "ip_farm", "js_farm", "sub_farm"]);
+const ACT_STANDALONE = new Set(["vulnerability", "project", "host_farm", "ip_farm", "js_farm", "sub_farm", "farm_run"]);
 
 const actDetail = (a: ProjectActivityItem, k: string): string => {
   const v = a.details?.[k];
@@ -162,6 +162,35 @@ export function groupActivity(items: ProjectActivityItem[], resolve: ActivityRes
     if (!bucket.length) return;
     const first = bucket[0];
     const type = first.entity_type || "event";
+    // Полный прогон фермы — карточка «ran a recon scan» со сводкой находок.
+    if (type === "farm_run") {
+      const d = (first.details ?? {}) as Record<string, unknown>;
+      const num = (k: string): number => (typeof d[k] === "number" ? (d[k] as number) : 0);
+      const parts: [string, string][] = [
+        ["subdomains_found", "subdomains"],
+        ["hosts_created", "hosts"],
+        ["ports_found", "ports"],
+        ["endpoints_found", "endpoints"],
+        ["js_found", "JS files"],
+        ["leaks_found", "leaks"],
+      ];
+      const lines: ActivityLine[] = parts
+        .filter(([k]) => num(k) > 0)
+        .map(([k, label], i) => ({ key: `${first.id}-${i}`, text: `${num(k)} ${label}` }));
+      if (lines.length === 0) lines.push({ key: `${first.id}-0`, text: "no new results" });
+      groups.push({
+        key: `g${first.id}`,
+        actor: first.username || "System",
+        verb: "ran",
+        subject: "a recon scan",
+        tone: ACT_TONE.info,
+        time: relTime(first.created_at),
+        lines,
+        vulnId: null,
+      });
+      bucket = [];
+      return;
+    }
     // Фарм-события — своя карточка со списком добавленных объектов из details.items.
     const farmNoun = FARM_NOUN[type];
     if (farmNoun) {

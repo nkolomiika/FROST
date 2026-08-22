@@ -356,6 +356,9 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		p.PortsFound = result.PortsFound
 		p.Errors = result.Errors
 	})
+	// Событие в ленту активности: полный прогон фермы завершён — со сводкой находок
+	// (поддомены/хосты/порты/эндпоинты/JS/утечки). "errors" в детали не тащим.
+	s.audit(ctx, claim.CreatedBy, "farm_run", detailsFrom(result, claim.ProjectID, "errors"))
 	return result, nil
 }
 
