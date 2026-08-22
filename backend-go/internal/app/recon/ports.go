@@ -81,6 +81,9 @@ type Store interface {
 	ListJsFiles(ctx context.Context, projectID int32) ([]JSFileView, error)
 	JSFileURLs(ctx context.Context, projectID int32, hostID *int32) ([]string, error)
 	DeleteJSFilesForHost(ctx context.Context, projectID, hostID int32) error
+	// BulkDeleteJSFiles удаляет JS-находки проекта по списку id одним DELETE;
+	// возвращает число реально удалённых (чужие/несуществующие id не считаются).
+	BulkDeleteJSFiles(ctx context.Context, projectID int32, ids []int32) (int64, error)
 
 	// ─── конфигурация фермы (пер-проектный JSONB-блоб) ───
 	GetFarmConfig(ctx context.Context, projectID int32) (FarmConfig, error)

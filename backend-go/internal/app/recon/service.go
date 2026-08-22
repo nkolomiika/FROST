@@ -493,6 +493,21 @@ func (s *Service) DeleteJSForHost(ctx context.Context, projectID, hostID int32) 
 	return s.store.DeleteJSFilesForHost(ctx, projectID, hostID)
 }
 
+// DeleteJSFilesBulk удаляет JS-находки проекта по списку id одним запросом.
+// Скоуп проекта в SQL — чужие/несуществующие id не удаляются. Пустой список —
+// no-op (0). Аудита нет — зеркало DeleteJSForHost (одиночное удаление без журнала).
+// Возвращает число реально удалённых.
+func (s *Service) DeleteJSFilesBulk(ctx context.Context, projectID int32, ids []int32) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	deleted, err := s.store.BulkDeleteJSFiles(ctx, projectID, ids)
+	if err != nil {
+		return 0, err
+	}
+	return int(deleted), nil
+}
+
 // ─────────────────────────── полный прогон фермы ───────────────────────────
 
 // StartFarmRun ставит задачу полного прогона фермы (kind='farm_run'). useDefaults

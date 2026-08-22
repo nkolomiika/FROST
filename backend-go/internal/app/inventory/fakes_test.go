@@ -81,7 +81,10 @@ func (f *fakeInvStore) ListHostsPage(_ context.Context, p HostListParams) ([]Hos
 func (f *fakeInvStore) CreateHost(context.Context, NewHost, []IPEntry) (int32, error) { return 1, nil }
 func (f *fakeInvStore) UpdateHost(context.Context, HostUpdateParams) error            { return nil }
 func (f *fakeInvStore) DeleteHost(context.Context, int32, int32) error                { return nil }
-func (f *fakeInvStore) LoadTrees(context.Context, []Host) ([]HostAggregate, error)    { return nil, nil }
+func (f *fakeInvStore) BulkDeleteHosts(context.Context, int32, []int32) (int64, error) {
+	return 0, nil
+}
+func (f *fakeInvStore) LoadTrees(context.Context, []Host) ([]HostAggregate, error) { return nil, nil }
 func (f *fakeInvStore) GetHostIP(context.Context, int32, int32) (*HostIP, error) {
 	return nil, ErrNoRows
 }
@@ -116,6 +119,9 @@ func (f *fakeInvStore) GetEndpointForHost(context.Context, int32, int32) (*Endpo
 	return nil, ErrNoRows
 }
 func (f *fakeInvStore) DeleteEndpoint(context.Context, int32) error { return nil }
+func (f *fakeInvStore) BulkDeleteEndpoints(context.Context, int32, []int32) (int64, error) {
+	return 0, nil
+}
 func (f *fakeInvStore) ImportPCF(context.Context, int32, []PcfHost) (ImportResult, error) {
 	return ImportResult{}, nil
 }

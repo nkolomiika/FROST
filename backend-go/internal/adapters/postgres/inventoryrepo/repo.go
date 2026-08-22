@@ -271,6 +271,13 @@ func (r *Repo) DeleteHost(ctx context.Context, projectID, hostID int32) error {
 	return r.q.DeleteHost(ctx, sqlc.DeleteHostParams{ID: hostID, ProjectID: projectID})
 }
 
+func (r *Repo) BulkDeleteHosts(ctx context.Context, projectID int32, ids []int32) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	return r.q.BulkDeleteHosts(ctx, sqlc.BulkDeleteHostsParams{ProjectID: projectID, Ids: ids})
+}
+
 func (r *Repo) GetHostIP(ctx context.Context, hostID, ipID int32) (*inventory.HostIP, error) {
 	ip, err := r.q.GetHostIPForHost(ctx, sqlc.GetHostIPForHostParams{ID: ipID, HostID: hostID})
 	if err != nil {
@@ -560,6 +567,13 @@ func (r *Repo) UpdateEndpoint(ctx context.Context, p inventory.UpdateEndpointPar
 
 func (r *Repo) DeleteEndpoint(ctx context.Context, id int32) error {
 	return r.q.DeleteEndpoint(ctx, id)
+}
+
+func (r *Repo) BulkDeleteEndpoints(ctx context.Context, projectID int32, ids []int32) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	return r.q.BulkDeleteEndpoints(ctx, sqlc.BulkDeleteEndpointsParams{ProjectID: projectID, Ids: ids})
 }
 
 // ─────────────────────────── audit ───────────────────────────

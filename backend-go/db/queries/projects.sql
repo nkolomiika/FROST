@@ -225,6 +225,14 @@ SELECT EXISTS (SELECT 1 FROM project_hidden_ips WHERE project_id = $1 AND ip_add
 INSERT INTO project_hidden_ips (project_id, ip_address, created_by) VALUES ($1, $2, $3)
 ON CONFLICT ON CONSTRAINT uq_project_hidden_ip DO NOTHING;
 
+-- name: BulkInsertHiddenIPs :execrows
+-- Пакетное скрытие адресов: апсерт по (project_id, ip_address) для списка адресов
+-- (ON CONFLICT DO NOTHING). Возвращает число реально добавленных (уже скрытые не
+-- считаются). Зеркало InsertHiddenIP для множества адресов.
+INSERT INTO project_hidden_ips (project_id, ip_address, created_by)
+SELECT sqlc.arg('project_id'), unnest(sqlc.arg('addrs')::text[]), sqlc.arg('created_by')
+ON CONFLICT ON CONSTRAINT uq_project_hidden_ip DO NOTHING;
+
 -- name: DeleteHiddenIP :exec
 DELETE FROM project_hidden_ips WHERE project_id = $1 AND ip_address = $2;
 

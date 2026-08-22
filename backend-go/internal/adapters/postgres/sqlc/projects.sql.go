@@ -11,6 +11,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bulkInsertHiddenIPs = `-- name: BulkInsertHiddenIPs :execrows
+INSERT INTO project_hidden_ips (project_id, ip_address, created_by)
+SELECT $1, unnest($2::text[]), $3
+ON CONFLICT ON CONSTRAINT uq_project_hidden_ip DO NOTHING
+`
+
+type BulkInsertHiddenIPsParams struct {
+	ProjectID int32       `json:"project_id"`
+	Addrs     []string    `json:"addrs"`
+	CreatedBy pgtype.Int4 `json:"created_by"`
+}
+
+// Пакетное скрытие адресов: апсерт по (project_id, ip_address) для списка адресов
+// (ON CONFLICT DO NOTHING). Возвращает число реально добавленных (уже скрытые не
+// считаются). Зеркало InsertHiddenIP для множества адресов.
+func (q *Queries) BulkInsertHiddenIPs(ctx context.Context, arg BulkInsertHiddenIPsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, bulkInsertHiddenIPs, arg.ProjectID, arg.Addrs, arg.CreatedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countNoteComments = `-- name: CountNoteComments :one
 SELECT count(*) FROM project_note_comments WHERE project_id = $1 AND note_id = $2
 `

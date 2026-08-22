@@ -1129,6 +1129,41 @@ func (s *Service) HideIP(ctx context.Context, projectID int32, ipAddress string,
 	return nil
 }
 
+// HideIPsBulk скрывает список адресов одним запросом (в транзакции: снос отдельных
+// IP-хостов + апсерт скрытия). Пустые/дублирующиеся адреса нормализуются. Пустой
+// список — no-op (0). Пишет одну сводную запись аудита (зеркало HideIP, которое
+// журналирует одиночное скрытие). Возвращает число реально скрытых.
+func (s *Service) HideIPsBulk(ctx context.Context, projectID int32, ipAddresses []string, actorID int32) (int, error) {
+	seen := make(map[string]struct{}, len(ipAddresses))
+	ips := make([]string, 0, len(ipAddresses))
+	for _, raw := range ipAddresses {
+		ip := strings.TrimSpace(raw)
+		if ip == "" {
+			continue
+		}
+		if _, ok := seen[ip]; ok {
+			continue
+		}
+		seen[ip] = struct{}{}
+		ips = append(ips, ip)
+	}
+	if len(ips) == 0 {
+		return 0, nil
+	}
+	hidden, err := s.store.BulkHideIPs(ctx, projectID, ips, actorID)
+	if err != nil {
+		return 0, err
+	}
+	s.audit(ctx, AuditEntry{
+		UserID:     &actorID,
+		Action:     "DELETE",
+		EntityType: "ip_address",
+		Details:    mustJSON(map[string]any{"project_id": strconv.Itoa(int(projectID)), "ip_addresses": ips, "hidden": hidden}),
+	})
+	// TODO(phase2): ws broadcast (hosts deleted)
+	return int(hidden), nil
+}
+
 // UnhideIP снимает адрес со скрытия.
 func (s *Service) UnhideIP(ctx context.Context, projectID int32, ipAddress string, actorID int32) error {
 	ip := strings.TrimSpace(ipAddress)

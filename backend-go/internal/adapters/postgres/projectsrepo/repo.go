@@ -663,6 +663,41 @@ func (r *Repo) HideIP(ctx context.Context, projectID int32, ip string, actorID i
 	})
 }
 
+// BulkHideIPs скрывает список адресов в одной транзакции: для каждого адреса
+// сносит отдельные IP-хосты (как HideIP), затем одним апсертом добавляет адреса в
+// hidden-ips. Возвращает число реально скрытых (уже скрытые не считаются).
+func (r *Repo) BulkHideIPs(ctx context.Context, projectID int32, ips []string, actorID int32) (int64, error) {
+	if len(ips) == 0 {
+		return 0, nil
+	}
+	var hidden int64
+	err := r.tx(ctx, func(q *sqlc.Queries) error {
+		for _, ip := range ips {
+			hostIDs, err := q.ListStandaloneIPHostIDs(ctx, sqlc.ListStandaloneIPHostIDsParams{ProjectID: projectID, IpAddress: ip})
+			if err != nil {
+				return err
+			}
+			for _, hid := range hostIDs {
+				if err := q.DeleteHostByID(ctx, hid); err != nil {
+					return err
+				}
+			}
+		}
+		n, err := q.BulkInsertHiddenIPs(ctx, sqlc.BulkInsertHiddenIPsParams{
+			ProjectID: projectID, Addrs: ips, CreatedBy: pgconv.Int4(&actorID),
+		})
+		if err != nil {
+			return err
+		}
+		hidden = n
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return hidden, nil
+}
+
 func (r *Repo) UnhideIP(ctx context.Context, projectID int32, ip string) error {
 	return r.q.DeleteHiddenIP(ctx, sqlc.DeleteHiddenIPParams{ProjectID: projectID, IpAddress: ip})
 }
