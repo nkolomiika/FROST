@@ -4809,7 +4809,7 @@ export function FrostApp() {
               {sec === "hosts" && rv === "js" && !state.jsScanSetupOpen && !state.exportPageOpen && !_jsd && (
                 <>
                   <button className="clk" onClick={() => openReconExport("js-endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
+                    <Icon name="download" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
                     <Icon name="search" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Select domains & scan")}
@@ -6318,7 +6318,7 @@ export function FrostApp() {
           const canExport = f.endpoints.length > 0 || f.secrets.length > 0;
           return (
             <button className="clk" onClick={() => openReconExport(f.endpoints.length ? "js-endpoints" : "js-secrets")} disabled={!canExport} style={{ height: 38, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canExport ? "pointer" : "default" }}>
-              <Icon name="upload" size={14} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
+              <Icon name="download" size={14} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
             </button>
           );
         })()}
