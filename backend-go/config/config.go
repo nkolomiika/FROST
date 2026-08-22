@@ -100,7 +100,8 @@ type Config struct {
 
 	// --- Ферма JS ---
 	JSFarmMaxFilesPerHost        int     `env:"JS_FARM_MAX_FILES_PER_HOST" envDefault:"50"`
-	JSFarmMaxFileBytes           int     `env:"JS_FARM_MAX_FILE_BYTES" envDefault:"5000000"`
+	JSFarmMaxFileBytes           int     `env:"JS_FARM_MAX_FILE_BYTES" envDefault:"0"`
+	JSFarmMaxInflightBytes       int     `env:"JS_FARM_MAX_INFLIGHT_BYTES" envDefault:"268435456"`
 	JSFarmDownloadTimeoutSeconds float64 `env:"JS_FARM_DOWNLOAD_TIMEOUT_SECONDS" envDefault:"15.0"`
 	JSFarmMaxConcurrency         int     `env:"JS_FARM_MAX_CONCURRENCY" envDefault:"10"`
 	JSFarmMaxTotalFiles          int     `env:"JS_FARM_MAX_TOTAL_FILES" envDefault:"500"`
@@ -143,6 +144,8 @@ type Config struct {
 	ReconWaybackurlsBin      string  `env:"RECON_WAYBACKURLS_BIN" envDefault:"waybackurls"`
 	ReconFfufBin             string  `env:"RECON_FFUF_BIN" envDefault:"ffuf"`
 	ReconEndpointsTimeoutSec float64 `env:"RECON_ENDPOINTS_TIMEOUT_SECONDS" envDefault:"180.0"`
+	ReconEndpointsMaxPerHost int     `env:"RECON_ENDPOINTS_MAX_PER_HOST" envDefault:"20000"`
+	ReconEndpointsMaxTotal   int     `env:"RECON_ENDPOINTS_MAX_TOTAL" envDefault:"100000"`
 
 	// --- Полный прогон фермы (kind='farm_run'): активный брут dnsx + словари ---
 	ReconDnsxBin              string  `env:"RECON_DNSX_BIN" envDefault:"dnsx"`

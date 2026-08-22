@@ -5696,7 +5696,7 @@ export function FrostApp() {
         <div style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, lineHeight: 1.4 }}>{desc}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 240px", minWidth: 200 }}>
-            <FrostSelect value={value} options={options} onChange={onPick} />
+            <FrostSelect value={value} options={options} onChange={onPick} searchable searchPlaceholder={t("Search wordlists…")} />
           </div>
           {uploadBtn(target)}
         </div>
@@ -6388,7 +6388,7 @@ export function FrostApp() {
           <div style={{ ...CARD, overflow: "hidden" }}>
             {/* No column headers over an empty table (same as the hosts table). */}
             {ipsRows.length > 0 && (
-              <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", alignItems: "center", textAlign: "center", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div>{t("IP address")}</div><div>{t("Hostname")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("ips")}</div>
               </div>
             )}
@@ -6474,7 +6474,7 @@ export function FrostApp() {
           {/* Прогресс скана — компактной пилюлей в шапке (справа от Total), не баннером. */}
           <div style={{ ...CARD, overflow: "hidden" }}>
             {jsGroups.length > 0 && (
-              <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", alignItems: "center", textAlign: "center", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div /><div>{t("Host")}</div><div>{t("Files")}</div><div>{t("Secrets")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("js")}</div>
               </div>
             )}
@@ -6540,7 +6540,7 @@ export function FrostApp() {
         <div style={{ ...CARD, overflow: "hidden" }}>
           {/* No column headers over an empty table — only show them with rows. */}
           {hostsList.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: hostGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", alignItems: "center", textAlign: "center", gridTemplateColumns: hostGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div /><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("hosts")}</div>
             </div>
           )}
@@ -7651,11 +7651,10 @@ export function FrostApp() {
       {state.pwError && (
         <div style={{ marginTop: 12, font: "600 12.5px Inter,sans-serif", color: "var(--fr-danger)" }}>{state.pwError}</div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
         <button className="clk" onClick={changeOwnPassword} disabled={!pwReady || state.pwBusy} style={{ height: 44, padding: "0 18px", border: "none", borderRadius: 11, background: !pwReady || state.pwBusy ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: !pwReady || state.pwBusy ? "not-allowed" : "pointer" }}>
           {state.pwBusy ? t("Changing…") : t("Change password")}
         </button>
-        <span style={{ font: "500 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>{t("You will be asked to sign in again.")}</span>
       </div>
     </div>
     <div style={{ ...CARD, padding: "22px 24px" }}>

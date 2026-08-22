@@ -45,6 +45,48 @@ func KatanaArgs(host string, cfg EndpointToolConfig) []string {
 	return args
 }
 
+// streamHits гоняет cmd и стримит его stdout построчно в EndpointHit'ы, не буферизуя
+// весь вывод в памяти: gau --subs / waybackurls на живом домене легко выдают сотни
+// МБ (100k–1M+ строк), а cmd.Output() держал бы это всё в RAM разом (× конкурентность
+// хостов → OOM). maxLines>0 — потолок на хост: набрали — убиваем процесс и выходим
+// (поток архивных URL всё равно почти весь шум). label — для текста ошибки.
+func streamHits(cmd *exec.Cmd, source, label string, maxLines int) ([]EndpointHit, string) {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, label + ": " + errName(err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, label + ": " + errName(err)
+	}
+	var hits []EndpointHit
+	killed := false
+	sc := bufio.NewScanner(stdout)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "http://") && !strings.HasPrefix(line, "https://") {
+			continue
+		}
+		hits = append(hits, EndpointHit{URL: line, Source: source})
+		if maxLines > 0 && len(hits) >= maxLines {
+			killed = true
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			break
+		}
+	}
+	werr := cmd.Wait()
+	// Убили сами (достигли потолка) или что-то нашли — не считаем ошибкой.
+	if werr != nil && !killed && len(hits) == 0 {
+		return nil, label + ": " + errName(werr)
+	}
+	return hits, ""
+}
+
 // KatanaURLs гоняет katana-краул по хосту и возвращает найденные URL. Нет бинаря →
 // пусто (не ошибка). Отмена — через ctx (per-step cancel рвёт процесс).
 func KatanaURLs(ctx context.Context, host string, cfg EndpointToolConfig, s Settings) ([]EndpointHit, string) {
@@ -56,11 +98,7 @@ func KatanaURLs(ctx context.Context, host string, cfg EndpointToolConfig, s Sett
 	c, cancel := context.WithTimeout(ctx, s.EndpointsTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(c, s.KatanaBin, KatanaArgs(host, cfg)...)
-	out, err := cmd.Output()
-	if err != nil && len(out) == 0 {
-		return nil, "katana(" + host + "): " + errName(err)
-	}
-	return hitsFromLines(string(out), "katana"), ""
+	return streamHits(cmd, "katana", "katana("+host+")", s.EndpointsMaxPerHost)
 }
 
 // GauURLs гоняет gau (архивные URL) по хосту (домен через stdin) и возвращает URL.
@@ -73,11 +111,7 @@ func GauURLs(ctx context.Context, host string, s Settings) ([]EndpointHit, strin
 	defer cancel()
 	cmd := exec.CommandContext(c, s.GauBin, "--subs")
 	cmd.Stdin = strings.NewReader(host + "\n")
-	out, err := cmd.Output()
-	if err != nil && len(out) == 0 {
-		return nil, "gau(" + host + "): " + errName(err)
-	}
-	return hitsFromLines(string(out), "gau"), ""
+	return streamHits(cmd, "gau", "gau("+host+")", s.EndpointsMaxPerHost)
 }
 
 // WaybackURLs гоняет waybackurls (архив Wayback) по хосту (домен через stdin) и
@@ -90,11 +124,7 @@ func WaybackURLs(ctx context.Context, host string, s Settings) ([]EndpointHit, s
 	defer cancel()
 	cmd := exec.CommandContext(c, s.WaybackurlsBin)
 	cmd.Stdin = strings.NewReader(host + "\n")
-	out, err := cmd.Output()
-	if err != nil && len(out) == 0 {
-		return nil, "waybackurls(" + host + "): " + errName(err)
-	}
-	return hitsFromLines(string(out), "waybackurls"), ""
+	return streamHits(cmd, "waybackurls", "waybackurls("+host+")", s.EndpointsMaxPerHost)
 }
 
 // hitsFromLines разбирает построчный вывод инструмента в EndpointHit'ы: только

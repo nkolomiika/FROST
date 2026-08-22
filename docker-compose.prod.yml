@@ -17,20 +17,29 @@
 # postgres и mailpit добираются SSH-туннелем.
 #   ssh -L 8000:127.0.0.1:8000 root@<server>
 
+# Лимиты памяти на контейнеры. mem_limit — ПОТОЛОК: контейнер убивается только если
+# ВЫШЕЛ за свой лимит, healthy-контейнеры он не трогает, память не резервирует. Поэтому
+# щедрые дефолты безопасны — они лишь ловят распухание (главный риск — recon-worker:
+# nmap/ffuf/katana/trufflehog + JS-бюджет). Значения переопределяются из .env.prod
+# (MEM_RECON, MEM_BACKEND, …) под RAM конкретной машины.
 services:
   backend:
     restart: unless-stopped
+    mem_limit: ${MEM_BACKEND:-1g}
     ports: !override
       - "127.0.0.1:8000:8000"
 
   mail-worker:
     restart: unless-stopped
+    mem_limit: ${MEM_MAIL:-256m}
 
   recon-worker:
     restart: unless-stopped
+    mem_limit: ${MEM_RECON:-2g}
 
   report-sidecar:
     restart: unless-stopped
+    mem_limit: ${MEM_SIDECAR:-512m}
 
   frontend:
     restart: unless-stopped
@@ -39,9 +48,11 @@ services:
     # уже установлены на этапе сборки, а повторный npm install поверх анонимного
     # volume /app/node_modules падает с ENOTEMPTY и загоняет контейнер в restart-loop.
     command: npm run dev
+    mem_limit: ${MEM_FRONTEND:-1g}
 
   db:
     restart: unless-stopped
+    mem_limit: ${MEM_DB:-1g}
     # Дефолтные user/password из базового compose — для дева. В проде
     # пароль приходит из .env.prod (deploy.sh экспортирует его для интерполяции).
     environment:
@@ -51,6 +62,7 @@ services:
 
   minio:
     restart: unless-stopped
+    mem_limit: ${MEM_MINIO:-768m}
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER не задан в .env.prod}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD не задан в .env.prod}
@@ -60,15 +72,18 @@ services:
 
   rabbitmq:
     restart: unless-stopped
+    mem_limit: ${MEM_RABBIT:-512m}
 
   mailpit:
     restart: unless-stopped
+    mem_limit: ${MEM_MAILPIT:-128m}
     ports: !override
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"
 
   nginx:
     restart: unless-stopped
+    mem_limit: ${MEM_NGINX:-256m}
     # Только 443. :80 (redirect на https) и :3000 (дев-привычка) наружу не
     # публикуем — на этой машине 80 занят посторонним сервисом. Следствие:
     # http://<адрес> не отвечает, адрес надо набирать с https:// явно.

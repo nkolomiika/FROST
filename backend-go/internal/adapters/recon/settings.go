@@ -17,11 +17,12 @@ type Settings struct {
 	FarmHostResolveIPsEnabled bool
 	FarmIPResolveHostsEnabled bool
 
-	JSMaxFilesPerHost int
-	JSMaxFileBytes    int
-	JSDownloadTimeout time.Duration
-	JSMaxConcurrency  int
-	JSMaxTotalFiles   int
+	JSMaxFilesPerHost  int
+	JSMaxFileBytes     int
+	JSDownloadTimeout  time.Duration
+	JSMaxConcurrency   int
+	JSMaxInflightBytes int
+	JSMaxTotalFiles    int
 
 	// JS-майнинг внешними инструментами (jsluice + trufflehog).
 	JSMineEnabled bool
@@ -58,11 +59,13 @@ type Settings struct {
 
 	// Стадия эндпоинтов полного прогона фермы: katana (краул) + gau + waybackurls
 	// (пассив) + ffuf (активный дир-фаззинг).
-	KatanaBin        string
-	GauBin           string
-	WaybackurlsBin   string
-	FfufBin          string
-	EndpointsTimeout time.Duration
+	KatanaBin           string
+	GauBin              string
+	WaybackurlsBin      string
+	FfufBin             string
+	EndpointsTimeout    time.Duration
+	EndpointsMaxPerHost int
+	EndpointsMaxTotal   int
 }
 
 func (s Settings) maxConcurrency() int {

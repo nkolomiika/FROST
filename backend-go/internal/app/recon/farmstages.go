@@ -11,6 +11,7 @@ import (
 
 	reconnet "github.com/nkolomiika/frost/internal/adapters/recon"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
 // Стадии полного прогона фермы, вынесенные из farmrun.go: резолв+liveness (общий
@@ -260,6 +261,11 @@ func (s *Service) runFarmEndpoints(ctx context.Context, runSvc *Service, cfg Far
 				hits, e := runSvc.scanEndpointTool(stepCtx, tool, host, toolCfg)
 				mu.Lock()
 				for _, hit := range hits {
+					// Общий потолок на прогон: staged/seen росли без предела (в отличие
+					// от leaks/JS), архивные тулы дают миллионы URL → OOM + распухшая БД.
+					if rs.EndpointsMaxTotal > 0 && len(staged) >= rs.EndpointsMaxTotal {
+						break
+					}
 					uh, ok := scope.match(hit.URL)
 					if !ok || seen[hit.URL] {
 						continue
@@ -298,11 +304,11 @@ func (s *Service) runFarmEndpoints(ctx context.Context, runSvc *Service, cfg Far
 
 // mineHostJS — JS-майнинг одного хоста (сид jsMiner в тестах; nil → DiscoverAndScan,
 // та же цепочка discover+download+MineJS, что и у js-farm/probeJS).
-func (s *Service) mineHostJS(ctx context.Context, host string) ([]reconnet.ScannedFile, []string) {
+func (s *Service) mineHostJS(ctx context.Context, host string, budget *semaphore.Weighted) ([]reconnet.ScannedFile, []string) {
 	if s.jsMiner != nil {
 		return s.jsMiner(ctx, host)
 	}
-	return reconnet.DiscoverAndScan(ctx, []string{host}, s.settings)
+	return reconnet.DiscoverAndScan(ctx, []string{host}, s.settings, budget)
 }
 
 // runFarmJS гоняет JS-майнинг (trufflehog+regex через MineJS) по живым хостам и
@@ -319,6 +325,13 @@ func (s *Service) runFarmJS(ctx context.Context, runSvc *Service, cfg FarmConfig
 	if limit < 1 {
 		limit = 1
 	}
+	// Общий байт-бюджет скана JS на весь прогон: конкурентные хосты делят один пул
+	// RAM (иначе cfg.Concurrency × JSMaxConcurrency × размер = перемножение пика).
+	inflight := rs.JSMaxInflightBytes
+	if inflight < 1 {
+		inflight = 256 << 20
+	}
+	jsBudget := semaphore.NewWeighted(int64(inflight))
 	var mu sync.Mutex
 	seen := map[string]bool{}
 	var staged []StagedJsInput
@@ -347,7 +360,7 @@ func (s *Service) runFarmJS(ctx context.Context, runSvc *Service, cfg FarmConfig
 			// Показываем реальные параметры запуска trufflehog; пути temp-файлов не светим.
 			id := prog.addStep(RunStep{Tool: "js-mine", Args: "trufflehog filesystem --json --no-update + regex (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
 			defer prog.removeStep(id)
-			files, errs := runSvc.mineHostJS(stepCtx, host)
+			files, errs := runSvc.mineHostJS(stepCtx, host, jsBudget)
 			mu.Lock()
 			for _, f := range files {
 				for _, sec := range f.Secrets {

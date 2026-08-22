@@ -2,7 +2,7 @@
    <select> for short, fixed option lists (e.g. member roles) so options can carry
    a colour dot and a description. Closes on select, click-outside and Esc. */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./frost.css";
 import { Icon } from "./icons";
 
@@ -24,12 +24,38 @@ interface FrostSelectProps {
   onChange: (value: string) => void;
   id?: string;
   placeholder?: string;
+  /** Show a filter box at the top of the open menu (for long option lists like
+      wordlists) — filters by label and group, same idea as the users search. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }
 
-export function FrostSelect({ value, options, onChange, id, placeholder }: FrostSelectProps) {
+export function FrostSelect({ value, options, onChange, id, placeholder, searchable, searchPlaceholder }: FrostSelectProps) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const selected = options.find((o) => o.value === value) ?? null;
+
+  // Отфильтрованный список для поиска: по label и по группе (регистронезависимо).
+  const shown = useMemo(() => {
+    if (!searchable) return options;
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(q) || (o.group ?? "").toLowerCase().includes(q));
+  }, [options, query, searchable]);
+
+  // Сброс запроса при закрытии; автофокус на поле поиска при открытии.
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return;
+    }
+    if (searchable) {
+      const h = setTimeout(() => searchRef.current?.focus(), 0);
+      return () => clearTimeout(h);
+    }
+  }, [open, searchable]);
 
   // Dismiss on outside click / Esc. stopPropagation on Esc keeps a surrounding
   // modal open — the first Esc closes the dropdown, a second closes the modal.
@@ -107,13 +133,44 @@ export function FrostSelect({ value, options, onChange, id, placeholder }: Frost
           zIndex: 50,
           padding: 6,
           transformOrigin: "top",
+          maxHeight: searchable ? 340 : undefined,
+          overflowY: searchable ? "auto" : undefined,
         }}
       >
-        {options.map((o, i) => {
+        {searchable && (
+          <div style={{ position: "sticky", top: 0, background: "var(--fr-surface)", padding: "2px 2px 6px", zIndex: 1 }}>
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <Icon name="search" size={14} color="var(--fr-text-faint)" style={{ position: "absolute", left: 10, pointerEvents: "none" }} />
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={searchPlaceholder ?? "Search…"}
+                style={{
+                  width: "100%",
+                  height: 36,
+                  border: "1px solid var(--fr-border)",
+                  borderRadius: 9,
+                  padding: "0 10px 0 30px",
+                  background: "var(--fr-elevated)",
+                  font: "500 13px Inter,sans-serif",
+                  color: "var(--fr-text)",
+                  outline: "none",
+                }}
+              />
+            </div>
+          </div>
+        )}
+        {shown.length === 0 && (
+          <div style={{ padding: "12px 10px", font: "500 12.5px Inter,sans-serif", color: "var(--fr-text-faint)", textAlign: "center" }}>
+            Nothing found
+          </div>
+        )}
+        {shown.map((o, i) => {
           const on = o.value === value;
           // Заголовок группы: рисуем, когда группа опции отличается от предыдущей
           // (первая опция с группой тоже получает заголовок). optgroup-style.
-          const prevGroup = i > 0 ? options[i - 1].group : undefined;
+          const prevGroup = i > 0 ? shown[i - 1].group : undefined;
           const showHeader = o.group !== undefined && o.group !== prevGroup;
           return (
             <div key={o.value}>
