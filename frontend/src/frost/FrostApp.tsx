@@ -534,6 +534,8 @@ interface FrostState {
   profileTab: ProfileTab;
   apiKeys: ApiKey[];
   apiKeyModalOpen: boolean;
+  /** Сгенерированный сырой токен для одноразового показа в модалке (null → скрыта). */
+  apiKeyCreated: string | null;
   apiKeyName: string;
   apiKeyScopes: Record<string, boolean>;
   /** Доступ ключа: все свои проекты (true) или явно выбранные (false). */
@@ -758,6 +760,7 @@ const initialState: FrostState = {
   profileTab: "account",
   apiKeys: [],
   apiKeyModalOpen: false,
+  apiKeyCreated: null,
   apiKeyName: "",
   apiKeyScopes: {},
   apiKeyAllProjects: true,
@@ -3526,9 +3529,10 @@ export function FrostApp() {
         all_projects: state.apiKeyAllProjects,
         expires_at,
       });
-      setState({ apiKeyModalOpen: false });
-      // The token is shown once and never again — the backend keeps only its hash.
-      pushToast(`Token created — copy it now: ${created.token}`, "success");
+      // Токен показывается ОДИН раз (бэкенд хранит только его хеш) — открываем модалку
+      // с кнопкой копирования; в тост сам ключ НЕ кладём.
+      setState({ apiKeyModalOpen: false, apiKeyCreated: created.token });
+      pushToast(t("Generated API key"), "success");
       reloadApiKeys();
     } catch (e) {
       pushToast(getApiErrorMessage(e, "Couldn't create token"), "error");
@@ -8156,6 +8160,28 @@ export function FrostApp() {
             </div>
           </div>
           {modalFooter(closeWSUserEditor, saveWSUser, state.wsUserMode === "add" ? t("Send invite") : t("Save"), "var(--fr-accent)")}
+        </>
+      )}
+
+      {/* Одноразовый показ сгенерированного ключа: копировать + предупреждение. */}
+      {modalShell(
+        state.apiKeyCreated != null,
+        () => setState({ apiKeyCreated: null }),
+        60,
+        480,
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 6 }}>
+            <span style={{ width: 42, height: 42, flex: "none", borderRadius: "50%", background: "var(--fr-success-soft)", color: "var(--fr-success)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="check" size={20} /></span>
+            <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "var(--fr-text)", letterSpacing: "-.4px" }}>{t("Generated API key")}</h2>
+          </div>
+          <div style={{ fontSize: 13.5, color: "var(--fr-text-2)", lineHeight: 1.55, marginTop: 8 }}>{t("Save this key now — it's shown only once and can't be recovered.")}</div>
+          <code className="mono" style={{ display: "block", marginTop: 16, background: "var(--fr-code-bg)", color: "var(--fr-code-text)", borderRadius: 10, padding: "12px 14px", fontSize: 12.5, wordBreak: "break-all", userSelect: "all" }}>{state.apiKeyCreated}</code>
+          <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button className="clk" onClick={() => setState({ apiKeyCreated: null })} style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-border)", borderRadius: 11, background: "var(--fr-surface)", font: "700 13.5px Inter,sans-serif", color: "var(--fr-text-2)" }}>{t("Close")}</button>
+            <button className="clk" onClick={() => copyText(state.apiKeyCreated ?? "", t("API key"))} style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13.5px Inter,sans-serif", display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <Icon name="copy" size={16} color="var(--fr-on-accent)" sw={2.2} />{t("Copy to clipboard")}
+            </button>
+          </div>
         </>
       )}
 
