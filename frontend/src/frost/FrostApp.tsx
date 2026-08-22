@@ -1389,6 +1389,11 @@ export function FrostApp() {
   const runFarmWithSettings = async () => {
     const pid = state.openProjectId;
     if (pid == null || state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")) return;
+    const c = state.farmCfg;
+    if (!c || !(c.stage_subdomains || c.stage_endpoints || c.stage_js || c.stage_ports)) {
+      pushToast(t("Select at least one stage to run"), "info");
+      return;
+    }
     if (state.farmCfg && JSON.stringify(state.farmCfg) !== JSON.stringify(state.farmCfgSaved)) {
       await saveFarmConfig();
     }
@@ -4744,16 +4749,23 @@ export function FrostApp() {
               </div>
             )}
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
-              {sec === "hosts" && rv === "farm" && !state.farmReportOpen && (
-                <button
-                  className="clk"
-                  onClick={runFarmWithSettings}
-                  disabled={state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "")}
-                  style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
-                >
-                  {t("Run recon")}
-                </button>
-              )}
+              {sec === "hosts" && rv === "farm" && !state.farmReportOpen && (() => {
+                const fcfg = state.farmCfg;
+                // Нельзя запустить прогон, пока не выбран ни один этап — кнопка бледная.
+                const noStage = !fcfg || !(fcfg.stage_subdomains || fcfg.stage_endpoints || fcfg.stage_js || fcfg.stage_ports);
+                const disabled = state.farmRunStarting || isFarmJobInFlight(state.farmRunJob?.status ?? "") || noStage;
+                return (
+                  <button
+                    className="clk"
+                    onClick={runFarmWithSettings}
+                    disabled={disabled}
+                    title={noStage ? t("Select at least one stage to run") : undefined}
+                    style={{ height: 42, padding: "0 20px", border: "none", borderRadius: 11, background: disabled ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}
+                  >
+                    {t("Run recon")}
+                  </button>
+                );
+              })()}
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
                 <>
                   <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
