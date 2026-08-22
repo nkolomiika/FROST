@@ -239,6 +239,7 @@ type RunProgress struct {
 	PortsFound     int       `json:"ports_found"`
 	EndpointsFound int       `json:"endpoints_found"`
 	JsFound        int       `json:"js_found"`
+	LeaksFound     int       `json:"leaks_found"`
 	Done           bool      `json:"done"`
 	Errors         []string  `json:"errors"`
 }
@@ -255,6 +256,7 @@ type FarmRunResult struct {
 	PortsFound      int      `json:"ports_found"`
 	EndpointsFound  int      `json:"endpoints_found"`
 	JsFound         int      `json:"js_found"`
+	LeaksFound      int      `json:"leaks_found"`
 	SourcesUsed     []string `json:"sources_used"`
 	Errors          []string `json:"errors"`
 }

@@ -46,6 +46,10 @@ type Service struct {
 	// githubScan — сид github-скана для тестов (nil → реальный trufflehog github).
 	// Возвращает распарсенные находки по цели с (опциональным) токеном.
 	githubScan func(ctx context.Context, target, token string) ([]reconnet.GithubSecret, error)
+	// breachSources — сид реестра breach-источников стадии утечек (nil → реальный
+	// reconnet.AllBreachSources). Возвращает ВСЕ источники; активные отбираются по
+	// Enabled(keys) в runFarmLeaks, неактивные мягко самопропускаются.
+	breachSources func(keys reconnet.BreachKeys) []reconnet.BreachSource
 }
 
 // AttachLeaks подключает резолвер интеграций и приёмник утечек (composition root).

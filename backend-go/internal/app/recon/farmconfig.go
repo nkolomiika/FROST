@@ -1,5 +1,11 @@
 package recon
 
+import (
+	"strings"
+
+	reconnet "github.com/nkolomiika/frost/internal/adapters/recon"
+)
+
 // FarmConfig — пер-проектная конфигурация recon-фермы (recon-стек). Хранится в
 // БД как JSONB-блоб; на чтении дефолты доклеиваются (LoadFarmConfig грузит
 // DefaultFarmConfig и накладывает сверху сохранённый JSON — отсутствующие поля
@@ -33,6 +39,15 @@ type FarmConfig struct {
 	StageEndpoints  bool `json:"stage_endpoints"`
 	StageJs         bool `json:"stage_js"`
 	StagePorts      bool `json:"stage_ports"`
+	StageLeaks      bool `json:"stage_leaks"`
+
+	// Leaks — входы стадии утечек (gated: stage_leaks). Github-URL'ы сканируются
+	// trufflehog'ом (секреты), домены/почты пробиваются по breach-источникам с
+	// сконфигурированными ключами. Пустые списки → стадия ничего не делает.
+	// Back-compat: отсутствие полей в сохранённом JSON = nil = «не задано».
+	LeaksGithub  []string `json:"leaks_github"`
+	LeaksDomains []string `json:"leaks_domains"`
+	LeaksEmails  []string `json:"leaks_emails"`
 
 	// Subdomains — сбор поддоменов.
 	Subfinder         bool `json:"subfinder"`
@@ -90,6 +105,7 @@ func DefaultFarmConfig() FarmConfig {
 		StageEndpoints:  true,
 		StageJs:         true,
 		StagePorts:      true,
+		StageLeaks:      false, // стадия утечек по умолчанию выключена (доп. вход/ключи)
 
 		Subfinder:         true,
 		Assetfinder:       true,
@@ -166,4 +182,76 @@ func (c *FarmConfig) Sanitize() {
 	c.KatanaDepth = clampInt(c.KatanaDepth, 1, 10)
 	c.SubsMaxResults = clampInt(c.SubsMaxResults, 1, 100000)
 	c.HttpxThreads = clampInt(c.HttpxThreads, 1, 1000)
+
+	// Leaks-входы: trim → нормализация → drop невалидных → дедуп → cap.
+	c.LeaksGithub = sanitizeStrList(c.LeaksGithub, leaksInputCap, normalizeGithubInput)
+	c.LeaksDomains = sanitizeStrList(c.LeaksDomains, leaksInputCap, normalizeDomainInput)
+	c.LeaksEmails = sanitizeStrList(c.LeaksEmails, leaksInputCap, normalizeEmailInput)
+}
+
+// leaksInputCap — верхняя граница числа входов на каждый список leaks (защита от
+// раздутого JSON и слишком длинного прогона).
+const leaksInputCap = 200
+
+// sanitizeStrList нормализует каждый элемент (norm возвращает канон и ok), выкидывает
+// невалидные/пустые/дубли (по канону) с сохранением порядка и обрезает по cap.
+func sanitizeStrList(in []string, cap int, norm func(string) (string, bool)) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		s, ok := norm(strings.TrimSpace(v))
+		if !ok || s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+		if len(out) >= cap {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// normalizeGithubInput валидирует github-URL через ParseGithubTarget (тот же
+// разбор, что и у скана) и приводит к каноничному виду. Невалидный → drop.
+func normalizeGithubInput(v string) (string, bool) {
+	t, err := reconnet.ParseGithubTarget(v)
+	if err != nil {
+		return "", false
+	}
+	if t.IsOrg {
+		return "https://github.com/" + t.Org, true
+	}
+	return t.Repo, true
+}
+
+// normalizeDomainInput приводит домен к нижнему регистру и отсеивает мусор (пробелы,
+// слэши, отсутствие точки). Хвостовая точка убирается.
+func normalizeDomainInput(v string) (string, bool) {
+	v = strings.ToLower(strings.TrimSuffix(v, "."))
+	if v == "" || strings.ContainsAny(v, " /\\") || !strings.Contains(v, ".") {
+		return "", false
+	}
+	return v, true
+}
+
+// normalizeEmailInput — базовая проверка формы почты (ровно один '@', домен с точкой,
+// без пробелов). Приводит к нижнему регистру.
+func normalizeEmailInput(v string) (string, bool) {
+	v = strings.ToLower(v)
+	if v == "" || strings.ContainsAny(v, " \t") || strings.Count(v, "@") != 1 {
+		return "", false
+	}
+	at := strings.IndexByte(v, '@')
+	local, dom := v[:at], v[at+1:]
+	if local == "" || dom == "" || !strings.Contains(dom, ".") || strings.HasPrefix(dom, ".") || strings.HasSuffix(dom, ".") {
+		return "", false
+	}
+	return v, true
 }

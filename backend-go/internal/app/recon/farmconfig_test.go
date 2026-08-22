@@ -2,6 +2,7 @@ package recon
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func TestFarmConfigRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(blob, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("round-trip mismatch:\n got=%+v\nwant=%+v", got, want)
 	}
 }
@@ -182,6 +183,68 @@ func hasAny(got []string, want ...string) bool {
 		}
 	}
 	return false
+}
+
+func TestFarmConfigDefaults_Leaks(t *testing.T) {
+	c := DefaultFarmConfig()
+	if c.StageLeaks {
+		t.Fatalf("stage_leaks default = true, want false")
+	}
+	if c.LeaksGithub != nil || c.LeaksDomains != nil || c.LeaksEmails != nil {
+		t.Fatalf("leaks input lists must default to nil: %+v", c)
+	}
+}
+
+func TestFarmConfigSanitize_LeaksInputs(t *testing.T) {
+	c := FarmConfig{
+		LeaksGithub: []string{
+			" https://github.com/owner/repo ",   // trim
+			"https://github.com/owner/repo.git", // канон = тот же repo → дубль
+			"https://gitlab.com/x/y",            // не github → drop
+			"https://github.com/org",            // org-форма
+			"",                                  // пусто → drop
+		},
+		LeaksDomains: []string{"Example.COM", "example.com", "not a domain", "b.co.", "no-dot"},
+		LeaksEmails:  []string{"A@B.com", "a@b.com", "bad", "no@dot", "two@@x.com"},
+	}
+	c.Sanitize()
+
+	if len(c.LeaksGithub) != 2 {
+		t.Fatalf("github: want 2 (repo canon + org, gitlab/dupes dropped), got %v", c.LeaksGithub)
+	}
+	if c.LeaksGithub[0] != "https://github.com/owner/repo" || c.LeaksGithub[1] != "https://github.com/org" {
+		t.Fatalf("github canonical/order wrong: %v", c.LeaksGithub)
+	}
+	if len(c.LeaksDomains) != 2 || c.LeaksDomains[0] != "example.com" || c.LeaksDomains[1] != "b.co" {
+		t.Fatalf("domains normalization wrong: %v", c.LeaksDomains)
+	}
+	if len(c.LeaksEmails) != 1 || c.LeaksEmails[0] != "a@b.com" {
+		t.Fatalf("emails normalization wrong: %v", c.LeaksEmails)
+	}
+}
+
+func TestFarmConfigSanitize_LeaksCap(t *testing.T) {
+	many := make([]string, 0, 250)
+	for i := 0; i < 250; i++ {
+		many = append(many, "d"+itoaTest(i)+".com")
+	}
+	c := FarmConfig{LeaksDomains: many}
+	c.Sanitize()
+	if len(c.LeaksDomains) != leaksInputCap {
+		t.Fatalf("cap not applied: got %d, want %d", len(c.LeaksDomains), leaksInputCap)
+	}
+}
+
+func itoaTest(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	var b []byte
+	for i > 0 {
+		b = append([]byte{byte('0' + i%10)}, b...)
+		i /= 10
+	}
+	return string(b)
 }
 
 func TestFarmConfigSanitizeClamps(t *testing.T) {
