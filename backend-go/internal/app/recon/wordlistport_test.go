@@ -12,14 +12,16 @@ import (
 // fakeMaterializer — сид WordlistMaterializer для тестов.
 type fakeMaterializer struct {
 	lastCustomID int
+	lastPath     string
 	lastTier     string
 	cleaned      atomic.Bool
 	err          error
 	path         string
 }
 
-func (f *fakeMaterializer) Materialize(_ context.Context, customID int, tier string) (string, func(), error) {
+func (f *fakeMaterializer) Materialize(_ context.Context, customID int, bundledPath, tier string) (string, func(), error) {
 	f.lastCustomID = customID
+	f.lastPath = bundledPath
 	f.lastTier = tier
 	if f.err != nil {
 		return "", nil, f.err
@@ -31,7 +33,7 @@ func (f *fakeMaterializer) Materialize(_ context.Context, customID int, tier str
 func TestResolveWordlist_NilMaterializerFallsBackToTier(t *testing.T) {
 	t.Setenv("RECON_WORDLIST_DIR", "/wl")
 	svc := stubService(&stubStore{}, reconnet.Settings{}, Config{})
-	path, cleanup, softErr := svc.resolveWordlist(context.Background(), 7, "large")
+	path, cleanup, softErr := svc.resolveWordlist(context.Background(), 7, "", "large")
 	defer cleanup()
 	if softErr != "" {
 		t.Fatalf("nil materializer should not error: %q", softErr)
@@ -46,7 +48,7 @@ func TestResolveWordlist_DelegatesToMaterializer(t *testing.T) {
 	svc := stubService(&stubStore{}, reconnet.Settings{}, Config{})
 	fm := &fakeMaterializer{path: "/tmp/frost-wordlist-x.txt"}
 	svc.AttachWordlists(fm)
-	path, cleanup, softErr := svc.resolveWordlist(context.Background(), 9, "medium")
+	path, cleanup, softErr := svc.resolveWordlist(context.Background(), 9, "", "medium")
 	if softErr != "" {
 		t.Fatalf("unexpected soft err: %q", softErr)
 	}
@@ -64,7 +66,7 @@ func TestResolveWordlist_ErrorFallsBackWithSoftErr(t *testing.T) {
 	t.Setenv("RECON_WORDLIST_DIR", "/wl")
 	svc := stubService(&stubStore{}, reconnet.Settings{}, Config{})
 	svc.AttachWordlists(&fakeMaterializer{err: errors.New("minio down")})
-	path, cleanup, softErr := svc.resolveWordlist(context.Background(), 3, "small")
+	path, cleanup, softErr := svc.resolveWordlist(context.Background(), 3, "", "small")
 	defer cleanup()
 	if softErr == "" {
 		t.Fatal("expected soft error on materialize failure")

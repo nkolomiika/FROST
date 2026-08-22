@@ -403,7 +403,7 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 	wlCleanup := func() {}
 	if active {
 		var wlErr string
-		wl, wlCleanup, wlErr = s.resolveWordlist(ctx, cfg.SubdomainWordlistID, cfg.WordlistSize)
+		wl, wlCleanup, wlErr = s.resolveWordlist(ctx, cfg.SubdomainWordlistID, cfg.SubdomainWordlistPath, cfg.WordlistSize)
 		if wlErr != "" {
 			softErrs = append(softErrs, wlErr)
 		}
@@ -416,10 +416,12 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 		}
 	}
 	defer wlCleanup()
-	// Ярлык словаря для прогресса — БЕЗ пути (temp/бандл-путь не светим наружу).
+	// Ярлык словаря для прогресса — БЕЗ полного пути (temp/бандл-путь не светим).
 	wlLabel := cfg.WordlistSize
 	if cfg.SubdomainWordlistID > 0 {
 		wlLabel = "custom#" + strconv.Itoa(cfg.SubdomainWordlistID)
+	} else if cfg.SubdomainWordlistPath != "" {
+		wlLabel = cfg.SubdomainWordlistPath // относительный путь под WordlistDir — не секрет
 	}
 	brute := reconnet.DNSXBruteConfig{WordlistPath: wl, RateLimit: cfg.RateLimit, Threads: cfg.Concurrency}
 

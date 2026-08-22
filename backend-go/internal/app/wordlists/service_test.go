@@ -3,6 +3,7 @@ package wordlists
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -148,25 +149,55 @@ func TestUpload_RollbackObjectOnInsertFail(t *testing.T) {
 	}
 }
 
-func TestList_BundledTiersAndCustom(t *testing.T) {
+// TestList_EnumeratesOnDiskFilesAndCustom проверяет, что List рекурсивно перечисляет
+// реальные файлы под WordlistDir по ОРИГИНАЛЬНЫМ именам (relative path/name/category/
+// lines) плюс кастомные словари. Корневой файл → category "n0kovo"; вложенный →
+// каталог. Пустые файлы пропускаются.
+func TestList_EnumeratesOnDiskFilesAndCustom(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("RECON_WORDLIST_DIR", dir)
+	// Корневой n0kovo-файл (3 строки) и вложенный SecLists-файл (2 строки).
+	if err := os.WriteFile(filepath.Join(dir, "n0kovo_subdomains_small.txt"), []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(dir, "seclists", "Discovery", "DNS")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "subdomains-top1million-5000.txt"), []byte("www\nmail\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Пустой файл — не должен попасть в листинг.
+	if err := os.WriteFile(filepath.Join(dir, "empty.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	store := newFakeStore()
-	st := newFakeStorage()
-	svc := NewService(store, st)
+	svc := NewService(store, newFakeStorage())
 	_, _ = svc.Upload(context.Background(), "custom.txt", []byte("a\n"), nil)
 
 	listing, err := svc.List(context.Background())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(listing.Bundled) != 3 {
-		t.Fatalf("want 3 bundled tiers, got %d", len(listing.Bundled))
+	if len(listing.Bundled) != 2 {
+		t.Fatalf("want 2 bundled files, got %d: %+v", len(listing.Bundled), listing.Bundled)
 	}
-	tiers := map[string]bool{}
+	byPath := map[string]BundledWordlist{}
 	for _, b := range listing.Bundled {
-		tiers[b.Tier] = true
+		byPath[b.Path] = b
 	}
-	if !tiers["small"] || !tiers["medium"] || !tiers["large"] {
-		t.Fatalf("bundled tiers wrong: %+v", listing.Bundled)
+	n0 := byPath["n0kovo_subdomains_small.txt"]
+	if n0.Name != "n0kovo_subdomains_small.txt" || n0.Category != "n0kovo" || n0.Lines != 3 {
+		t.Fatalf("n0kovo entry wrong: %+v", n0)
+	}
+	sl := byPath["seclists/Discovery/DNS/subdomains-top1million-5000.txt"]
+	if sl.Name != "subdomains-top1million-5000.txt" || sl.Category != "seclists/Discovery/DNS" || sl.Lines != 2 {
+		t.Fatalf("seclists entry wrong: %+v", sl)
+	}
+	// Стабильная сортировка по path: n0kovo... < seclists/...
+	if listing.Bundled[0].Path >= listing.Bundled[1].Path {
+		t.Fatalf("bundled not sorted by path: %+v", listing.Bundled)
 	}
 	if len(listing.Custom) != 1 {
 		t.Fatalf("want 1 custom, got %d", len(listing.Custom))
@@ -197,7 +228,7 @@ func TestDelete_RemovesObjectAndRow(t *testing.T) {
 func TestMaterialize_BundledTierNoTemp(t *testing.T) {
 	t.Setenv("RECON_WORDLIST_DIR", "/wl")
 	svc := NewService(newFakeStore(), newFakeStorage())
-	path, cleanup, err := svc.Materialize(context.Background(), 0, "medium")
+	path, cleanup, err := svc.Materialize(context.Background(), 0, "", "medium")
 	if err != nil {
 		t.Fatalf("materialize tier: %v", err)
 	}
@@ -207,13 +238,72 @@ func TestMaterialize_BundledTierNoTemp(t *testing.T) {
 	}
 }
 
+// TestMaterialize_BundledPathValidatedUnderDir: путь забандленного файла разрешается
+// напрямую (no-op cleanup), если файл реально лежит под WordlistDir.
+func TestMaterialize_BundledPathValidatedUnderDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("RECON_WORDLIST_DIR", dir)
+	sub := filepath.Join(dir, "seclists", "Discovery", "DNS")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rel := "seclists/Discovery/DNS/common.txt"
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(rel)), []byte("a\nb\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(newFakeStore(), newFakeStorage())
+	path, cleanup, err := svc.Materialize(context.Background(), 0, rel, "medium")
+	if err != nil {
+		t.Fatalf("materialize path: %v", err)
+	}
+	defer cleanup()
+	if path != filepath.Join(dir, filepath.FromSlash(rel)) {
+		t.Fatalf("bundled path wrong: %q", path)
+	}
+}
+
+// TestMaterialize_RejectsTraversalPath: путь с '..'/абсолютный/за пределами
+// WordlistDir отвергается (ошибка) — инструменту он не уходит.
+func TestMaterialize_RejectsTraversalPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("RECON_WORDLIST_DIR", dir)
+	svc := NewService(newFakeStore(), newFakeStorage())
+	for _, bad := range []string{"../../etc/passwd", "/etc/passwd", "seclists/../../secret.txt"} {
+		if _, _, err := svc.Materialize(context.Background(), 0, bad, "medium"); err == nil {
+			t.Fatalf("expected reject for traversal path %q", bad)
+		}
+	}
+}
+
+// TestMaterialize_CustomWinsOverPath: при customID>0 путь игнорируется (кастомный
+// из MinIO имеет приоритет).
+func TestMaterialize_CustomWinsOverPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("RECON_WORDLIST_DIR", dir)
+	store := newFakeStore()
+	st := newFakeStorage()
+	svc := NewService(store, st)
+	wl, _ := svc.Upload(context.Background(), "c.txt", []byte("admin\n"), nil)
+
+	path, cleanup, err := svc.Materialize(context.Background(), int(wl.ID), "some/bundled/path.txt", "medium")
+	if err != nil {
+		t.Fatalf("materialize custom-over-path: %v", err)
+	}
+	defer cleanup()
+	// Разрешился кастомный temp (не бандл-путь) — content из MinIO.
+	data, rerr := os.ReadFile(path)
+	if rerr != nil || string(data) != "admin\n" {
+		t.Fatalf("custom did not win over path: %q (%v)", data, rerr)
+	}
+}
+
 func TestMaterialize_CustomStreamsToTemp(t *testing.T) {
 	store := newFakeStore()
 	st := newFakeStorage()
 	svc := NewService(store, st)
 	wl, _ := svc.Upload(context.Background(), "c.txt", []byte("admin\nlogin\n"), nil)
 
-	path, cleanup, err := svc.Materialize(context.Background(), int(wl.ID), "medium")
+	path, cleanup, err := svc.Materialize(context.Background(), int(wl.ID), "", "medium")
 	if err != nil {
 		t.Fatalf("materialize custom: %v", err)
 	}
@@ -239,7 +329,7 @@ func TestMaterialize_CustomStreamsToTemp(t *testing.T) {
 
 func TestMaterialize_CustomMissing404(t *testing.T) {
 	svc := NewService(newFakeStore(), newFakeStorage())
-	if _, _, err := svc.Materialize(context.Background(), 999, "medium"); err == nil {
+	if _, _, err := svc.Materialize(context.Background(), 999, "", "medium"); err == nil {
 		t.Fatal("expected 404 for missing custom wordlist")
 	}
 }

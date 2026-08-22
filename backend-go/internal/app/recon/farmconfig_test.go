@@ -116,6 +116,48 @@ func TestFarmConfigSanitize_WordlistAndEndpointsMode(t *testing.T) {
 	}
 }
 
+func TestFarmConfigSanitize_WordlistPaths(t *testing.T) {
+	// Дефолты пусты.
+	if d := DefaultFarmConfig(); d.SubdomainWordlistPath != "" || d.EndpointsWordlistPath != "" {
+		t.Fatalf("default wordlist paths must be empty: %+v", d)
+	}
+	// Валидный относительный путь → вычищается и сохраняется.
+	c := FarmConfig{
+		SubdomainWordlistPath: "seclists/Discovery/DNS/subdomains-top1million-5000.txt",
+		EndpointsWordlistPath: "n0kovo_subdomains_small.txt",
+	}
+	c.Sanitize()
+	if c.SubdomainWordlistPath != "seclists/Discovery/DNS/subdomains-top1million-5000.txt" {
+		t.Fatalf("valid subdomain path altered: %q", c.SubdomainWordlistPath)
+	}
+	if c.EndpointsWordlistPath != "n0kovo_subdomains_small.txt" {
+		t.Fatalf("valid endpoints path altered: %q", c.EndpointsWordlistPath)
+	}
+	// Traversal / абсолютный / выход наружу → "".
+	for _, bad := range []string{"../../etc/passwd", "/etc/passwd", "a/../../b.txt", "..", "."} {
+		c := FarmConfig{SubdomainWordlistPath: bad, EndpointsWordlistPath: bad}
+		c.Sanitize()
+		if c.SubdomainWordlistPath != "" || c.EndpointsWordlistPath != "" {
+			t.Fatalf("bad path %q not dropped: sub=%q ep=%q", bad, c.SubdomainWordlistPath, c.EndpointsWordlistPath)
+		}
+	}
+}
+
+func TestFarmConfig_BackCompatMissingWordlistPaths(t *testing.T) {
+	// Старый блоб без path-полей → пустые пути (не паникуем, дефолты держатся).
+	cfg := DefaultFarmConfig()
+	if err := json.Unmarshal([]byte(`{"subdomain_wordlist_id":5}`), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	cfg.Sanitize()
+	if cfg.SubdomainWordlistPath != "" || cfg.EndpointsWordlistPath != "" {
+		t.Fatalf("missing path fields should stay empty: %+v", cfg)
+	}
+	if cfg.SubdomainWordlistID != 5 {
+		t.Fatalf("id lost: %+v", cfg)
+	}
+}
+
 func TestEndpointTools_ModeSelection(t *testing.T) {
 	base := FarmConfig{Katana: true, Gau: true, Waybackurls: true}
 
@@ -149,6 +191,15 @@ func TestEndpointTools_ModeSelection(t *testing.T) {
 	activeNoWL.EndpointsWordlistID = 0
 	if hasAny(endpointTools(activeNoWL), "ffuf") {
 		t.Fatalf("ffuf must be skipped without custom endpoints wordlist: %v", endpointTools(activeNoWL))
+	}
+
+	// active с забандленным словарём ПО ПУТИ (без id) → ffuf включается.
+	activePath := base
+	activePath.EndpointsMode = "active"
+	activePath.EndpointsWordlistID = 0
+	activePath.EndpointsWordlistPath = "seclists/Discovery/Web-Content/common.txt"
+	if !hasAll(endpointTools(activePath), "ffuf") {
+		t.Fatalf("ffuf must run when endpoints wordlist path is set: %v", endpointTools(activePath))
 	}
 
 	// Пустой mode (старый конфиг) → both.

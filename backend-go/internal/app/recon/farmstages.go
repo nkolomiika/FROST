@@ -159,7 +159,7 @@ func endpointTools(cfg FarmConfig) []string {
 	if passive && cfg.Waybackurls {
 		tools = append(tools, "waybackurls")
 	}
-	if active && cfg.EndpointsWordlistID > 0 {
+	if active && (cfg.EndpointsWordlistID > 0 || cfg.EndpointsWordlistPath != "") {
 		tools = append(tools, "ffuf")
 	}
 	return tools
@@ -212,9 +212,12 @@ func (s *Service) runFarmEndpoints(ctx context.Context, runSvc *Service, cfg Far
 	// Кастомный (>0) стримится из MinIO во temp; при недоступности FfufDirFuzz
 	// самопропускается (словарь по пути не существует). Ярлык — без пути наружу.
 	ffufLabel := "custom#" + strconv.Itoa(cfg.EndpointsWordlistID)
+	if cfg.EndpointsWordlistID <= 0 && cfg.EndpointsWordlistPath != "" {
+		ffufLabel = cfg.EndpointsWordlistPath // относительный путь под WordlistDir
+	}
 	ffufCleanup := func() {}
 	if containsTool(tools, "ffuf") {
-		path, cleanup, wlErr := s.resolveWordlist(ctx, cfg.EndpointsWordlistID, cfg.WordlistSize)
+		path, cleanup, wlErr := s.resolveWordlist(ctx, cfg.EndpointsWordlistID, cfg.EndpointsWordlistPath, cfg.WordlistSize)
 		toolCfg.FfufWordlist = path
 		ffufCleanup = cleanup
 		if wlErr != "" {
