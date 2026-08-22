@@ -21,6 +21,8 @@ import type {
   FarmReport,
   LeaksReport,
   LeakScanJob,
+  Wordlist,
+  WordlistsResponse,
   IntegrationKey,
   IntegrationsResponse,
   ImportResult,
@@ -856,6 +858,34 @@ export async function clearFarmReport(projectId: number, jobId?: number): Promis
     params: jobId != null ? { job_id: jobId } : undefined,
   });
   return data.cleared;
+}
+
+// ---- Recon: словари брута (бандл-тиры + кастомные загруженные) ----
+
+/** Список словарей: бандл-тиры (small/medium/large) + загруженные кастомные. */
+export async function getWordlists(): Promise<WordlistsResponse> {
+  const { data } = await api.get<WordlistsResponse>("/recon/wordlists");
+  return data;
+}
+
+/** Загружает кастомный словарь (multipart: file + опциональное имя). Только
+ *  админ. Возвращает созданную запись словаря. */
+export async function uploadWordlist(file: File, name?: string): Promise<Wordlist> {
+  if (!file) {
+    throw new Error("A wordlist file is required");
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  if (name) formData.append("name", name);
+  const { data } = await api.post<Wordlist>("/recon/wordlists", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+/** Удаляет кастомный словарь по id (только админ). */
+export async function deleteWordlist(id: number): Promise<void> {
+  await api.delete(`/recon/wordlists/${id}`);
 }
 
 // ---- Vault: утечки (ревью OSINT-находок + запуск GitHub-скана) ----

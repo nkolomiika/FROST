@@ -454,6 +454,8 @@ export interface ReconFarmConfig {
   stage_endpoints: boolean;
   stage_js: boolean;
   stage_ports: boolean;
+  /** Стадия утечек: OSINT/breach-источники + GitHub-скан гоняются прямо прогоном. */
+  stage_leaks: boolean;
   // Subdomains — внутренние флаги инструментов (UI их не показывает, но провод
   // их несёт, чтобы round-trip сохранял значения).
   subfinder: boolean;
@@ -463,6 +465,8 @@ export interface ReconFarmConfig {
   ct_time_correlation: boolean;
   active_brute: boolean;
   subs_max_results: number;
+  /** Словарь брута сабдоменов: 0 = бандл-тир (по `wordlist_size`), >0 = кастомный. */
+  subdomain_wordlist_id: number;
   // Liveness
   dnsx: boolean;
   httpx: boolean;
@@ -475,6 +479,11 @@ export interface ReconFarmConfig {
   gau: boolean;
   waybackurls: boolean;
   katana_depth: number;
+  /** Режим сбора эндпоинтов: passive = архивы (gau+waybackurls), active = краул
+   *  (katana) + dir-fuzz (ffuf), both = всё сразу. */
+  endpoints_mode: "passive" | "active" | "both";
+  /** Кастомный словарь для ffuf dir-fuzz (active/both): 0 = ffuf пропускается. */
+  endpoints_wordlist_id: number;
   // Parameters
   param_discovery: boolean;
   // Dir fuzz
@@ -483,6 +492,29 @@ export interface ReconFarmConfig {
   // Vulns
   nuclei: boolean;
   nuclei_severity: string;
+  // Leaks — цели стадии утечек (см. `stage_leaks`). Каждая — построчный список.
+  /** GitHub URL репозиториев/организаций для скана секретов. */
+  leaks_github: string[];
+  /** Домены для breach/OSINT-поиска (источники активируются ключами интеграций). */
+  leaks_domains: string[];
+  /** E-mail-адреса для breach/OSINT-поиска. */
+  leaks_emails: string[];
+}
+
+/** Кастомный (загруженный) словарь брута. Бандл-тиры файла не имеют — только
+ *  `tier`; кастомные несут метаданные о загруженном файле. */
+export interface Wordlist {
+  id: number;
+  name: string;
+  size_bytes: number;
+  lines: number;
+  created_at: string;
+}
+
+/** Ответ списка словарей: бандл-тиры (по размеру) + загруженные кастомные. */
+export interface WordlistsResponse {
+  bundled: { tier: "small" | "medium" | "large" }[];
+  custom: Wordlist[];
 }
 
 /** Один инструмент, работающий прямо сейчас в полном прогоне фермы. */
