@@ -5677,7 +5677,7 @@ export function FrostApp() {
           className="finp mono"
           rows={3}
           placeholder={placeholder}
-          value={(cfg[key] as string[]).join("\n")}
+          value={((cfg[key] as string[] | null) ?? []).join("\n")}
           onChange={(e) => setFarmField(key, e.target.value.split("\n").map((s) => s.trim()))}
           style={{ font: "600 12.5px 'JetBrains Mono',monospace", resize: "vertical" }}
         />
