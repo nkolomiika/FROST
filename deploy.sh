@@ -40,6 +40,15 @@ DOCKER_NETWORK_MTU="${DOCKER_NETWORK_MTU:-1500}"
 export CERT_IP CERT_HOST POSTGRES_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD DOCKER_NETWORK_MTU
 export ENV_FILE="$ENV_PROD"
 
+# Интерполяция compose-файла (${MEM_RECON:-…} и т.п.) берёт значения из ОКРУЖЕНИЯ
+# shell, а не из env_file контейнеров. Поэтому per-box лимиты памяти (MEM_*), если
+# заданы в .env.prod, нужно ЯВНО экспортировать сюда — иначе compose подставит свои
+# дефолты. Экспортируем все MEM_*, найденные в .env.prod.
+while IFS='=' read -r k v; do
+  [ -n "$k" ] || continue
+  export "$k=$v"
+done < <(grep -E '^MEM_[A-Z]+=' "$ENV_PROD" || true)
+
 cmd="${1:-up}"
 case "$cmd" in
   up|"")        "${COMPOSE[@]}" up -d --build ;;
