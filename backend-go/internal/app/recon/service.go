@@ -34,6 +34,22 @@ type Service struct {
 	endpointScanner func(ctx context.Context, tool, host string, cfg reconnet.EndpointToolConfig) ([]reconnet.EndpointHit, string)
 	// jsMiner — JS-майнинг одного хоста стадии JS (сид для тестов; nil → DiscoverAndScan).
 	jsMiner func(ctx context.Context, host string) ([]reconnet.ScannedFile, []string)
+
+	// integrations — резолвер workspace-ключей (github_token и т.п.) для сканов утечек.
+	integrations IntegrationResolver
+	// leakSink — приёмник находок утечек (пишет в единое хранилище recon_leaks).
+	leakSink LeakSink
+	// githubScan — сид github-скана для тестов (nil → реальный trufflehog github).
+	// Возвращает распарсенные находки по цели с (опциональным) токеном.
+	githubScan func(ctx context.Context, target, token string) ([]reconnet.GithubSecret, error)
+}
+
+// AttachLeaks подключает резолвер интеграций и приёмник утечек (composition root).
+// Без него github-скан вернёт понятную ошибку. Отдельный сеттер, чтобы не ломать
+// сигнатуру NewService и её тестовых вызовов.
+func (s *Service) AttachLeaks(resolver IntegrationResolver, sink LeakSink) {
+	s.integrations = resolver
+	s.leakSink = sink
 }
 
 // NewService собирает сервис рекона.
@@ -67,6 +83,8 @@ func (s *Service) CreateJob(ctx context.Context, kind string, projectID, actorID
 		view, err = s.createPortsJob(ctx, projectID, actorID, raw)
 	case KindReverse:
 		view, err = s.createReverseJob(ctx, projectID, actorID, raw)
+	case KindGithubScan:
+		view, err = s.createGithubScanJob(ctx, projectID, actorID, raw)
 	default:
 		return JobView{}, apperr.Validation("Неизвестный тип задачи фермы")
 	}

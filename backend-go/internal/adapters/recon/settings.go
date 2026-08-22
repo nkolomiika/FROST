@@ -29,6 +29,10 @@ type Settings struct {
 	TrufflehogBin string
 	JSMineTimeout time.Duration
 
+	// GitHub secret-scan (trufflehog github) — отдельный таймаут (скан репозитория/
+	// org длиннее файлового майнинга).
+	GithubScanTimeout time.Duration
+
 	ServicesDetectEnabled  bool
 	ServicesDetectEngine   string
 	ServicesHttpxBin       string

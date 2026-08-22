@@ -31,6 +31,10 @@ const (
 	// (актив) параллельно → резолв+liveness (httpx) → скан портов (nmap), с
 	// живым прогрессом. Гоняет весь стек одной кнопкой.
 	KindFarmRun = "farm_run"
+	// KindGithubScan — github secret-scan (trufflehog github) на ОБЫЧНОЙ дорожке
+	// (не farm). raw хранит github-цель (repo/org/user URL). Находки складываются
+	// в единое хранилище утечек (recon_leaks, source=github), НЕ в проект.
+	KindGithubScan = "github_scan"
 )
 
 // Статусы задачи (порт enums.ReconJobStatus).
