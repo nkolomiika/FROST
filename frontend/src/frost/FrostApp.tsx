@@ -3865,6 +3865,11 @@ export function FrostApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [hosts, state.hostQuery, state.hostFilters, state.hostCfFilter]);
 
+  // Число «настоящих» хостов — как в таблице: БЕЗ IP-фермовых строк (origin==="ip",
+  // они живут во вкладке IP). Дашборд-карточка и сайдбар считали hosts.length (со
+  // всеми IP-строками), из-за чего счётчик расходился с реальным списком хостов.
+  const realHostCount = useMemo(() => hosts.filter((h) => h.origin !== "ip").length, [hosts]);
+
   /* Каждый хост, реально показанный в таблице: корневые строки плюс раскрытые
      под ними поддомены, без дублей. Таблица держит поддомены вложенными, поэтому
      hostsList сам по себе — это только корни (домен с 68 поддоменами даёт длину 1).
@@ -4772,7 +4777,7 @@ export function FrostApp() {
           <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 0, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("RECON")}</div>
             {([
-              { v: "hosts" as const, icon: "server" as const, label: "Hosts", count: hosts.length as number | null },
+              { v: "hosts" as const, icon: "server" as const, label: "Hosts", count: realHostCount as number | null },
               { v: "ips" as const, icon: "card" as const, label: "IPs", count: ipsRows.length as number | null },
               { v: "endpoints" as const, icon: "link" as const, label: "Endpoints", count: endpointTotal as number | null },
               { v: "js" as const, icon: "doc" as const, label: "JS", count: jsFiles.length as number | null },
@@ -5074,7 +5079,7 @@ export function FrostApp() {
           const openVulns = d.vulns.filter((v) => (VSTATUS_OPEN as readonly string[]).includes(v.status));
           const myVulns = d.vulns.filter((v) => v.author === me);
           return [
-          { icon: "globe" as const, color: "var(--fr-accent-2)", label: "Hosts", value: hosts.length, spark: cumulativeSpark(hosts.map((h) => h.created), wStart, wEnd), stroke: "var(--fr-accent-2)", onClick: () => setSection("hosts") },
+          { icon: "globe" as const, color: "var(--fr-accent-2)", label: "Hosts", value: realHostCount, spark: cumulativeSpark(hosts.filter((h) => h.origin !== "ip").map((h) => h.created), wStart, wEnd), stroke: "var(--fr-accent-2)", onClick: () => setSection("hosts") },
           { icon: "alert-triangle" as const, color: "var(--fr-danger)", label: "Open vulns", value: openVulnCount, spark: cumulativeSpark(openVulns.map((v) => v.created), wStart, wEnd), stroke: "var(--fr-danger)", onClick: goToOpenVulns },
           { icon: "star" as const, color: "var(--fr-purple)", label: "My findings", value: myFindingsCount, spark: cumulativeSpark(myVulns.map((v) => v.created), wStart, wEnd), stroke: "var(--fr-purple)", onClick: goToMyFindings },
           ];

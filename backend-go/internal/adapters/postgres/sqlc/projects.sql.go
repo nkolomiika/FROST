@@ -1495,7 +1495,7 @@ SELECT p.id AS project_id, p.status,
        COALESCE(v.total, 0)::bigint AS total_findings,
        COALESCE(v.open, 0)::bigint AS open_findings
 FROM projects p
-LEFT JOIN (SELECT project_id, count(*) AS cnt FROM hosts GROUP BY project_id) h ON h.project_id = p.id
+LEFT JOIN (SELECT project_id, count(*) AS cnt FROM hosts WHERE origin <> 'ip' GROUP BY project_id) h ON h.project_id = p.id
 LEFT JOIN (SELECT project_id, count(*) AS total,
                   count(*) FILTER (WHERE status IN ('OPEN','IN_PROGRESS')) AS open
            FROM vulnerabilities GROUP BY project_id) v ON v.project_id = p.id
@@ -1544,7 +1544,7 @@ SELECT p.id AS project_id, p.status,
        COALESCE(v.open, 0)::bigint AS open_findings
 FROM projects p
 JOIN project_members m ON m.project_id = p.id AND m.user_id = $1
-LEFT JOIN (SELECT project_id, count(*) AS cnt FROM hosts GROUP BY project_id) h ON h.project_id = p.id
+LEFT JOIN (SELECT project_id, count(*) AS cnt FROM hosts WHERE origin <> 'ip' GROUP BY project_id) h ON h.project_id = p.id
 LEFT JOIN (SELECT project_id, count(*) AS total,
                   count(*) FILTER (WHERE status IN ('OPEN','IN_PROGRESS')) AS open
            FROM vulnerabilities GROUP BY project_id) v ON v.project_id = p.id
