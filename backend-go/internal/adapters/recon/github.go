@@ -34,9 +34,11 @@ type GithubSecret struct {
 
 // GithubTarget — разобранная цель скана: либо конкретный repo-URL, либо org/user.
 type GithubTarget struct {
-	IsOrg bool
-	Repo  string // полный URL репозитория (для --repo)
-	Org   string // имя org/user (для --org)
+	IsOrg    bool
+	Repo     string // полный URL репозитория (для --repo)
+	Org      string // имя org/user (для --org)
+	Owner    string // владелец репозитория (для REST /repos/{owner}/{repo})
+	RepoName string // имя репозитория без .git (для REST /repos/{owner}/{repo})
 }
 
 // ParseGithubTarget разбирает github-URL в цель скана. Один сегмент пути → org/user
@@ -67,8 +69,9 @@ func ParseGithubTarget(raw string) (GithubTarget, error) {
 		return GithubTarget{IsOrg: true, Org: segs[0]}, nil
 	}
 	// owner/repo — нормализуем к https://github.com/owner/repo (без .git и хвоста).
-	repoURL := "https://" + host + "/" + segs[0] + "/" + strings.TrimSuffix(segs[1], ".git")
-	return GithubTarget{Repo: repoURL}, nil
+	repoName := strings.TrimSuffix(segs[1], ".git")
+	repoURL := "https://" + host + "/" + segs[0] + "/" + repoName
+	return GithubTarget{Repo: repoURL, Owner: segs[0], RepoName: repoName}, nil
 }
 
 // ScanGithub запускает trufflehog github по цели и парсит JSON-строки в находки.

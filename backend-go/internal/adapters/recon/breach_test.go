@@ -148,3 +148,75 @@ func TestThinBreachSource_LeakCheckParses(t *testing.T) {
 		t.Fatalf("key not sent: %q", doer.lastReq.URL.Query().Get("key"))
 	}
 }
+
+// HIBP по домену: Domain Search endpoint отдаёт карту {alias:[breaches]} → каждый
+// alias раскрывается в account-находку subject=<alias>@<domain> (утёкший email-аккаунт),
+// ключ уходит в заголовок, домен — в путь (не аргумент процесса).
+func TestHIBPSource_DomainSearch(t *testing.T) {
+	doer := &mockDoer{body: `{"john":["Adobe","LinkedIn"],"sales":["Dropbox"]}`}
+	src := &hibpSource{key: "hibp-key-xxx", cfg: BreachHTTPConfig{Doer: doer}}
+
+	leaks, err := src.Search(context.Background(), BreachTarget{Kind: BreachTargetDomain, Value: "corp.com"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(leaks) != 2 {
+		t.Fatalf("want 2 account leaks, got %d: %+v", len(leaks), leaks)
+	}
+	// собираем по subject (порядок из map недетерминирован).
+	bySubject := map[string]BreachLeak{}
+	for _, l := range leaks {
+		if l.Source != "hibp" || l.Kind != "account" || l.Value != "" {
+			t.Fatalf("unexpected leak shape: %+v", l)
+		}
+		bySubject[l.Subject] = l
+	}
+	john, ok := bySubject["john@corp.com"]
+	if !ok {
+		t.Fatalf("john@corp.com not emitted: %+v", leaks)
+	}
+	// ресурс-источник: конкретные breach-базы + домен.
+	breaches, _ := john.Detail["breaches"].([]string)
+	if len(breaches) != 2 || breaches[0] != "Adobe" {
+		t.Fatalf("john breaches wrong: %+v", john.Detail)
+	}
+	if john.Detail["domain"] != "corp.com" {
+		t.Fatalf("john domain missing: %+v", john.Detail)
+	}
+	if _, ok := bySubject["sales@corp.com"]; !ok {
+		t.Fatalf("sales@corp.com not emitted: %+v", leaks)
+	}
+	// ключ в заголовке, домен в пути /breacheddomain/<domain>.
+	if doer.lastReq.Header.Get("hibp-api-key") != "hibp-key-xxx" {
+		t.Fatalf("api key not in header")
+	}
+	if !strings.Contains(doer.lastReq.URL.Path, "breacheddomain/corp.com") {
+		t.Fatalf("domain endpoint/path wrong: %s", doer.lastReq.URL.Path)
+	}
+}
+
+// Dehashed по домену: entries без пароля → account-находки с subject=<email>
+// (утёкшие email-аккаунты домена), с указанием breach-базы в detail.
+func TestDehashedSource_DomainAccounts(t *testing.T) {
+	doer := &mockDoer{body: `{"entries":[{"email":"a@corp.com","database_name":"Collection1"},{"email":"b@corp.com","database_name":"LinkedIn"}]}`}
+	src := &dehashedSource{key: "acct@x.com:apikey123", cfg: BreachHTTPConfig{Doer: doer}}
+
+	leaks, err := src.Search(context.Background(), BreachTarget{Kind: BreachTargetDomain, Value: "corp.com"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(leaks) != 2 {
+		t.Fatalf("want 2 account leaks, got %d: %+v", len(leaks), leaks)
+	}
+	for _, l := range leaks {
+		if l.Source != "dehashed" || l.Kind != "account" || l.Value != "" {
+			t.Fatalf("want account leak without password, got %+v", l)
+		}
+		if l.Detail["database"] == "" || l.Detail["database"] == nil {
+			t.Fatalf("account leak missing breach database resource: %+v", l.Detail)
+		}
+	}
+	if leaks[0].Subject != "a@corp.com" {
+		t.Fatalf("subject should be discovered email: %+v", leaks[0])
+	}
+}

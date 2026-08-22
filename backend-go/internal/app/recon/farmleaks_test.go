@@ -50,10 +50,14 @@ func TestRunFarmLeaks_GithubAndBreachSources(t *testing.T) {
 	sink := &fakeSink{}
 	svc.AttachLeaks(fakeResolver{token: "ghp_xxx", ok: true}, sink)
 
-	var gotToken string
+	var gotToken, gotEmailToken string
 	svc.githubScan = func(_ context.Context, target, token string) ([]reconnet.GithubSecret, error) {
 		gotToken = token
 		return []reconnet.GithubSecret{{Detector: "AWS", Verified: true, Raw: "AKIA", Repo: target, File: "cfg.yml"}}, nil
+	}
+	svc.githubEmailScan = func(_ context.Context, _, token string) ([]reconnet.GithubEmail, []string, error) {
+		gotEmailToken = token
+		return []reconnet.GithubEmail{{Email: "dev@corp.com", Name: "Dev", Repos: []string{"owner/repo"}}}, nil, nil
 	}
 	enabledSrc := &fakeBreachSource{name: "hibp", enabled: true, leaks: []reconnet.BreachLeak{
 		{Source: "hibp", Kind: "account", Subject: "a@b.com", Detail: map[string]any{"breach": "Adobe"}},
@@ -80,12 +84,16 @@ func TestRunFarmLeaks_GithubAndBreachSources(t *testing.T) {
 	if gotToken != "ghp_xxx" {
 		t.Fatalf("github token not passed: %q", gotToken)
 	}
-	// 1 github secret + 2 breach (enabled src × {domain,email}) = 3 записи, один sink-вызов.
+	if gotEmailToken != "ghp_xxx" {
+		t.Fatalf("github email token not passed: %q", gotEmailToken)
+	}
+	// 1 github secret + 1 github account email + 2 breach (enabled src × {domain,email})
+	// = 4 записи, один sink-вызов.
 	if sink.called != 1 {
 		t.Fatalf("sink must be called once, got %d", sink.called)
 	}
-	if len(sink.recs) != 3 {
-		t.Fatalf("want 3 leak records, got %d: %+v", len(sink.recs), sink.recs)
+	if len(sink.recs) != 4 {
+		t.Fatalf("want 4 leak records, got %d: %+v", len(sink.recs), sink.recs)
 	}
 	if sink.projectID != 7 || sink.jobID == nil || *sink.jobID != 1 {
 		t.Fatalf("wrong scope: project=%d jobID=%v", sink.projectID, sink.jobID)
@@ -101,14 +109,32 @@ func TestRunFarmLeaks_GithubAndBreachSources(t *testing.T) {
 	if !containsSubstr(res.Errors, "dehashed пропущен") {
 		t.Fatalf("expected soft skip note for keyless source, got %v", res.Errors)
 	}
-	// проверяем присутствие обоих source в записях.
-	var sawGithub, sawHIBP bool
+	// проверяем присутствие source и КОНКРЕТНОГО РЕСУРСА-ИСТОЧНИКА в записях.
+	var sawSecret, sawAccount, sawHIBP bool
 	for _, r := range sink.recs {
 		switch r.Source {
 		case "github":
-			sawGithub = true
-			if r.Kind != "secret" || r.Value != "AKIA" || !r.Verified {
-				t.Fatalf("github record wrong: %+v", r)
+			switch r.Kind {
+			case "secret":
+				sawSecret = true
+				if r.Value != "AKIA" || !r.Verified {
+					t.Fatalf("github secret record wrong: %+v", r)
+				}
+				// ресурс-источник секрета: repo+file.
+				if r.Detail["repo"] == nil || r.Detail["file"] != "cfg.yml" {
+					t.Fatalf("github secret detail missing resource: %+v", r.Detail)
+				}
+			case "account":
+				sawAccount = true
+				if r.Subject != "dev@corp.com" || r.Value != "" || r.Verified {
+					t.Fatalf("github account record wrong: %+v", r)
+				}
+				// ресурс-источник аккаунта: repo, где почта засветилась.
+				if r.Detail["repo"] != "owner/repo" {
+					t.Fatalf("github account detail missing repo: %+v", r.Detail)
+				}
+			default:
+				t.Fatalf("unexpected github kind: %+v", r)
 			}
 		case "hibp":
 			sawHIBP = true
@@ -117,11 +143,11 @@ func TestRunFarmLeaks_GithubAndBreachSources(t *testing.T) {
 			}
 		}
 	}
-	if !sawGithub || !sawHIBP {
-		t.Fatalf("both sources expected in records: %+v", sink.recs)
+	if !sawSecret || !sawAccount || !sawHIBP {
+		t.Fatalf("secret+account+hibp expected in records: %+v", sink.recs)
 	}
-	if res.LeaksFound != 3 {
-		t.Fatalf("LeaksFound=%d, want 3", res.LeaksFound)
+	if res.LeaksFound != 4 {
+		t.Fatalf("LeaksFound=%d, want 4", res.LeaksFound)
 	}
 }
 
@@ -175,6 +201,10 @@ func TestRunFarm_LeaksStageWiredIn(t *testing.T) {
 	svc.AttachLeaks(fakeResolver{ok: false}, sink) // токенов/ключей нет
 	svc.githubScan = func(_ context.Context, target, _ string) ([]reconnet.GithubSecret, error) {
 		return []reconnet.GithubSecret{{Detector: "AWS", Verified: false, Raw: "AKIA", Repo: target}}, nil
+	}
+	// email-майнинг засеян пустым — стадия остаётся герметичной (без сети).
+	svc.githubEmailScan = func(_ context.Context, _, _ string) ([]reconnet.GithubEmail, []string, error) {
+		return nil, nil, nil
 	}
 
 	if err := svc.RunReconJob(context.Background(), 1); err != nil {
