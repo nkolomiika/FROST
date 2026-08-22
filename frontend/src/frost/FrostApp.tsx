@@ -4408,7 +4408,7 @@ export function FrostApp() {
       {/* table */}
       <div style={{ ...CARD, overflow: "hidden" }}>
         {projRows.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 150px 70px", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+          <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: "48px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 150px 70px", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
             <div>#</div>
             <div>{t("Project")}</div>
             <div>{t("Description")}</div>
@@ -4827,6 +4827,13 @@ export function FrostApp() {
                 {sec === "hosts" && !_hd && !_ipd && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{reconTotalLabel} <b className="mono" style={{ color: "var(--fr-text)" }}>{reconTotal}</b></span>
                 )}
+                {/* Прогресс JS-скана — компактной синей пилюлей справа от Total. */}
+                {sec === "hosts" && rv === "js" && isFarmJobInFlight(state.jsFarmJob?.status ?? "") && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "600 12.5px Inter,sans-serif", color: "var(--fr-accent)", background: "var(--fr-accent-soft)", borderRadius: 20, padding: "5px 13px" }}>
+                    <span className="frost-spin" style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+                    {t("Scanning")} {state.jsFarmJob?.targets_total ?? ""} {t("domains")}
+                  </span>
+                )}
               </div>
             )}
             <div style={{ display: "flex", gap: 10, flex: "none" }}>
@@ -5065,8 +5072,8 @@ export function FrostApp() {
   /* One pill per port holds BOTH the port and its status in a single highlight.
      A down host shows "down" per port; an up host shows the probed HTTP code. */
   const portPills = (ports: Host["ports"], hostDown = false) => (
-    // Максимум 3 порта в строке — сетка из 3 колонок по контенту, дальше перенос.
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, max-content))", gap: 5, justifyContent: "start" }}>
+    // Порты переносятся по строкам (flex-wrap), не переполняя колонку в соседнюю.
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, minWidth: 0 }}>
       {portPillsOf(ports).map((p, i) => {
         const statusText = hostDown ? "down" : p.http != null ? String(p.http) : null;
         const statusColor = hostDown ? "var(--fr-danger)" : p.http != null ? httpStatusColor(p.http) : undefined;
@@ -6369,7 +6376,7 @@ export function FrostApp() {
           <div style={{ ...CARD, overflow: "hidden" }}>
             {/* No column headers over an empty table (same as the hosts table). */}
             {ipsRows.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div>{t("IP address")}</div><div>{t("Hostname")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("ips")}</div>
               </div>
             )}
@@ -6417,7 +6424,7 @@ export function FrostApp() {
                 </div>
                 {g.expanded && (
                   <div style={{ borderTop: "1px solid var(--fr-divider)", animation: "frost-fade .2s ease both" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+                    <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: "72px minmax(0,1fr) 96px", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                       <div>{t("Method")}</div><div>{t("Path")}</div><div />
                     </div>
                     {g.endpoints.map((e: Endpoint, i: number) => {
@@ -6452,16 +6459,10 @@ export function FrostApp() {
       return (
         <div className="route">
           {reconFilterRow("js")}
-          {/* Same blue in-flight banner as the host/IP farms. */}
-          {jsRunning && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
-              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
-              {t("Scanning")} {state.jsFarmJob?.targets_total ?? ""} {t("domains — secrets and paths appear as files are scanned.")}
-            </div>
-          )}
+          {/* Прогресс скана — компактной пилюлей в шапке (справа от Total), не баннером. */}
           <div style={{ ...CARD, overflow: "hidden" }}>
             {jsGroups.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div /><div>{t("Host")}</div><div>{t("Files")}</div><div>{t("Secrets")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("js")}</div>
               </div>
             )}
