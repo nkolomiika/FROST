@@ -59,17 +59,25 @@ func (s *Service) Upload(ctx context.Context, name string, data []byte, uploaded
 	return wl, nil
 }
 
-// List отдаёт забандленные тиры + кастомные словари workspace. Lines бандл-тиров не
-// считаем (огромные n0kovo-файлы, к тому же они лежат в образе воркера, не API).
+// List отдаёт ВСЕ забандленные на диске словари (рекурсивный обход WordlistDir:
+// SecLists + n0kovo, по оригинальным именам) + кастомные словари workspace.
+// Bundled собирается из реальных файлов, а не из фиксированных тиров.
 func (s *Service) List(ctx context.Context) (Listing, error) {
 	custom, err := s.store.List(ctx)
 	if err != nil {
 		return Listing{}, err
 	}
-	return Listing{
-		Bundled: []BundledTier{{Tier: "small"}, {Tier: "medium"}, {Tier: "large"}},
-		Custom:  custom,
-	}, nil
+	files, err := reconnet.EnumerateWordlists()
+	if err != nil {
+		return Listing{}, err
+	}
+	bundled := make([]BundledWordlist, 0, len(files))
+	for _, f := range files {
+		bundled = append(bundled, BundledWordlist{
+			Name: f.Name, Path: f.Path, Category: f.Category, Lines: f.Lines,
+		})
+	}
+	return Listing{Bundled: bundled, Custom: custom}, nil
 }
 
 // Delete удаляет объект MinIO и строку метаданных. Нет строки → 404. Ошибку удаления
@@ -92,13 +100,24 @@ func (s *Service) Delete(ctx context.Context, id int32) error {
 }
 
 // Materialize — ЕДИНСТВЕННЫЙ путь, отдающий имя файла-словаря инструменту фермы.
-// customID==0 → бандл-тир: возвращаем СЕРВЕРНЫЙ забандленный путь (cleanup — no-op).
-// customID>0 → стримим объект MinIO во ВРЕМЕННЫЙ серверный файл (os.CreateTemp,
-// серверное имя) и возвращаем его путь + cleanup, удаляющий temp. Ни в одном случае
-// путь не выводится из пользовательского ввода → нет traversal/arg-инъекции.
-func (s *Service) Materialize(ctx context.Context, customID int, tier string) (path string, cleanup func(), err error) {
+// Порядок разрешения: customID>0 (кастомный из MinIO во ВРЕМЕННЫЙ серверный файл) →
+// bundledPath!="" (забандленный на диске файл по ОТНОСИТЕЛЬНОМУ пути, ВАЛИДИРУЕТСЯ
+// под WordlistDir и возвращается напрямую, cleanup — no-op) → tier (бандл-тир по
+// WordlistSize). Путь забандленного словаря приходит как пользовательский выбор, но
+// ResolveWordlistPath синтаксически чистит его и требует, чтобы он оставался под
+// WordlistDir → traversal наружу невозможен; невалидный путь → ошибка (наверх
+// деградирует к тиру в resolveWordlist). Пользовательская строка НИКОГДА не уходит
+// инструменту без серверной валидации.
+func (s *Service) Materialize(ctx context.Context, customID int, bundledPath, tier string) (path string, cleanup func(), err error) {
 	noop := func() {}
 	if customID <= 0 {
+		if bundledPath != "" {
+			abs, ok := reconnet.ResolveWordlistPath(bundledPath)
+			if !ok {
+				return "", noop, apperr.Validation("Недопустимый путь словаря")
+			}
+			return abs, noop, nil
+		}
 		return reconnet.WordlistPath(tier), noop, nil
 	}
 	wl, err := s.store.Get(ctx, int32(customID))

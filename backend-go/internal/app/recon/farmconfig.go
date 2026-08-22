@@ -20,16 +20,23 @@ type FarmConfig struct {
 	PortScanScope string `json:"port_scan_scope"` // "top1000" | "all"
 	CrawlDepth    int    `json:"crawl_depth"`     // глубина краула (1..10)
 
-	// Выбор словаря брута поддоменов: 0 → бандл-тир из WordlistSize; >0 → id
-	// кастомного словаря (recon_wordlists), материализуется в temp перед dnsx -w.
-	SubdomainWordlistID int `json:"subdomain_wordlist_id"`
+	// Выбор словаря брута поддоменов. Приоритет разрешения (см. Materialize):
+	//   SubdomainWordlistID>0 → кастомный словарь (recon_wordlists) из MinIO в temp;
+	//   иначе SubdomainWordlistPath!="" → забандленный на диске файл по ОТНОСИТЕЛЬНОМУ
+	//   пути под WordlistDir (SecLists/n0kovo, валидируется сервером);
+	//   иначе → бандл-тир из WordlistSize.
+	SubdomainWordlistID   int    `json:"subdomain_wordlist_id"`
+	SubdomainWordlistPath string `json:"subdomain_wordlist_path"`
 
 	// Стадия эндпоинтов: режим сбора и словарь дир-фаззинга (ffuf).
 	//   EndpointsMode "passive" → gau+waybackurls; "active" → katana+ffuf;
 	//   "both" (дефолт) → всё. Тумблеры Katana/Gau/Waybackurls остаются доп.фильтром.
-	//   EndpointsWordlistID: 0 → бандл-дефолт для ffuf (medium-тир); >0 → кастомный.
-	EndpointsMode       string `json:"endpoints_mode"`
-	EndpointsWordlistID int    `json:"endpoints_wordlist_id"`
+	//   Словарь ffuf: EndpointsWordlistID>0 → кастомный; иначе EndpointsWordlistPath!=""
+	//   → забандленный файл по пути; иначе → бандл-тир (WordlistSize). ffuf включается,
+	//   если задан id ИЛИ путь.
+	EndpointsMode         string `json:"endpoints_mode"`
+	EndpointsWordlistID   int    `json:"endpoints_wordlist_id"`
+	EndpointsWordlistPath string `json:"endpoints_wordlist_path"`
 
 	// Stage toggles — пер-стадийное включение полного прогона (farm_run). Дефолт
 	// true у всех: пропущенная в сохранённом JSON стадия остаётся включённой (см.
@@ -97,9 +104,11 @@ func DefaultFarmConfig() FarmConfig {
 		PortScanScope: "top1000",
 		CrawlDepth:    3,
 
-		SubdomainWordlistID: 0,
-		EndpointsMode:       "both",
-		EndpointsWordlistID: 0,
+		SubdomainWordlistID:   0,
+		SubdomainWordlistPath: "",
+		EndpointsMode:         "both",
+		EndpointsWordlistID:   0,
+		EndpointsWordlistPath: "",
 
 		StageSubdomains: true,
 		StageEndpoints:  true,
@@ -176,6 +185,12 @@ func (c *FarmConfig) Sanitize() {
 	if c.EndpointsWordlistID < 0 {
 		c.EndpointsWordlistID = 0
 	}
+	// Пути забандленных словарей: чистим до безопасного относительного пути под
+	// WordlistDir; абсолютный/'..'/выход наружу → "" (используется id или тир).
+	// Синтаксическая проверка; финальная валидация с проверкой файла — на запуске
+	// инструмента (ResolveWordlistPath в Materialize).
+	c.SubdomainWordlistPath = reconnet.SanitizeWordlistRelPath(c.SubdomainWordlistPath)
+	c.EndpointsWordlistPath = reconnet.SanitizeWordlistRelPath(c.EndpointsWordlistPath)
 	c.CrawlDepth = clampInt(c.CrawlDepth, 1, 10)
 	c.RateLimit = clampInt(c.RateLimit, 1, 500)
 	c.Concurrency = clampInt(c.Concurrency, 1, 100)

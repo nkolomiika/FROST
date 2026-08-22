@@ -33,15 +33,21 @@ type NewWordlist struct {
 	UploadedBy *int32
 }
 
-// BundledTier — забандленный в образ тир-словарь поддоменов (n0kovo). Пользователь
-// выбирает его размером ("small|medium|large"), файл маппит FROST.
-type BundledTier struct {
-	Tier  string `json:"tier"`
-	Lines *int32 `json:"lines,omitempty"`
+// BundledWordlist — один забандленный в образ recon-воркера словарь на диске
+// (SecLists + n0kovo), отдаётся наружу по ОРИГИНАЛЬНОМУ имени. Path — путь
+// ОТНОСИТЕЛЬНО WordlistDir (им же выбирается словарь в FarmConfig), Name — базовое
+// имя, Category — каталог (напр. "seclists/Discovery/DNS" или "n0kovo"), Lines —
+// дешёвый подсчёт строк с потолком.
+type BundledWordlist struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Category string `json:"category"`
+	Lines    int    `json:"lines"`
 }
 
-// Listing — ответ GET /recon/wordlists: забандленные тиры + кастомные словари.
+// Listing — ответ GET /recon/wordlists: реальные забандленные файлы (по именам) +
+// кастомные словари workspace.
 type Listing struct {
-	Bundled []BundledTier `json:"bundled"`
-	Custom  []Wordlist    `json:"custom"`
+	Bundled []BundledWordlist `json:"bundled"`
+	Custom  []Wordlist        `json:"custom"`
 }

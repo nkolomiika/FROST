@@ -60,8 +60,11 @@ COPY --from=katana /usr/local/bin/katana /usr/local/bin/katana
 COPY --from=endpoint-tools /out/gau /usr/local/bin/gau
 COPY --from=endpoint-tools /out/waybackurls /usr/local/bin/waybackurls
 COPY --from=endpoint-tools /out/ffuf /usr/local/bin/ffuf
-# Тир-словари поддоменов (n0kovo_subdomains) для активного брута dnsx в полном
-# прогоне фермы. Три тира → small|medium|large (см. WordlistPath в Go). Каталог
+# Забандленные словари recon-воркера. Тир-словари поддоменов (n0kovo_subdomains,
+# small|medium|large — см. WordlistPath в Go) в корне каталога + КУРИРОВАННЫЙ набор
+# SecLists (отдельные raw-файлы, НЕ клон ~1ГБ репо) под seclists/<категория>/ с
+# сохранением оригинальных имён. Все *.txt перечисляются в API по оригинальным
+# именам (EnumerateWordlists) и выбираются в ферме по относительному пути. Каталог
 # переопределяется env RECON_WORDLIST_DIR (дефолт — этот).
 #
 # Скачивание НЕ фатально для сборки: сеть buildkit на сервере флапает (из-за этого
@@ -79,6 +82,29 @@ RUN apk add --no-cache --virtual .wl-fetch wget; \
       else \
         echo "WARN: wordlist ${tier} download failed — active brute will self-skip this tier"; \
         rm -f "$f"; \
+      fi; \
+    done; \
+    for rel in \
+      Discovery/DNS/subdomains-top1million-5000.txt \
+      Discovery/DNS/subdomains-top1million-20000.txt \
+      Discovery/DNS/subdomains-top1million-110000.txt \
+      Discovery/DNS/bitquark-subdomains-top100000.txt \
+      Discovery/Web-Content/directory-list-2.3-small.txt \
+      Discovery/Web-Content/directory-list-2.3-medium.txt \
+      Discovery/Web-Content/raft-medium-directories.txt \
+      Discovery/Web-Content/raft-medium-files.txt \
+      Discovery/Web-Content/common.txt \
+      Discovery/Web-Content/raft-large-directories.txt \
+    ; do \
+      dst="/usr/local/share/frost-wordlists/seclists/${rel}"; \
+      mkdir -p "$(dirname "$dst")"; \
+      if wget -q --tries=3 --timeout=45 -O "$dst" \
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/${rel}" \
+        && [ -s "$dst" ]; then \
+        echo "seclists ${rel}: ok ($(wc -c < "$dst") bytes)"; \
+      else \
+        echo "WARN: seclists ${rel} download failed — file will be absent from the picker"; \
+        rm -f "$dst"; \
       fi; \
     done; \
     apk del .wl-fetch
