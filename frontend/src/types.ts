@@ -465,8 +465,12 @@ export interface ReconFarmConfig {
   ct_time_correlation: boolean;
   active_brute: boolean;
   subs_max_results: number;
-  /** Словарь брута сабдоменов: 0 = бандл-тир (по `wordlist_size`), >0 = кастомный. */
+  /** Словарь брута сабдоменов. Разрешение на бэке: кастомный id (>0) → путь
+   *  забандленного файла (!="") → тир по `wordlist_size`. */
   subdomain_wordlist_id: number;
+  /** Путь забандленного словаря сабдоменов ОТНОСИТЕЛЬНО каталога словарей
+   *  ("" = не выбран). Действует, только если `subdomain_wordlist_id` == 0. */
+  subdomain_wordlist_path: string;
   // Liveness
   dnsx: boolean;
   httpx: boolean;
@@ -482,8 +486,12 @@ export interface ReconFarmConfig {
   /** Режим сбора эндпоинтов: passive = архивы (gau+waybackurls), active = краул
    *  (katana) + dir-fuzz (ffuf), both = всё сразу. */
   endpoints_mode: "passive" | "active" | "both";
-  /** Кастомный словарь для ffuf dir-fuzz (active/both): 0 = ffuf пропускается. */
+  /** Словарь для ffuf dir-fuzz (active/both). Разрешение на бэке: кастомный id (>0)
+   *  → путь забандленного файла (!="") → пропуск ffuf. */
   endpoints_wordlist_id: number;
+  /** Путь забандленного словаря для ffuf ОТНОСИТЕЛЬНО каталога словарей
+   *  ("" = не выбран). Действует, только если `endpoints_wordlist_id` == 0. */
+  endpoints_wordlist_path: string;
   // Parameters
   param_discovery: boolean;
   // Dir fuzz
@@ -501,8 +509,8 @@ export interface ReconFarmConfig {
   leaks_emails: string[];
 }
 
-/** Кастомный (загруженный) словарь брута. Бандл-тиры файла не имеют — только
- *  `tier`; кастомные несут метаданные о загруженном файле. */
+/** Кастомный (загруженный) словарь брута. Несёт метаданные о загруженном файле;
+ *  выбирается по `id`. */
 export interface Wordlist {
   id: number;
   name: string;
@@ -511,9 +519,21 @@ export interface Wordlist {
   created_at: string;
 }
 
-/** Ответ списка словарей: бандл-тиры (по размеру) + загруженные кастомные. */
+/** Забандленный на диске словарь (SecLists + n0kovo), отдаётся по оригинальному
+ *  имени. `path` — путь ОТНОСИТЕЛЬНО каталога словарей (им же выбирается словарь в
+ *  FarmConfig), `category` — каталог ("seclists/Discovery/DNS" или "n0kovo"),
+ *  `lines` — дешёвый подсчёт строк с потолком. */
+export interface WordlistBundled {
+  name: string;
+  path: string;
+  category: string;
+  lines: number;
+}
+
+/** Ответ списка словарей: реальные забандленные файлы (по путям) + загруженные
+ *  кастомные (по id). */
 export interface WordlistsResponse {
-  bundled: { tier: "small" | "medium" | "large" }[];
+  bundled: WordlistBundled[];
   custom: Wordlist[];
 }
 

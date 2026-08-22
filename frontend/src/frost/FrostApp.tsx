@@ -151,6 +151,7 @@ import type {
   LeaksReport as ApiLeaksReport,
   LeakScanJob as ApiLeakScanJob,
   Wordlist as ApiWordlist,
+  WordlistBundled as ApiWordlistBundled,
   WordlistsResponse as ApiWordlistsResponse,
   IntegrationKey as ApiIntegrationKey,
   Port as ApiPort,
@@ -1415,8 +1416,14 @@ export function FrostApp() {
           : { bundled: [], custom: [wl] },
       }));
       // Сразу выбираем загруженный словарь для нужной стадии.
-      if (target === "subdomains") setFarmField("subdomain_wordlist_id", wl.id);
-      else setFarmField("endpoints_wordlist_id", wl.id);
+      // Загруженный кастомный выбирается по id → сбрасываем путь забандленного.
+      if (target === "subdomains") {
+        setFarmField("subdomain_wordlist_id", wl.id);
+        setFarmField("subdomain_wordlist_path", "");
+      } else {
+        setFarmField("endpoints_wordlist_id", wl.id);
+        setFarmField("endpoints_wordlist_path", "");
+      }
       pushToast(t("Wordlist uploaded"), "success");
     } catch (e) {
       setState({ wordlistUploading: false });
@@ -5566,16 +5573,21 @@ export function FrostApp() {
       );
     };
 
-    // ─ Wordlists: словари брута (бандл-тиры + кастомные загруженные) ─
-    // Бандл-тиры всегда доступны (фолбэк на small/medium/large, если список ещё
-    // не подтянулся); кастомные приходят из wordlists.custom.
-    const wlBundled: ("small" | "medium" | "large")[] =
-      state.wordlists && state.wordlists.bundled.length > 0
-        ? state.wordlists.bundled.map((b) => b.tier)
-        : (["small", "medium", "large"] as const).slice();
+    // ─ Wordlists: словари брута (реальные забандленные файлы + кастомные) ─
+    // Забандленные (SecLists + n0kovo) приходят с диска recon-воркера, выбираются
+    // ПО ПУТИ; кастомные загруженные — ПО id. Список приходит из wordlists.
+    const wlBundled: ApiWordlistBundled[] = state.wordlists?.bundled ?? [];
     const wlCustom: ApiWordlist[] = state.wordlists?.custom ?? [];
-    // Компактная подпись кастомного словаря: число строк + размер файла.
+    // Компактные подписи: кастомный — строки + размер файла; забандленный — строки.
     const wlDesc = (w: ApiWordlist): string => `${w.lines.toLocaleString()} ${t("lines")} · ${kb(w.size_bytes)}`;
+    const bundledDesc = (b: ApiWordlistBundled): string => `${b.lines.toLocaleString()} ${t("lines")}`;
+    // Опции забандленных словарей, сгруппированные по category (список уже
+    // отсортирован по path на бэке → одинаковые категории идут подряд).
+    const bundledOpts = (files: ApiWordlistBundled[]): FrostSelectOption[] =>
+      files.map((b) => ({ value: `path:${b.path}`, label: b.name, desc: bundledDesc(b), group: b.category }));
+    // Опции кастомных словарей под общей группой «Custom».
+    const customOpts = (): FrostSelectOption[] =>
+      wlCustom.map((w) => ({ value: `custom:${w.id}`, label: w.name, desc: wlDesc(w), group: t("Custom") }));
 
     // Кнопка-affordance «Upload…» — скрытый file-input внутри label. `target`
     // решает, какой стадии присвоить загруженный словарь.
@@ -5600,34 +5612,66 @@ export function FrostApp() {
       </label>
     );
 
-    // Пикер словаря для сабдоменов: бандл-тиры + кастомные. Выбор тира ставит
-    // wordlist_size и обнуляет subdomain_wordlist_id; выбор кастомного — наоборот.
+    // Пикер словаря для сабдоменов: ВСЕ забандленные (по категориям) + кастомные.
+    // Выбор забандленного ставит subdomain_wordlist_path и обнуляет id; выбор
+    // кастомного — наоборот. Значение отражает id (приоритет) → path → фолбэк.
+    // Фолбэк выбранной опции (когда ни id, ни path не заданы): n0kovo-файл текущего
+    // тира wordlist_size, иначе первый n0kovo, иначе первый забандленный — это то,
+    // что реально возьмёт бэк по wordlist_size.
+    const tierFile: Record<string, string> = {
+      small: "n0kovo_subdomains_small.txt",
+      medium: "n0kovo_subdomains_medium.txt",
+      large: "n0kovo_subdomains_huge.txt",
+    };
+    const n0kovoBundled = wlBundled.filter((b) => b.category === "n0kovo");
+    const subWlFallback =
+      n0kovoBundled.find((b) => b.name === tierFile[cfg.wordlist_size]) ?? n0kovoBundled[0] ?? wlBundled[0];
     const subWlValue =
       cfg.subdomain_wordlist_id > 0 && wlCustom.some((w) => w.id === cfg.subdomain_wordlist_id)
         ? `custom:${cfg.subdomain_wordlist_id}`
-        : `tier:${cfg.wordlist_size}`;
-    const subWlOptions: FrostSelectOption[] = [
-      ...wlBundled.map((tier) => ({ value: `tier:${tier}`, label: `${t(cap(tier))} · ${t("bundled")}`, desc: t("Bundled subdomain wordlist") })),
-      ...wlCustom.map((w) => ({ value: `custom:${w.id}`, label: w.name, desc: wlDesc(w) })),
-    ];
+        : cfg.subdomain_wordlist_path && wlBundled.some((b) => b.path === cfg.subdomain_wordlist_path)
+          ? `path:${cfg.subdomain_wordlist_path}`
+          : subWlFallback
+            ? `path:${subWlFallback.path}`
+            : "";
+    const subWlOptions: FrostSelectOption[] = [...bundledOpts(wlBundled), ...customOpts()];
     const onPickSubWl = (v: string) => {
       if (v.startsWith("custom:")) {
         setFarmField("subdomain_wordlist_id", Number(v.slice(7)));
-      } else {
-        setFarmField("wordlist_size", v.slice(5) as "small" | "medium" | "large");
+        setFarmField("subdomain_wordlist_path", "");
+      } else if (v.startsWith("path:")) {
+        setFarmField("subdomain_wordlist_path", v.slice(5));
         setFarmField("subdomain_wordlist_id", 0);
       }
     };
-    // Пикер словаря для ffuf (endpoints active/both): только кастомные + «None».
-    // None (=0) означает «пропустить ffuf».
+    // Пикер словаря для ffuf (endpoints active/both): релевантные забандленные
+    // (Web-Content-списки) + кастомные + «None». Выбор забандленного ставит
+    // endpoints_wordlist_path (id=0), кастомного — id (path=""), None — оба сброшены
+    // (=пропустить ffuf).
+    const ffufBundled = wlBundled.filter((b) => /web-content/i.test(b.category));
     const ffufWlValue =
       cfg.endpoints_wordlist_id > 0 && wlCustom.some((w) => w.id === cfg.endpoints_wordlist_id)
-        ? String(cfg.endpoints_wordlist_id)
-        : "0";
+        ? `custom:${cfg.endpoints_wordlist_id}`
+        : cfg.endpoints_wordlist_path && wlBundled.some((b) => b.path === cfg.endpoints_wordlist_path)
+          ? `path:${cfg.endpoints_wordlist_path}`
+          : "none";
     const ffufWlOptions: FrostSelectOption[] = [
-      { value: "0", label: t("None · skip ffuf"), desc: t("Don't run directory fuzzing") },
-      ...wlCustom.map((w) => ({ value: String(w.id), label: w.name, desc: wlDesc(w) })),
+      { value: "none", label: t("None · skip ffuf"), desc: t("Don't run directory fuzzing") },
+      ...bundledOpts(ffufBundled),
+      ...customOpts(),
     ];
+    const onPickFfufWl = (v: string) => {
+      if (v.startsWith("custom:")) {
+        setFarmField("endpoints_wordlist_id", Number(v.slice(7)));
+        setFarmField("endpoints_wordlist_path", "");
+      } else if (v.startsWith("path:")) {
+        setFarmField("endpoints_wordlist_path", v.slice(5));
+        setFarmField("endpoints_wordlist_id", 0);
+      } else {
+        setFarmField("endpoints_wordlist_id", 0);
+        setFarmField("endpoints_wordlist_path", "");
+      }
+    };
 
     // Полноширинный блок пикера словаря: заголовок + подсказка, ряд «селект +
     // Upload», и (только админ) список кастомных словарей с корзиной на удаление.
@@ -5811,7 +5855,7 @@ export function FrostApp() {
                   {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
                   {wordlistBlock(
                     t("Wordlist"),
-                    t("Pick a bundled tier or a custom uploaded list for subdomain brute-forcing."),
+                    t("Pick a bundled list (SecLists / n0kovo) or a custom uploaded one for subdomain brute-forcing."),
                     subWlValue,
                     subWlOptions,
                     onPickSubWl,
@@ -5826,10 +5870,10 @@ export function FrostApp() {
                   {(cfg.endpoints_mode === "active" || cfg.endpoints_mode === "both") &&
                     wordlistBlock(
                       t("Dir-fuzz wordlist"),
-                      t("Custom list for ffuf directory fuzzing — None skips ffuf entirely."),
+                      t("Bundled or custom list for ffuf directory fuzzing — None skips ffuf entirely."),
                       ffufWlValue,
                       ffufWlOptions,
-                      (v) => setFarmField("endpoints_wordlist_id", Number(v)),
+                      onPickFfufWl,
                       "endpoints",
                       false,
                     )}

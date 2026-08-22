@@ -13,6 +13,9 @@ export interface FrostSelectOption {
   dot?: string;
   /** Optional one-line hint under the label. */
   desc?: string;
+  /** Optional group header. Consecutive options sharing a group render under one
+      sticky-styled header row (optgroup-style). Ungrouped options render flat. */
+  group?: string;
 }
 
 interface FrostSelectProps {
@@ -106,11 +109,32 @@ export function FrostSelect({ value, options, onChange, id, placeholder }: Frost
           transformOrigin: "top",
         }}
       >
-        {options.map((o) => {
+        {options.map((o, i) => {
           const on = o.value === value;
+          // Заголовок группы: рисуем, когда группа опции отличается от предыдущей
+          // (первая опция с группой тоже получает заголовок). optgroup-style.
+          const prevGroup = i > 0 ? options[i - 1].group : undefined;
+          const showHeader = o.group !== undefined && o.group !== prevGroup;
           return (
+            <div key={o.value}>
+            {showHeader && (
+              <div
+                aria-hidden="true"
+                style={{
+                  padding: "8px 10px 4px",
+                  font: "700 10.5px Inter,sans-serif",
+                  letterSpacing: ".06em",
+                  textTransform: "uppercase",
+                  color: "var(--fr-text-faint)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {o.group}
+              </div>
+            )}
             <div
-              key={o.value}
               role="option"
               aria-selected={on}
               className="nav clk"
@@ -134,6 +158,7 @@ export function FrostSelect({ value, options, onChange, id, placeholder }: Frost
                 {o.desc && <div style={{ fontSize: 11.5, color: "var(--fr-text-3)", marginTop: 1 }}>{o.desc}</div>}
               </div>
               {on && <Icon name="check" size={16} color="var(--fr-accent)" sw={2.4} />}
+            </div>
             </div>
           );
         })}
