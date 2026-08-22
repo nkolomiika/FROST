@@ -6513,7 +6513,11 @@ export function FrostApp() {
 
         {/* main column */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
-          <main style={{ flex: 1, overflow: "auto", paddingBottom: 48 }}>
+          <main style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
+            {/* Контент-обёртка растёт и НЕ сжимается: на короткой странице занимает
+                всю высоту и прижимает футер к низу; на длинной — перерастает экран,
+                и футер виден только когда долистал до конца (не залезает на текст). */}
+            <div style={{ flex: "1 0 auto" }}>
             {isList && renderProjects()}
             {isDocs && (
               <Suspense fallback={<div className="route" style={{ padding: "40px 48px", color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading docs…")}</div>}>
@@ -6529,15 +6533,15 @@ export function FrostApp() {
                 : renderNoAccessPage("The Members section is admin-only — this is where users are created and roles assigned."))}
             {state.view === "detail" && (state.accessDenied ? renderNoAccessPage() : renderDetail())}
             {state.view === "profile" && renderProfile()}
+            </div>
+            {/* Футер в потоке под контент-обёрткой: по центру, прижат к низу на
+                короткой странице и виден только в конце — на текст не залезает. */}
+            <footer style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "20px 16px 16px", fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap" }}>
+              <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
+            </footer>
           </main>
         </div>
       </div>
-
-      {/* Копирайт зафиксирован по центру ВСЕГО экрана у самого низа (во всю ширину,
-          не смещён сайдбаром). pointer-events:none — не перехватывает клики. */}
-      <footer style={{ position: "fixed", left: 0, right: 0, bottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 12.5, color: "var(--fr-text-faint)", flexWrap: "wrap", pointerEvents: "none", zIndex: 5 }}>
-        <FrostWordmark size={13} spacing={2} /><span>·</span><span>{t("Copyright © 2026. All rights reserved.")}</span>
-      </footer>
 
       {/* ===== modals ===== */}
       {/* workspace user editor */}
