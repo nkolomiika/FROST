@@ -593,6 +593,56 @@ export interface FarmReport {
   js: StagedJs[];
 }
 
+// ---- Vault: утечки (OSINT-источники + GitHub-скан) ----
+
+/** Одна найденная утечка на ревью перед импортом. `detail` — сырой пейлоад
+ *  источника (форма зависит от `source`/`kind`), показываем только развёрнуто. */
+export interface Leak {
+  id: number;
+  source: string;
+  kind: string;
+  subject: string;
+  value: string;
+  detail: Record<string, unknown>;
+  verified: boolean;
+  imported: boolean;
+}
+
+/** Отчёт по утечкам проекта: сводка + список находок (мирроринг отчёта фермы). */
+export interface LeaksReport {
+  summary: {
+    total: number;
+    verified: number;
+    imported: number;
+    by_source: Record<string, number>;
+  };
+  leaks: Leak[];
+}
+
+/** Задача GitHub-скана утечек. Бэкенд возвращает как минимум id+status; поля
+ *  прогресса опциональны — поллим до терминального статуса. */
+export interface LeakScanJob {
+  id: number;
+  status: string;
+  error?: string | null;
+  progress?: { found?: number | null; scanned?: number | null } | null;
+}
+
+// ---- Workspace: интеграции (API-ключи источников утечек) ----
+
+/** Один известный ключ интеграции. Значение секрета бэкенд не отдаёт никогда —
+ *  только флаг «настроен» и время последнего обновления. */
+export interface IntegrationKey {
+  key_name: string;
+  configured: boolean;
+  updated_at: string | null;
+}
+
+/** Ответ списка интеграций рабочего пространства (только для админа). */
+export interface IntegrationsResponse {
+  items: IntegrationKey[];
+}
+
 export interface Service {
   id: number;
   port_id: number;

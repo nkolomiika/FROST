@@ -18,6 +18,10 @@ import type {
   ReconFarmConfig,
   FarmRunJob,
   FarmReport,
+  LeaksReport,
+  LeakScanJob,
+  IntegrationKey,
+  IntegrationsResponse,
   ImportResult,
   OpenApiImportResult,
   Invitation,
@@ -844,6 +848,60 @@ export async function clearFarmReport(projectId: number, jobId?: number): Promis
     params: jobId != null ? { job_id: jobId } : undefined,
   });
   return data.cleared;
+}
+
+// ---- Vault: утечки (ревью OSINT-находок + запуск GitHub-скана) ----
+
+/** Отчёт по утечкам проекта: сводка + список находок. `source` опционален —
+ *  фильтрация по источнику на стороне бэкенда. */
+export async function getLeaks(projectId: number, source?: string): Promise<LeaksReport> {
+  const { data } = await api.get<LeaksReport>(`/projects/${projectId}/leaks`, {
+    params: source ? { source } : undefined,
+  });
+  return data;
+}
+
+/** Запускает GitHub-скан утечек по URL репозитория/организации. Возвращает
+ *  задачу (202) — далее поллим её статус через getLeakScan. */
+export async function startGithubLeakScan(projectId: number, url: string): Promise<LeakScanJob> {
+  const { data } = await api.post<LeakScanJob>(`/projects/${projectId}/leaks/scan/github`, { url });
+  return data;
+}
+
+/** Статус задачи GitHub-скана утечек (для живого прогресса). */
+export async function getLeakScan(projectId: number, jobId: number): Promise<LeakScanJob> {
+  const { data } = await api.get<LeakScanJob>(`/projects/${projectId}/leaks/scan/${jobId}`);
+  return data;
+}
+
+/** Импортирует выбранные утечки в проект. Возвращает число импортированных. */
+export async function importLeaks(projectId: number, ids: number[]): Promise<{ imported: number }> {
+  const { data } = await api.post<{ imported: number }>(`/projects/${projectId}/leaks/import`, { ids });
+  return data;
+}
+
+/** Очищает утечки проекта (опционально — только одного источника). Возвращает
+ *  число удалённых. */
+export async function clearLeaks(projectId: number, source?: string): Promise<number> {
+  const { data } = await api.delete<{ cleared: number }>(`/projects/${projectId}/leaks`, {
+    params: source ? { source } : undefined,
+  });
+  return data.cleared;
+}
+
+// ---- Workspace: интеграции (API-ключи источников; только админ) ----
+
+/** Список известных ключей интеграций со статусом «настроен». Секреты не
+ *  возвращаются никогда — только флаг configured и updated_at. */
+export async function getIntegrations(): Promise<IntegrationsResponse> {
+  const { data } = await api.get<IntegrationsResponse>(`/workspace/integrations`);
+  return data;
+}
+
+/** Сохраняет значение ключа интеграции. Пустое значение удаляет ключ. */
+export async function setIntegration(keyName: string, value: string): Promise<IntegrationKey> {
+  const { data } = await api.put<IntegrationKey>(`/workspace/integrations`, { key_name: keyName, value });
+  return data;
 }
 
 export async function getPorts(projectId: number, hostId: number): Promise<Port[]> {
