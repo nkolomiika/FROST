@@ -17,6 +17,7 @@ import type {
   JsFile,
   ReconFarmConfig,
   FarmRunJob,
+  FarmRunListItem,
   FarmReport,
   LeaksReport,
   LeakScanJob,
@@ -791,6 +792,13 @@ export async function startFarmRun(projectId: number, useDefaults: boolean): Pro
 }
 
 /** Статус+прогресс прогона фермы (для живой панели). */
+/** Журнал прошлых прогонов фермы: свежие первыми, не больше 100. Каждый элемент
+ *  несёт снимок конфига и итог, чтобы UI показал историю сканов без доп-запросов. */
+export async function getFarmRuns(projectId: number): Promise<FarmRunListItem[]> {
+  const { data } = await api.get<FarmRunListItem[]>(`/projects/${projectId}/recon/farm/runs`);
+  return data;
+}
+
 export async function getFarmRun(projectId: number, jobId: number): Promise<FarmRunJob> {
   const { data } = await api.get<FarmRunJob>(`/projects/${projectId}/recon/farm/run/${jobId}`);
   return data;
