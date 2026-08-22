@@ -5789,7 +5789,7 @@ export function FrostApp() {
     // ─ Leaks: построчные textarea-ручки (GitHub / домены / e-mail) ─
     // Значение хранится как string[]; textarea показывает join("\n"), ввод
     // режется по строкам и триммится (пустые строки при вводе сохраняются).
-    const leaksArea = (key: "leaks_github" | "leaks_domains" | "leaks_emails", label: string, placeholder: string, last = false, fill?: { label: string; onClick: () => void }) => (
+    const leaksArea = (key: "leaks_github" | "leaks_domains" | "leaks_emails" | "leaks_companies", label: string, placeholder: string, last = false, fill?: { label: string; onClick: () => void }) => (
       <div style={{ padding: "13px 0", borderBottom: last ? "none" : "1px solid var(--fr-divider)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <label className="flabel">{label}</label>
@@ -5975,7 +5975,7 @@ export function FrostApp() {
               {stage("lock", t("Leaks"), t("Scan GitHub repos/orgs — pulls secrets, emails and domains by default."), "stage_leaks",
                 leaksArea("leaks_github", t("GitHub URLs"), t("https://github.com/org or repo URL — one per line"), true)
               )}
-              {stage("idcard", t("Account search"), t("Breach/OSINT lookup by domain and email — activates when API keys are set in Integrations."), "stage_account_search",
+              {stage("idcard", t("Account search"), t("Breach/OSINT by domain, email, and employees enumerated from LinkedIn — free out of the box (ProxyNova); more sources activate with API keys."), "stage_account_search",
                 <>
                   {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"), false, {
                     label: t("Use project domains"),
@@ -5992,6 +5992,7 @@ export function FrostApp() {
                       if (roots.length === 0) pushToast(t("No project domains yet — add hosts first."), "info");
                     },
                   })}
+                  {leaksArea("leaks_companies", t("Companies (LinkedIn)"), t("Acme Corp — one per line · finds employees, guesses emails from Domains above"))}
                   {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"), true)}
                 </>,
                 true
@@ -7144,6 +7145,9 @@ export function FrostApp() {
       if (l.source === "github") {
         const repo = d.repo ?? (Array.isArray(d.repos) ? d.repos[0] : "");
         return String(repo || d.link || "");
+      }
+      if (l.source === "linkedin") {
+        return [d.company, d.headline].filter(Boolean).map(String).join(" · ");
       }
       const breaches = d.breaches;
       if (Array.isArray(breaches) && breaches.length) return breaches.slice(0, 3).map(String).join(", ") + (breaches.length > 3 ? "…" : "");

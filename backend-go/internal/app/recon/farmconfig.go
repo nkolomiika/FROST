@@ -53,9 +53,10 @@ type FarmConfig struct {
 	// trufflehog'ом (секреты), домены/почты пробиваются по breach-источникам с
 	// сконфигурированными ключами. Пустые списки → стадия ничего не делает.
 	// Back-compat: отсутствие полей в сохранённом JSON = nil = «не задано».
-	LeaksGithub  []string `json:"leaks_github"`
-	LeaksDomains []string `json:"leaks_domains"`
-	LeaksEmails  []string `json:"leaks_emails"`
+	LeaksGithub    []string `json:"leaks_github"`
+	LeaksDomains   []string `json:"leaks_domains"`
+	LeaksEmails    []string `json:"leaks_emails"`
+	LeaksCompanies []string `json:"leaks_companies"`
 
 	// Subdomains — сбор поддоменов.
 	Subfinder         bool `json:"subfinder"`
@@ -204,6 +205,7 @@ func (c *FarmConfig) Sanitize() {
 	c.LeaksGithub = sanitizeStrList(c.LeaksGithub, leaksInputCap, normalizeGithubInput)
 	c.LeaksDomains = sanitizeStrList(c.LeaksDomains, leaksInputCap, normalizeDomainInput)
 	c.LeaksEmails = sanitizeStrList(c.LeaksEmails, leaksInputCap, normalizeEmailInput)
+	c.LeaksCompanies = sanitizeStrList(c.LeaksCompanies, leaksInputCap, normalizeCompanyInput)
 }
 
 // leaksInputCap — верхняя граница числа входов на каждый список leaks (защита от
@@ -268,6 +270,15 @@ func normalizeEmailInput(v string) (string, bool) {
 	at := strings.IndexByte(v, '@')
 	local, dom := v[:at], v[at+1:]
 	if local == "" || dom == "" || !strings.Contains(dom, ".") || strings.HasPrefix(dom, ".") || strings.HasSuffix(dom, ".") {
+		return "", false
+	}
+	return v, true
+}
+
+// normalizeCompanyInput — название компании для LinkedIn-энумерации: непустое, не
+// слишком длинное. Пробелы/регистр сохраняем (идут в поисковый запрос как есть).
+func normalizeCompanyInput(v string) (string, bool) {
+	if v == "" || len(v) > 120 {
 		return "", false
 	}
 	return v, true

@@ -34,6 +34,10 @@ type Settings struct {
 	// org длиннее файлового майнинга).
 	GithubScanTimeout time.Duration
 
+	// LinkedIn-энумерация сотрудников (стадия поиска учёток): таймаут и потолок людей.
+	LinkedInTimeout    time.Duration
+	LinkedInMaxResults int
+
 	ServicesDetectEnabled  bool
 	ServicesDetectEngine   string
 	ServicesHttpxBin       string

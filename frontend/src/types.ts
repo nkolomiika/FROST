@@ -510,6 +510,8 @@ export interface ReconFarmConfig {
   leaks_domains: string[];
   /** E-mail-адреса для breach/OSINT-поиска. */
   leaks_emails: string[];
+  /** Компании для LinkedIn-энумерации сотрудников (стадия поиска учёток). */
+  leaks_companies: string[];
 }
 
 /** Кастомный (загруженный) словарь брута. Несёт метаданные о загруженном файле;

@@ -101,6 +101,9 @@ type Config struct {
 	ReconArchiveStagingAfterDays int `env:"RECON_ARCHIVE_STAGING_AFTER_DAYS" envDefault:"14"`
 	ReconArchiveSweepSeconds     int `env:"RECON_ARCHIVE_SWEEP_SECONDS" envDefault:"3600"`
 	ReconArchiveBatch            int `env:"RECON_ARCHIVE_BATCH" envDefault:"20"`
+	// LinkedIn-энумерация сотрудников (search-engine, без ключей).
+	ReconLinkedInTimeoutSec float64 `env:"RECON_LINKEDIN_TIMEOUT_SECONDS" envDefault:"20.0"`
+	ReconLinkedInMaxResults int     `env:"RECON_LINKEDIN_MAX_RESULTS" envDefault:"150"`
 
 	// --- Ферма JS ---
 	JSFarmMaxFilesPerHost        int     `env:"JS_FARM_MAX_FILES_PER_HOST" envDefault:"50"`

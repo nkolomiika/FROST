@@ -54,6 +54,45 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 		}
 	}
 
+	// LinkedIn-энумерация: по названиям компаний достаём сотрудников через поисковик
+	// (без логина/ключей), генерим вероятные почты по доменам прогона и добавляем их
+	// в цели breach-пробива; самих людей эмитим как account-находки (source=linkedin).
+	// Синхронно, каждая компания — видимый шаг (несколько HTTP-запросов). На cancel —
+	// как и breach-находки: накопленное отбрасывается (return true до WriteLeaks).
+	var linkedinRecs []LeakRecord
+	if cfg.StageAccountSearch && len(cfg.LeaksCompanies) > 0 {
+		genSeen := make(map[string]struct{})
+		for _, tg := range targets {
+			if tg.Kind == reconnet.BreachTargetEmail {
+				genSeen[strings.ToLower(tg.Value)] = struct{}{}
+			}
+		}
+		for _, company := range cfg.LeaksCompanies {
+			if ctx.Err() != nil {
+				break
+			}
+			stepCtx, stepCancel := context.WithCancel(ctx)
+			id := prog.addStep(RunStep{Tool: "linkedin", Args: `duckduckgo site:linkedin.com/in "` + company + `"`, Target: company, StartedAt: time.Now()}, stepCancel)
+			people, note := reconnet.EnumerateLinkedIn(stepCtx, company, s.settings)
+			if note != "" {
+				result.Errors = append(result.Errors, note)
+			}
+			for _, p := range people {
+				linkedinRecs = append(linkedinRecs, linkedinLeakRecord(p, company, cfg.LeaksDomains))
+			}
+			for _, em := range reconnet.GenerateEmails(people, cfg.LeaksDomains, leaksInputCap) {
+				le := strings.ToLower(em)
+				if _, ok := genSeen[le]; ok {
+					continue
+				}
+				genSeen[le] = struct{}{}
+				targets = append(targets, reconnet.BreachTarget{Kind: reconnet.BreachTargetEmail, Value: em})
+			}
+			prog.removeStep(id)
+			stepCancel()
+		}
+	}
+
 	// Активные источники — только те, у кого есть ключ; для неактивных — мягкая
 	// пометка (лишь когда есть что пробивать), прогон не валится.
 	var enabled []reconnet.BreachSource
@@ -179,6 +218,7 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 	}
 
 	_ = eg.Wait()
+	recs = append(recs, linkedinRecs...) // LinkedIn-люди (найдены до errgroup)
 	if wasCancelled.Load() {
 		return true
 	}
@@ -279,6 +319,35 @@ func githubEmailLeakRecord(em reconnet.GithubEmail, domainSet map[string]struct{
 		Source:   "github",
 		Kind:     "account",
 		Subject:  em.Email,
+		Value:    "",
+		Verified: false,
+		Detail:   detail,
+	}
+}
+
+// linkedinLeakRecord — сотрудник, найденный через LinkedIn (search-engine) → запись
+// хранилища утечек (source=linkedin, kind=account). subject — первая сгенерированная
+// вероятная почта (если есть домен прогона), иначе ФИО. detail несёт имя, компанию,
+// подпись-профиль и предполагаемую почту (не верифицируется).
+func linkedinLeakRecord(p reconnet.LinkedInPerson, company string, domains []string) LeakRecord {
+	name := strings.TrimSpace(p.First + " " + p.Last)
+	detail := map[string]any{
+		"name":     name,
+		"company":  company,
+		"resource": "linkedin",
+	}
+	if p.Headline != "" {
+		detail["headline"] = p.Headline
+	}
+	subject := name
+	if em := reconnet.GenerateEmails([]reconnet.LinkedInPerson{p}, domains, 1); len(em) > 0 {
+		subject = em[0]
+		detail["guessed_email"] = em[0]
+	}
+	return LeakRecord{
+		Source:   "linkedin",
+		Kind:     "account",
+		Subject:  subject,
 		Value:    "",
 		Verified: false,
 		Detail:   detail,
