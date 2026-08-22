@@ -5893,16 +5893,28 @@ export function FrostApp() {
               {stage("plug", t("Port scan"), t("Probe open ports on discovered hosts."), "stage_ports",
                 row(t("Port scan scope"), t("Scan the top 1000 ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : t("All ports"))), true)
               )}
-              {stage("lock", t("Leaks"), t("Scan GitHub, breach and OSINT sources for exposed credentials."), "stage_leaks",
-                <>
-                  {leaksArea("leaks_github", t("GitHub URLs"), t("https://github.com/org or repo URL — one per line"))}
-                  {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"))}
-                  {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"))}
-                  <div style={{ padding: "6px 0 4px", fontSize: 12, color: "var(--fr-text-3)", lineHeight: 1.5 }}>
-                    {t("Breach and OSINT sources activate when their API keys are set in Integrations.")}
+              {stage("lock", t("Leaks"), t("Scan GitHub repos/orgs — pulls secrets, emails and domains by default."), "stage_leaks",
+                leaksArea("leaks_github", t("GitHub URLs"), t("https://github.com/org or repo URL — one per line"), true),
+                !cfg.stage_leaks
+              )}
+              {/* Поиск учёток — отдельная секция под стадией Leaks: брич/OSINT-лукап
+                  по доменам и почтам (домены имён здесь, не в GitHub-блоке). */}
+              {cfg.stage_leaks && (
+                <div style={{ padding: "16px 0", borderBottom: "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 9, background: "var(--fr-accent-soft)", flex: "none" }}>
+                      <Icon name="idcard" size={17} color="var(--fr-accent)" sw={2} />
+                    </span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ font: "700 13.5px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Account search")}</div>
+                      <div style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, lineHeight: 1.4 }}>{t("Breach/OSINT lookup by domain and email — activates when API keys are set in Integrations.")}</div>
+                    </div>
                   </div>
-                </>,
-                true
+                  <div style={{ marginTop: 4, marginLeft: 46, paddingLeft: 14, borderLeft: "2px solid var(--fr-divider)" }}>
+                    {leaksArea("leaks_domains", t("Domains"), t("example.com — one per line"))}
+                    {leaksArea("leaks_emails", t("Emails"), t("name@example.com — one per line"), true)}
+                  </div>
+                </div>
               )}
             </div>
           )}
