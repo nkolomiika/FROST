@@ -190,16 +190,20 @@ func (h *hibpSource) Search(ctx context.Context, t BreachTarget) ([]BreachLeak, 
 	if strings.TrimSpace(h.key) == "" {
 		return nil, nil
 	}
-	var endpoint string
 	switch t.Kind {
 	case BreachTargetEmail:
-		endpoint = "https://haveibeenpwned.com/api/v3/breachedaccount/" + url.PathEscape(t.Value) + "?truncateResponse=false"
+		return h.searchAccount(ctx, t)
 	case BreachTargetDomain:
-		q := url.Values{"Domain": {t.Value}}
-		endpoint = "https://haveibeenpwned.com/api/v3/breaches?" + q.Encode()
+		return h.searchDomain(ctx, t)
 	default:
 		return nil, nil
 	}
+}
+
+// searchAccount — breachedaccount по почте: список брешей, где почта засветилась →
+// account-находки (пароля HIBP не отдаёт, только факт присутствия).
+func (h *hibpSource) searchAccount(ctx context.Context, t BreachTarget) ([]BreachLeak, error) {
+	endpoint := "https://haveibeenpwned.com/api/v3/breachedaccount/" + url.PathEscape(t.Value) + "?truncateResponse=false"
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -232,6 +236,46 @@ func (h *hibpSource) Search(ctx context.Context, t BreachTarget) ([]BreachLeak, 
 				"breach_date":  b.BreachDate,
 				"pwn_count":    b.PwnCount,
 				"data_classes": b.DataClasses,
+			},
+		})
+	}
+	return out, nil
+}
+
+// searchDomain — Domain Search: GET /breacheddomain/{domain} (нужен hibp-api-key и
+// верифицированное владение доменом). Ответ — карта {alias: [Breach1, ...]}, где alias
+// это local-part засветившейся почты на домене. Каждый alias раскрываем в
+// account-находку с subject=<alias>@<domain> (это и есть УТЁКШИЙ EMAIL-АККАУНТ).
+func (h *hibpSource) searchDomain(ctx context.Context, t BreachTarget) ([]BreachLeak, error) {
+	endpoint := "https://haveibeenpwned.com/api/v3/breacheddomain/" + url.PathEscape(t.Value)
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("hibp-api-key", h.key)
+	body, ok, err := breachDo(ctx, h.cfg, "hibp", req)
+	if err != nil || !ok {
+		return nil, err
+	}
+	// {"alias":["Adobe","LinkedIn"], ...}; null/пусто → находок нет.
+	var aliases map[string][]string
+	if json.Unmarshal(body, &aliases) != nil {
+		return nil, nil
+	}
+	out := make([]BreachLeak, 0, len(aliases))
+	for alias, breaches := range aliases {
+		alias = strings.TrimSpace(alias)
+		if alias == "" {
+			continue
+		}
+		out = append(out, BreachLeak{
+			Source:  "hibp",
+			Kind:    "account",
+			Subject: alias + "@" + t.Value,
+			Value:   "", // домен-поиск отдаёт только факт присутствия, без пароля
+			Detail: map[string]any{
+				"breaches": breaches,
+				"domain":   t.Value,
 			},
 		})
 	}

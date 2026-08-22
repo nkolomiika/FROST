@@ -2,6 +2,7 @@ package recon
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -62,8 +63,16 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 	var mu sync.Mutex
 	var recs []LeakRecord
 
+	// Домены прогона — для пометки github-почт, чей домен совпал (детект, не фильтр:
+	// эмитим ВСЕ найденные аккаунты).
+	domainSet := make(map[string]struct{}, len(cfg.LeaksDomains))
+	for _, d := range cfg.LeaksDomains {
+		domainSet[strings.ToLower(strings.TrimSpace(d))] = struct{}{}
+	}
+
 	// Плавный рост процента по мере готовности единиц работы (band [pctLeaks..pctDone-1]).
-	totalUnits := len(cfg.LeaksGithub) + len(targets)*len(enabled)
+	// Каждый github-URL даёт ДВЕ единицы: секрет-скан + email-майнинг.
+	totalUnits := len(cfg.LeaksGithub)*2 + len(targets)*len(enabled)
 	var doneUnits atomic.Int64
 	bump := func() {
 		d := int(doneUnits.Add(1))
@@ -98,6 +107,32 @@ func (s *Service) runFarmLeaks(ctx context.Context, runSvc *Service, cfg FarmCon
 			}
 			if stepCtx.Err() != nil && ctx.Err() == nil {
 				result.Errors = append(result.Errors, "процесс отменён: trufflehog-github "+ghURL)
+			}
+			mu.Unlock()
+			bump()
+			return nil
+		})
+
+		// ── github email-майнинг по тому же URL (аккаунты из истории коммитов) ──
+		eg.Go(func() error {
+			stepCtx, stepCancel := context.WithCancel(ctx)
+			defer stepCancel()
+			id := prog.addStep(RunStep{Tool: "github-emails", Args: "github commit emails " + githubArgDisplay(ghURL), Target: ghURL, StartedAt: time.Now()}, stepCancel)
+			defer prog.removeStep(id)
+			emails, notes, err := runSvc.runGithubEmailScanner(stepCtx, ghURL, githubToken)
+			mu.Lock()
+			for _, em := range emails {
+				recs = append(recs, githubEmailLeakRecord(em, domainSet))
+			}
+			// Пределы обхода/ошибки API — мягкие пометки (история могла быть усечена).
+			for _, n := range notes {
+				result.Errors = append(result.Errors, "github-emails "+ghURL+": "+n)
+			}
+			if err != nil {
+				result.Errors = append(result.Errors, "github-emails "+ghURL+": "+reconnet.ErrLabel(err))
+			}
+			if stepCtx.Err() != nil && ctx.Err() == nil {
+				result.Errors = append(result.Errors, "процесс отменён: github-emails "+ghURL)
 			}
 			mu.Unlock()
 			bump()
@@ -207,6 +242,36 @@ func githubLeakRecord(sec reconnet.GithubSecret) LeakRecord {
 			"detector": sec.Detector,
 			"verified": sec.Verified,
 		},
+	}
+}
+
+// githubEmailLeakRecord — почта из истории коммитов github → запись хранилища
+// утечек (source=github, kind=account, subject=<email>, value=""). detail несёт
+// КОНКРЕТНЫЙ РЕСУРС-ИСТОЧНИК: repo(s), где почта засветилась, + имя автора. Домены
+// прогона используются только для пометки matched_domain (не для фильтра — эмитим
+// все найденные аккаунты). Breach-данные не верифицируются.
+func githubEmailLeakRecord(em reconnet.GithubEmail, domainSet map[string]struct{}) LeakRecord {
+	detail := map[string]any{
+		"repos": em.Repos,
+		"name":  em.Name,
+	}
+	if len(em.Repos) > 0 {
+		detail["repo"] = em.Repos[0] // первый репозиторий для удобства UI
+	}
+	if len(domainSet) > 0 {
+		if at := strings.LastIndexByte(em.Email, '@'); at >= 0 {
+			if _, ok := domainSet[strings.ToLower(em.Email[at+1:])]; ok {
+				detail["matched_domain"] = true
+			}
+		}
+	}
+	return LeakRecord{
+		Source:   "github",
+		Kind:     "account",
+		Subject:  em.Email,
+		Value:    "",
+		Verified: false,
+		Detail:   detail,
 	}
 }
 

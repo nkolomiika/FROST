@@ -3,6 +3,7 @@ package recon
 import (
 	"context"
 	"errors"
+	"time"
 
 	reconnet "github.com/nkolomiika/frost/internal/adapters/recon"
 	"github.com/nkolomiika/frost/internal/apperr"
@@ -61,6 +62,16 @@ func (s *Service) runGithubScanner(ctx context.Context, target, token string) ([
 		return s.githubScan(ctx, target, token)
 	}
 	return reconnet.ScanGithub(ctx, s.settings.GithubScanConfigFrom(), target, token)
+}
+
+// runGithubEmailScanner — сид-обёртка email-майнинга github (nil-сид → реальный
+// reconnet.ScanGithubEmails через дефолтный http.Client с bounded-пределами).
+func (s *Service) runGithubEmailScanner(ctx context.Context, target, token string) ([]reconnet.GithubEmail, []string, error) {
+	if s.githubEmailScan != nil {
+		return s.githubEmailScan(ctx, target, token)
+	}
+	cfg := reconnet.GithubEmailConfig{Timeout: 15 * time.Second, UserAgent: "frost-recon"}
+	return reconnet.ScanGithubEmails(ctx, cfg, target, token)
 }
 
 // runGithubScan прогоняет github-скан: резолвит токен, гоняет trufflehog, парсит
