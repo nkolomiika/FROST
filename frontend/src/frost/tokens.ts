@@ -67,7 +67,10 @@ export const VSTATUS_LABEL: Record<VStatus, string> = {
 };
 
 /** Statuses in the order they are offered in pickers and filters. */
-export const VSTATUS_ORDER: VStatus[] = ["open", "in_progress", "fixed", "wont_fix", "accepted_risk"];
+// wont_fix / accepted_risk убраны из UI-выбора (фильтры + пикер статуса). Тип и
+// VSTAT/VSTATUS_LABEL для них оставлены — чтобы старые записи с такими статусами
+// всё ещё корректно отображались.
+export const VSTATUS_ORDER: VStatus[] = ["open", "in_progress", "fixed"];
 
 /** A finding still needing work — the "unresolved" filter and the open-count tile. */
 export const VSTATUS_OPEN: VStatus[] = ["open", "in_progress"];
