@@ -817,10 +817,25 @@ export async function getFarmReport(projectId: number, jobId?: number): Promise<
   return data;
 }
 
-/** Импортирует выбранные застейдженные хосты в проект. Возвращает число импортированных. */
-export async function importFarmReport(projectId: number, hostIds: number[]): Promise<number> {
-  const { data } = await api.post<{ imported: number }>(`/projects/${projectId}/recon/farm/report/import`, { host_ids: hostIds });
-  return data.imported;
+/** Что импортировать из отчёта фермы: хосты, эндпоинты и/или JS-находки. Любой
+ *  ключ опционален — сервер импортирует ровно то, что пришло. */
+export interface FarmImportSelection {
+  host_ids?: number[];
+  endpoint_ids?: number[];
+  js_ids?: number[];
+}
+
+/** Сколько импортировано по каждой категории — возвращает эндпоинт импорта. */
+export interface FarmImportResult {
+  imported_hosts: number;
+  imported_endpoints: number;
+  imported_js: number;
+}
+
+/** Импортирует выбранные застейдженные результаты (хосты/эндпоинты/JS) в проект. */
+export async function importFarmReport(projectId: number, sel: FarmImportSelection): Promise<FarmImportResult> {
+  const { data } = await api.post<FarmImportResult>(`/projects/${projectId}/recon/farm/report/import`, sel);
+  return data;
 }
 
 /** Очищает отчёт фермы (застейдженные результаты). Возвращает число удалённых. */
