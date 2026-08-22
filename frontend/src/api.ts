@@ -801,6 +801,10 @@ export async function getFarmRuns(projectId: number): Promise<FarmRunListItem[]>
   return data;
 }
 
+export async function deleteFarmRun(projectId: number, jobId: number): Promise<void> {
+  await api.delete(`/projects/${projectId}/recon/farm/run/${jobId}`);
+}
+
 export async function getFarmRun(projectId: number, jobId: number): Promise<FarmRunJob> {
   const { data } = await api.get<FarmRunJob>(`/projects/${projectId}/recon/farm/run/${jobId}`);
   return data;

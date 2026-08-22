@@ -446,7 +446,7 @@ export interface ReconFarmConfig {
   wordlist_size: "small" | "medium" | "large";
   rate_limit: number;
   concurrency: number;
-  port_scan_scope: "top1000" | "web" | "all";
+  port_scan_scope: "top1000" | "web" | "all" | "custom";
   /** Явный список портов nmap (напр. "80,443,8080,3000-3010") — переопределяет scope. */
   port_scan_ports: string;
   crawl_depth: number;

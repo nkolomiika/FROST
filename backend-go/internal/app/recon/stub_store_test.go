@@ -153,6 +153,7 @@ func (s *stubStore) ListStagedHostsByIDs(_ context.Context, _ int32, ids []int32
 func (s *stubStore) ListFarmRuns(_ context.Context, _ int32, _ int32) ([]FarmRunListItem, error) {
 	return nil, nil
 }
+func (s *stubStore) DeleteFarmRunJob(_ context.Context, _ int32, _ int32) error { return nil }
 
 func (s *stubStore) LatestFarmRunJobID(_ context.Context, _ int32) (int32, bool, error) {
 	if s.latestFarmJob != nil {

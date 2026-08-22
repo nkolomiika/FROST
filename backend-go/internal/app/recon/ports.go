@@ -74,6 +74,8 @@ type Store interface {
 	LatestFarmRunJobID(ctx context.Context, projectID int32) (int32, bool, error)
 	// ListFarmRuns — история прогонов фермы проекта (новые сверху, до limit).
 	ListFarmRuns(ctx context.Context, projectID, limit int32) ([]FarmRunListItem, error)
+	// DeleteFarmRunJob удаляет строку прогона (kind='farm_run') проекта из истории.
+	DeleteFarmRunJob(ctx context.Context, projectID, jobID int32) error
 	// MarkStagedImported помечает выбранные staged-строки импортированными.
 	MarkStagedImported(ctx context.Context, projectID int32, ids []int32) error
 	// ClearStagedHosts удаляет staged-строки одного прогона; возвращает число удалённых.

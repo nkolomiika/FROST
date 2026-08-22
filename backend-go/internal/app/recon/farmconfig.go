@@ -176,7 +176,7 @@ func (c *FarmConfig) Sanitize() {
 		c.WordlistSize = "medium"
 	}
 	switch c.PortScanScope {
-	case "all", "web", "top1000":
+	case "all", "web", "custom", "top1000":
 	default:
 		c.PortScanScope = "top1000"
 	}

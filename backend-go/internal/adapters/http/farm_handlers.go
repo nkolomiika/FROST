@@ -70,6 +70,7 @@ func (h *ReconHandler) Register(r chi.Router) {
 		ar.With(pa).Post(base+"/recon/farm/run", h.startFarmRun)
 		ar.With(pa).Get(base+"/recon/farm/run/{job_id}", h.getFarmRun)
 		ar.With(pa).Get(base+"/recon/farm/runs", h.getFarmRuns)
+		ar.With(pa).Delete(base+"/recon/farm/run/{job_id}", h.deleteFarmRun)
 
 		// отмена прогона фермы (весь прогон / один шаг / все активные)
 		ar.With(pa).Post(base+"/recon/farm/run/cancel-all", h.cancelAllFarmRuns)
@@ -250,6 +251,24 @@ func (h *ReconHandler) getFarmRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, farmRunListResponse(runs))
+}
+
+// deleteFarmRun — удалить прогон из истории сканов (+ его staging). Lead/admin.
+func (h *ReconHandler) deleteFarmRun(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	jobID, err := pathInt32(r, "job_id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.svc.DeleteFarmRun(r.Context(), pid, jobID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *ReconHandler) getFarmReport(w http.ResponseWriter, r *http.Request) {

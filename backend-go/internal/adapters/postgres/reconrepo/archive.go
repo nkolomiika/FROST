@@ -79,3 +79,13 @@ func (r *Repo) DeleteStagingArchive(ctx context.Context, jobID int32) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM recon_staging_archives WHERE job_id = $1`, jobID)
 	return err
 }
+
+// DeleteFarmRunJob удаляет строку прогона фермы из истории (kind='farm_run'). FK на
+// recon_staging_archives каскадит указатель; staged-строки прогона чистит сервис
+// отдельно (ClearStaged*) перед удалением.
+func (r *Repo) DeleteFarmRunJob(ctx context.Context, projectID, jobID int32) error {
+	_, err := r.pool.Exec(ctx,
+		`DELETE FROM host_farm_jobs WHERE id = $1 AND project_id = $2 AND kind = 'farm_run'`,
+		jobID, projectID)
+	return err
+}

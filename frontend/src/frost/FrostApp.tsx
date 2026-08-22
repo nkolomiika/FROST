@@ -73,6 +73,7 @@ import {
   startFarmRun as apiStartFarmRun,
   getFarmRun as apiGetFarmRun,
   getFarmRuns as apiGetFarmRuns,
+  deleteFarmRun as apiDeleteFarmRun,
   cancelFarmRun as apiCancelFarmRun,
   cancelFarmStep as apiCancelFarmStep,
   cancelAllFarmRuns as apiCancelAllFarmRuns,
@@ -2366,6 +2367,25 @@ export function FrostApp() {
       setState({ farmRunsLoading: false });
       pushToast(getApiErrorMessage(e, t("Couldn't load the scan history")), "error");
     }
+  };
+  // Удаление прогона из истории сканов (с подтверждением): убираем строку локально,
+  // затем перезагружаем историю. Открытый отчёт этого прогона закрываем.
+  const deleteFarmRunConfirm = (jobId: number) => {
+    const pid = state.openProjectId;
+    if (pid == null) return;
+    if (!window.confirm(t("Delete this scan from history? This removes its staged results too."))) return;
+    void (async () => {
+      try {
+        await apiDeleteFarmRun(pid, jobId);
+        setState((s) => ({
+          farmRuns: (s.farmRuns ?? []).filter((r) => r.id !== jobId),
+          ...(s.farmReportJobId === jobId ? { farmReportOpen: false, farmReportJobId: null } : {}),
+        }));
+        pushToast(t("Scan deleted"), "success");
+      } catch (e) {
+        pushToast(getApiErrorMessage(e, t("Couldn't delete the scan")), "error");
+      }
+    })();
   };
   // Открытие только выставляет флаг + чей прогон открыт + сбрасывает выбор;
   // загрузку делает эффект ниже (он же ловит прямую ссылку /farm/report и «Назад»).
@@ -4783,7 +4803,7 @@ export function FrostApp() {
           <div className={`menu ${state.reconMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 0, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("RECON")}</div>
             {([
-              { v: "hosts" as const, icon: "server" as const, label: "Hosts", count: realHostCount as number | null },
+              { v: "hosts" as const, icon: "globe2" as const, label: "Hosts", count: realHostCount as number | null },
               { v: "ips" as const, icon: "card" as const, label: "IPs", count: ipsRows.length as number | null },
               { v: "endpoints" as const, icon: "link" as const, label: "Endpoints", count: endpointTotal as number | null },
               { v: "js" as const, icon: "doc" as const, label: "JS", count: jsFiles.length as number | null },
@@ -4814,7 +4834,7 @@ export function FrostApp() {
           <div className={`menu ${state.vaultMenuOpen ? "open" : ""}`} style={{ position: "absolute", top: 52, left: 0, width: 214, background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, boxShadow: "0 20px 54px rgba(15,27,45,.16)", zIndex: 50, padding: 8, transformOrigin: "top left" }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--fr-text-faint)", fontWeight: 700, padding: "8px 10px" }}>{t("VAULT")}</div>
             {([
-              { v: "creds" as const, icon: "lock" as const, label: "Creds", count: d.creds.length as number | null },
+              { v: "creds" as const, icon: "card" as const, label: "Creds", count: d.creds.length as number | null },
               { v: "leaks" as const, icon: "globe" as const, label: "Leaks", count: (state.leaksReport?.summary.total ?? null) as number | null },
             ]).map((it) => {
               const on = sec === "vault" && state.vaultView === it.v;
@@ -5877,6 +5897,19 @@ export function FrostApp() {
       if (r.js_found != null) parts.push(`${r.js_found} ${t("js")}`);
       return parts.join(" · ");
     };
+    // Тэги «какие сканы были запущены» — включённые стадии прогона (как пилюли портов).
+    const runStageTags = (c: ApiReconFarmConfig | null): string[] => {
+      if (!c) return [];
+      const tags: string[] = [];
+      if (c.stage_subdomains) tags.push(t("subs"));
+      if (c.stage_endpoints) tags.push(t("endpoints"));
+      if (c.stage_js) tags.push(t("js"));
+      if (c.stage_ports) tags.push(t("ports"));
+      if (c.stage_leaks) tags.push(t("leaks"));
+      if (c.stage_account_search) tags.push(t("accounts"));
+      return tags;
+    };
+    const historyGrid = "84px 172px 1fr 88px";
 
     const scanHistoryCard = card("clock", t("Scan history"), t("Every past farm run — click one to open its report and the settings it ran with"),
       (() => {
@@ -5900,30 +5933,32 @@ export function FrostApp() {
             {runs === null || runs.length === 0 ? (
               <div style={{ padding: "22px 2px", textAlign: "center", fontSize: 13, color: "var(--fr-text-faint)" }}>{t("No runs yet")}</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {runs.map((run, i) => {
+              <div>
+                {/* Заголовок таблицы: статус · дата · какие сканы · действия. */}
+                <div style={{ display: "grid", gridTemplateColumns: historyGrid, gap: 12, alignItems: "center", padding: "10px 8px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>
+                  <div>{t("Status")}</div>
+                  <div>{t("Date")}</div>
+                  <div>{t("Scans")}</div>
+                  <div />
+                </div>
+                {runs.map((run) => {
                   const meta = runStatusMeta(run.status);
-                  const resSummary = runResultSummary(run.result);
+                  const tags = runStageTags(run.config);
                   return (
-                    <div
-                      key={run.id}
-                      className="clk frow-step"
-                      onClick={() => openFarmReport(run.id)}
-                      title={t("Open this run's report")}
-                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 8px", borderTop: i === 0 ? "none" : "1px solid var(--fr-divider)", cursor: "pointer", minWidth: 0 }}
-                    >
-                      {/* Пилюля статуса. */}
-                      <span style={{ flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 74, padding: "4px 10px", borderRadius: 999, background: meta.bg, color: meta.color, font: "700 11px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".4px" }}>{meta.label}</span>
-                      {/* Дата старта + сводка конфига (ключевые настройки прогона). */}
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div title={run.created_at} style={{ font: "600 13px Inter,sans-serif", color: "var(--fr-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtRunTime(run.created_at)}</div>
-                        <div title={runConfigSummary(run.config)} style={{ fontSize: 12, color: "var(--fr-text-3)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{runConfigSummary(run.config)}</div>
+                    <div key={run.id} style={{ display: "grid", gridTemplateColumns: historyGrid, gap: 12, alignItems: "center", padding: "12px 8px", borderBottom: "1px solid var(--fr-divider)", minWidth: 0 }}>
+                      <span style={{ justifySelf: "start", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 10px", borderRadius: 999, background: meta.bg, color: meta.color, font: "700 11px Inter,sans-serif", textTransform: "uppercase", letterSpacing: ".4px" }}>{meta.label}</span>
+                      <div className="mono" title={run.created_at} style={{ fontSize: 12.5, color: "var(--fr-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtRunTime(run.created_at)}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, minWidth: 0 }}>
+                        {tags.length === 0
+                          ? <span style={{ fontSize: 11.5, color: "var(--fr-text-faint)" }}>{t("no stages")}</span>
+                          : tags.map((tag) => (
+                              <span key={tag} className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".3px", textTransform: "uppercase", color: "var(--fr-accent-2)", background: "var(--fr-accent-soft)", borderRadius: 6, padding: "3px 8px" }}>{tag}</span>
+                            ))}
                       </div>
-                      {/* Сводка итога (справа) — только у завершённых прогонов. */}
-                      {resSummary && (
-                        <div className="mono" style={{ flex: "none", fontSize: 11.5, color: "var(--fr-text-2)", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "42%" }}>{resSummary}</div>
-                      )}
-                      <Icon name="activity" size={15} color="var(--fr-text-faint)" sw={2} />
+                      <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: 4 }}>
+                        <div className="actbtn clk" title={t("View report")} onClick={() => openFarmReport(run.id)} style={{ cursor: "pointer" }}><Icon name="eye" size={15} /></div>
+                        <div className="actbtn clk" title={t("Delete scan")} onClick={() => deleteFarmRunConfirm(run.id)} style={{ cursor: "pointer" }}><Icon name="trash" size={15} color="var(--fr-danger)" /></div>
+                      </div>
                     </div>
                   );
                 })}
@@ -5974,8 +6009,8 @@ export function FrostApp() {
               {stage("doc", t("JS mining"), t("Mine JavaScript for secrets and hidden endpoints."), "stage_js", null)}
               {stage("plug", t("Port scan"), t("Probe open ports on discovered hosts."), "stage_ports",
                 <>
-                  {row(t("Port scan scope"), t("Top 1000, common web ports, or every port (slower)."), seg(cfg.port_scan_scope, ["top1000", "web", "all"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : s === "web" ? t("Web ports") : t("All ports"))))}
-                  {row(t("Custom ports"), t("Optional — e.g. 80,443,8080,3000-3010. Overrides the scope above."),
+                  {row(t("Port scan scope"), t("Top 1000, common web ports, every port (slower), or a custom list."), seg(cfg.port_scan_scope, ["top1000", "web", "all", "custom"] as const, (s) => setFarmField("port_scan_scope", s), (s) => (s === "top1000" ? t("Top 1000") : s === "web" ? t("Web ports") : s === "all" ? t("All ports") : t("Custom"))), cfg.port_scan_scope !== "custom")}
+                  {cfg.port_scan_scope === "custom" && row(t("Custom ports"), t("e.g. 80,443,8080,3000-3010"),
                     <input
                       className="finp mono"
                       placeholder="80,443,8080,…"
@@ -6697,8 +6732,8 @@ export function FrostApp() {
         {(() => {
           const canExport = f.endpoints.length > 0 || f.secrets.length > 0;
           return (
-            <button className="clk" onClick={() => openReconExport(f.endpoints.length ? "js-endpoints" : "js-secrets")} disabled={!canExport} style={{ height: 38, padding: "0 14px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canExport ? "pointer" : "default" }}>
-              <Icon name="download" size={14} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
+            <button className="clk" onClick={() => openReconExport(f.endpoints.length ? "js-endpoints" : "js-secrets")} disabled={!canExport} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canExport ? "pointer" : "default" }}>
+              <Icon name="download" size={16} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
             </button>
           );
         })()}

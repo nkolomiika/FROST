@@ -70,17 +70,19 @@ func (s *Service) runSettings(cfg FarmConfig) reconnet.Settings {
 	if cfg.SubsMaxResults > 0 {
 		rs.SubsMaxResults = cfg.SubsMaxResults
 	}
-	if cfg.PortScanScope == "all" {
+	// Скоуп портов. Явные -p (web-набор / кастомный список) применяются ТОЛЬКО для
+	// своего scope — чтобы скрытое поле кастом-портов не перетирало web/top1000/all.
+	rs.PortscanTopPorts = 1000
+	rs.PortscanPorts = ""
+	switch cfg.PortScanScope {
+	case "all":
 		rs.PortscanTopPorts = 0 // 0 → nmap -p- (все порты)
-	} else {
-		rs.PortscanTopPorts = 1000
-	}
-	// Явные порты (-p): кастомный список пользователя > web-набор. Переопределяют
-	// --top-ports/-p- (см. NmapPhases/DefaultNmapScanner).
-	if p := strings.TrimSpace(cfg.PortScanPorts); p != "" {
-		rs.PortscanPorts = p
-	} else if cfg.PortScanScope == "web" {
+	case "web":
 		rs.PortscanPorts = reconnet.WebPorts
+	case "custom":
+		if p := strings.TrimSpace(cfg.PortScanPorts); p != "" {
+			rs.PortscanPorts = p // пусто → фолбэк на top1000
+		}
 	}
 	return rs
 }

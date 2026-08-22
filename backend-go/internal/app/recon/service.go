@@ -604,6 +604,19 @@ func (s *Service) ListFarmRuns(ctx context.Context, projectID int32) ([]FarmRunL
 	return s.store.ListFarmRuns(ctx, projectID, 100)
 }
 
+// DeleteFarmRun удаляет прогон из истории сканов: сначала его staged-строки, затем
+// саму строку задачи. Валидирует принадлежность проекту (чужой/несуществующий → 404
+// через ErrNoRows). Найденные утечки (recon_leaks) НЕ трогает — они живут отдельно.
+func (s *Service) DeleteFarmRun(ctx context.Context, projectID, jobID int32) error {
+	if _, err := s.store.GetJobForProject(ctx, projectID, jobID, KindFarmRun); err != nil {
+		return err
+	}
+	_, _ = s.store.ClearStagedHosts(ctx, projectID, jobID)
+	_, _ = s.store.ClearStagedEndpoints(ctx, projectID, jobID)
+	_, _ = s.store.ClearStagedJs(ctx, projectID, jobID)
+	return s.store.DeleteFarmRunJob(ctx, projectID, jobID)
+}
+
 // CancelFarmRun сигналит отмену ВСЕГО прогона (cancel_requested). Валидирует, что
 // задача — farm_run этого проекта (404 иначе); поллер воркера подхватит сигнал и
 // оборвёт прогон. Идемпотентно: повторный вызов на уже завершённой задаче безвреден.

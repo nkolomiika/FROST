@@ -105,6 +105,7 @@ func (f *fakeStore) LatestFarmRunJobID(context.Context, int32) (int32, bool, err
 func (f *fakeStore) ListFarmRuns(context.Context, int32, int32) ([]FarmRunListItem, error) {
 	return nil, nil
 }
+func (f *fakeStore) DeleteFarmRunJob(context.Context, int32, int32) error { return nil }
 func (f *fakeStore) MarkStagedImported(context.Context, int32, []int32) error { return nil }
 func (f *fakeStore) ClearStagedHosts(context.Context, int32, int32) (int64, error) {
 	return 0, nil
