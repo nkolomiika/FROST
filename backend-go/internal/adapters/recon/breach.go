@@ -1,6 +1,7 @@
 package recon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -110,14 +111,7 @@ func AllBreachSources(keys BreachKeys, cfg BreachHTTPConfig) []BreachSource {
 	return []BreachSource{
 		&hibpSource{key: keys.HIBP, cfg: cfg},
 		&dehashedSource{key: keys.Dehashed, cfg: cfg},
-		newThinBreachSource("intelx", keys.IntelX, cfg, func(key string, t BreachTarget) (*http.Request, error) {
-			q := url.Values{"term": {t.Value}, "maxresults": {"100"}, "media": {"0"}}
-			req, err := http.NewRequest(http.MethodGet, "https://2.intelx.io/intelligent/search?"+q.Encode(), nil)
-			if err == nil {
-				req.Header.Set("x-key", key)
-			}
-			return req, err
-		}),
+		&intelxSource{key: keys.IntelX, cfg: cfg},
 		newThinBreachSource("leakcheck", keys.LeakCheck, cfg, func(key string, t BreachTarget) (*http.Request, error) {
 			q := url.Values{"key": {key}, "check": {t.Value}, "type": {leakcheckType(t.Kind)}}
 			return http.NewRequest(http.MethodGet, "https://leakcheck.io/api?"+q.Encode(), nil)
@@ -336,6 +330,136 @@ func splitBasic(key string) (string, string) {
 		return key[:i], key[i+1:]
 	}
 	return "", key
+}
+
+// ─────────────────────────── IntelX ───────────────────────────
+
+// intelxBase — база API IntelX для БЕСПЛАТНЫХ ключей (у платных — 2.intelx.io).
+// Free-ключ на 2.intelx.io отдаёт 401, поэтому по умолчанию бьём в free.intelx.io.
+const intelxBase = "https://free.intelx.io"
+
+// intelxSource — IntelX intelligent search. Поиск двухшаговый: POST /intelligent/search
+// стартует поиск и возвращает id, затем результаты добираются поллингом GET
+// /intelligent/search/result (status 0 = ещё идёт, 1 = больше нет, 2 = истёк, 3 =
+// пусто). Каждая запись — ссылка на дамп/паст/документ, где селектор засветился.
+type intelxSource struct {
+	key string
+	cfg BreachHTTPConfig
+}
+
+func (s *intelxSource) Name() string { return "intelx" }
+
+func (s *intelxSource) Enabled(keys BreachKeys) bool { return strings.TrimSpace(keys.IntelX) != "" }
+
+func (s *intelxSource) Search(ctx context.Context, t BreachTarget) ([]BreachLeak, error) {
+	if strings.TrimSpace(s.key) == "" {
+		return nil, nil // нет ключа → мягкий самопропуск
+	}
+	id, err := s.startSearch(ctx, t.Value)
+	if err != nil || id == "" {
+		return nil, err
+	}
+	var records []intelxRecord
+	for i := 0; i < 5; i++ {
+		recs, status, ferr := s.fetchResults(ctx, id)
+		if ferr != nil {
+			return mapIntelxRecords(t, records), ferr
+		}
+		records = append(records, recs...)
+		if status != 0 || len(records) >= 100 { // 0 = добираем дальше; иначе готово
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return mapIntelxRecords(t, records), nil
+		case <-time.After(700 * time.Millisecond):
+		}
+	}
+	return mapIntelxRecords(t, records), nil
+}
+
+func (s *intelxSource) startSearch(ctx context.Context, term string) (string, error) {
+	payload := map[string]any{
+		"term": term, "buckets": []string{}, "lookuplevel": 0, "maxresults": 100,
+		"timeout": 0, "datefrom": "", "dateto": "", "sort": 2, "media": 0, "terminate": []string{},
+	}
+	raw, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost, intelxBase+"/intelligent/search", bytes.NewReader(raw))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("x-key", s.key)
+	req.Header.Set("Content-Type", "application/json")
+	body, ok, err := breachDo(ctx, s.cfg, "intelx", req)
+	if err != nil || !ok {
+		return "", err
+	}
+	var r struct {
+		ID     string `json:"id"`
+		Status int    `json:"status"`
+	}
+	_ = json.Unmarshal(body, &r)
+	if r.Status == 2 { // невалидный term
+		return "", nil
+	}
+	return r.ID, nil
+}
+
+func (s *intelxSource) fetchResults(ctx context.Context, id string) ([]intelxRecord, int, error) {
+	q := url.Values{"id": {id}, "limit": {"100"}, "statistics": {"0"}, "previewlines": {"8"}}
+	req, err := http.NewRequest(http.MethodGet, intelxBase+"/intelligent/search/result?"+q.Encode(), nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("x-key", s.key)
+	body, ok, err := breachDo(ctx, s.cfg, "intelx", req)
+	if err != nil || !ok {
+		return nil, 0, err
+	}
+	var r struct {
+		Records []intelxRecord `json:"records"`
+		Status  int            `json:"status"`
+	}
+	_ = json.Unmarshal(body, &r)
+	return r.Records, r.Status, nil
+}
+
+type intelxRecord struct {
+	SystemID string `json:"systemid"`
+	Name     string `json:"name"`
+	Bucket   string `json:"bucket"`
+	Date     string `json:"date"`
+}
+
+// mapIntelxRecords — записи IntelX → находки (source=intelx, kind=reference: ссылка
+// на дамп/паст, где селектор засветился). Дедуп по (bucket,name).
+func mapIntelxRecords(t BreachTarget, recs []intelxRecord) []BreachLeak {
+	out := make([]BreachLeak, 0, len(recs))
+	seen := map[string]struct{}{}
+	for _, r := range recs {
+		name := strings.TrimSpace(r.Name)
+		if name == "" {
+			name = r.SystemID
+		}
+		key := r.Bucket + "\x00" + name
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, BreachLeak{
+			Source:  "intelx",
+			Kind:    "reference",
+			Subject: t.Value,
+			Value:   name,
+			Detail: map[string]any{
+				"bucket":   r.Bucket,
+				"name":     name,
+				"date":     r.Date,
+				"systemid": r.SystemID,
+			},
+		})
+	}
+	return out
 }
 
 // ─────────────────────────── тонкие источники ───────────────────────────
