@@ -4762,7 +4762,6 @@ export function FrostApp() {
                   <button className="addbtn clk" onClick={openHostImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add hosts")}
                   </button>
-                  {bulkDelButton("hosts")}
                 </>
               )}
               {/* On the open card the primary action becomes "Edit host" — it takes
@@ -4782,7 +4781,6 @@ export function FrostApp() {
                   <button className="addbtn clk" onClick={openIpImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add IPs")}
                   </button>
-                  {bulkDelButton("ips")}
                 </>
               )}
               {/* The IP card edits the host the address belongs to. */}
@@ -4799,7 +4797,6 @@ export function FrostApp() {
                   <button className="addbtn clk" onClick={openEpImport} style={{ height: 42 }}>
                     <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add endpoints")}
                   </button>
-                  {bulkDelButton("endpoints")}
                 </>
               )}
               {/* Opens the domain picker rather than scanning straight away, so the
@@ -4814,7 +4811,6 @@ export function FrostApp() {
                   <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
                     <Icon name="search" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Select domains & scan")}
                   </button>
-                  {bulkDelButton("js")}
                 </>
               )}
               {sec === "vulns" && state.openVulnId == null && (
@@ -5156,16 +5152,17 @@ export function FrostApp() {
     </label>
   );
 
-  /* Кнопка запуска пикера массового удаления в шапке раздела — вторичная, с
-     иконкой корзины и текстом в danger-тон. Показывается только при праве на
+  /* Компактная кнопка запуска пикера массового удаления — живёт в шапке таблицы,
+     в колонке действий, ровно над строковыми корзинами. Иконка корзины в
+     danger-тон, размер под ячейку заголовка. Показывается только при праве на
      редактирование проекта и непустом списке объектов этого типа. */
   const bulkDelButton = (kind: "hosts" | "ips" | "endpoints" | "js") => {
     if (!canEditProject || bulkDelItemsFor(kind).length === 0) return null;
     // IP-строки не удаляются, а скрываются — потому у них своя подпись в тултипе.
     const title = kind === "ips" ? t("Hide objects") : t("Delete objects");
     return (
-      <button className="clk" title={title} aria-label={title} onClick={() => openBulkDelete(kind)} onMouseEnter={(e) => (e.currentTarget.style.background = "var(--fr-elevated)")} onMouseLeave={(e) => (e.currentTarget.style.background = "var(--fr-surface)")} style={{ width: 42, height: 42, flex: "none", padding: 0, border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", color: "var(--fr-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-        <Icon name="trash" size={16} sw={2.2} color="var(--fr-danger)" />
+      <button className="clk" title={title} aria-label={title} onClick={() => openBulkDelete(kind)} onMouseEnter={(e) => (e.currentTarget.style.background = "var(--fr-elevated)")} onMouseLeave={(e) => (e.currentTarget.style.background = "var(--fr-surface)")} style={{ width: 27, height: 27, flex: "none", padding: 0, border: "1px solid var(--fr-border)", borderRadius: 8, background: "var(--fr-surface)", color: "var(--fr-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <Icon name="trash" size={15} sw={2.2} color="var(--fr-danger)" />
       </button>
     );
   };
@@ -6093,7 +6090,7 @@ export function FrostApp() {
             {/* No column headers over an empty table (same as the hosts table). */}
             {ipsRows.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
-                <div>{t("IP address")}</div><div>{t("Hostname")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div />
+                <div>{t("IP address")}</div><div>{t("Hostname")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("ips")}</div>
               </div>
             )}
             {ipsRows.map((i, idx) => (
@@ -6123,6 +6120,13 @@ export function FrostApp() {
         <div className="route">
           {reconFilterRow("endpoints")}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* У списка эндпоинтов нет общей шапки с колонками — группы это
+                карточки. Триггер массового удаления кладём в тонкую полосу над
+                карточками, выровняв по правому краю ровно над строковыми
+                корзинами (те сидят в 20px от правого края карточки). */}
+            {endpointTotal > 0 && (
+              <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 20px 0 0" }}>{bulkDelButton("endpoints")}</div>
+            )}
             {endpointGroups.map((g) => (
               <div key={g.host} style={{ background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 14, overflow: "hidden" }}>
                 <div className="prow clk" onClick={() => toggleEpGroup(g.host)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px" }}>
@@ -6178,7 +6182,7 @@ export function FrostApp() {
           <div style={{ ...CARD, overflow: "hidden" }}>
             {jsGroups.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
-                <div /><div>{t("Host")}</div><div>{t("Files")}</div><div>{t("Secrets")}</div><div />
+                <div /><div>{t("Host")}</div><div>{t("Files")}</div><div>{t("Secrets")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("js")}</div>
               </div>
             )}
             {jsGroups.map((g) => {
@@ -6244,7 +6248,7 @@ export function FrostApp() {
           {/* No column headers over an empty table — only show them with rows. */}
           {hostsList.length > 0 && (
             <div style={{ display: "grid", gridTemplateColumns: hostGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
-              <div /><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div />
+              <div /><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("hosts")}</div>
             </div>
           )}
           {hostsList.map(({ h, idx }) => {
