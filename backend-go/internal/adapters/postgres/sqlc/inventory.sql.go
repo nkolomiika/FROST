@@ -53,6 +53,19 @@ func (q *Queries) BulkDeleteHosts(ctx context.Context, arg BulkDeleteHostsParams
 	return result.RowsAffected(), nil
 }
 
+const countEndpointsForProject = `-- name: CountEndpointsForProject :one
+SELECT count(*) FROM endpoints e
+JOIN hosts h ON h.id = e.host_id
+WHERE h.project_id = $1
+`
+
+func (q *Queries) CountEndpointsForProject(ctx context.Context, projectID int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countEndpointsForProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countHosts = `-- name: CountHosts :one
 SELECT count(*) FROM hosts
 WHERE project_id = $1
@@ -647,6 +660,55 @@ func (q *Queries) ListEndpointsForHosts(ctx context.Context, hostIds []int32) ([
 			&i.RequestHeaders,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEndpointsForProjectPage = `-- name: ListEndpointsForProjectPage :many
+SELECT e.id, e.host_id, e.path, e.method
+FROM endpoints e
+JOIN hosts h ON h.id = e.host_id
+WHERE h.project_id = $1
+ORDER BY e.id
+LIMIT $2 OFFSET $3
+`
+
+type ListEndpointsForProjectPageParams struct {
+	ProjectID int32 `json:"project_id"`
+	Limit     int32 `json:"limit"`
+	Offset    int32 `json:"offset"`
+}
+
+type ListEndpointsForProjectPageRow struct {
+	ID     int32          `json:"id"`
+	HostID int32          `json:"host_id"`
+	Path   string         `json:"path"`
+	Method NullHttpMethod `json:"method"`
+}
+
+// Постраничный список эндпоинтов всего проекта (join hosts по host_id).
+// Стабильная сортировка по e.id для консистентной пагинации.
+func (q *Queries) ListEndpointsForProjectPage(ctx context.Context, arg ListEndpointsForProjectPageParams) ([]ListEndpointsForProjectPageRow, error) {
+	rows, err := q.db.Query(ctx, listEndpointsForProjectPage, arg.ProjectID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEndpointsForProjectPageRow{}
+	for rows.Next() {
+		var i ListEndpointsForProjectPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.Path,
+			&i.Method,
 		); err != nil {
 			return nil, err
 		}

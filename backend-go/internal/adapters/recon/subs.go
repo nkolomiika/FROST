@@ -139,7 +139,25 @@ func runSubfinder(ctx context.Context, root string, s Settings) ([]string, strin
 	return ParseSubfinder(string(out), root), ""
 }
 
-// DefaultSubCollector — реальный сбор: crt.sh + subfinder по каждому корню.
+// runAssetfinder — assetfinder --subs-only root. Нет бинаря — тихо пропускаем.
+// Формат вывода такой же (по поддомену на строку), поэтому парсим ParseSubfinder.
+func runAssetfinder(ctx context.Context, root string, s Settings) ([]string, string) {
+	if !lookPathOK(s.SubsAssetfinderBin) {
+		return nil, ""
+	}
+	c, cancel := context.WithTimeout(ctx, s.SubsAssetfinderTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(c, s.SubsAssetfinderBin, "--subs-only", root)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, "assetfinder(" + root + "): " + errName(err)
+	}
+	return ParseSubfinder(string(out), root), ""
+}
+
+// DefaultSubCollector — реальный сбор пассивных источников по каждому корню:
+// crt.sh + subfinder + assetfinder. Каждый источник за своей ручкой Settings,
+// так что per-run конфиг фермы (crtsh/subfinder/assetfinder) реально управляет им.
 func DefaultSubCollector(s Settings) SubCollector {
 	return func(ctx context.Context, roots []string) (map[string]bool, []string, []string) {
 		type rootOut struct {
@@ -170,6 +188,16 @@ func DefaultSubCollector(s Settings) SubCollector {
 						ro.used = append(ro.used, "subfinder")
 					}
 					ro.subs = append(ro.subs, sf...)
+					if e != "" {
+						ro.errs = append(ro.errs, e)
+					}
+				}
+				if s.SubsAssetfinderEnabled {
+					af, e := runAssetfinder(ctx, root, s)
+					if len(af) > 0 {
+						ro.used = append(ro.used, "assetfinder")
+					}
+					ro.subs = append(ro.subs, af...)
 					if e != "" {
 						ro.errs = append(ro.errs, e)
 					}

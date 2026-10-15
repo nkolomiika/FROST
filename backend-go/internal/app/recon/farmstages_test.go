@@ -223,10 +223,11 @@ func TestFarmReport_IncludesEndpointsAndJs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FarmReport: %v", err)
 	}
-	if len(rep.Endpoints) != 1 || rep.Summary.EndpointsTotal != 1 {
+	// Отчёт лёгкий: массивы endpoints/js пустые, но summary-счётчики верны (COUNT).
+	if len(rep.Endpoints) != 0 || rep.Summary.EndpointsTotal != 1 {
 		t.Fatalf("endpoints array/summary wrong: %+v / %+v", rep.Endpoints, rep.Summary)
 	}
-	if len(rep.Js) != 2 || rep.Summary.JsTotal != 2 {
+	if len(rep.Js) != 0 || rep.Summary.JsTotal != 2 {
 		t.Fatalf("js array/summary wrong: %+v / %+v", rep.Js, rep.Summary)
 	}
 	// Существующая форма хостов не сломана.

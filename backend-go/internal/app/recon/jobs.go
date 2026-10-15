@@ -149,6 +149,11 @@ func (s *Service) ListJsFiles(ctx context.Context, projectID int32) ([]JSFileVie
 	return s.store.ListJsFiles(ctx, projectID)
 }
 
+// ListJsFilesPage — постраничный список JS-файлов проекта с находками.
+func (s *Service) ListJsFilesPage(ctx context.Context, projectID int32, offset, limit int) ([]JSFileView, int64, error) {
+	return s.store.ListJsFilesPage(ctx, projectID, offset, limit)
+}
+
 // BuildArchive — zip найденных .js, докачиваемых по требованию (порт download_js_archive).
 func (s *Service) BuildArchive(ctx context.Context, projectID int32, hostID *int32) (string, []byte, error) {
 	urls, err := s.store.JSFileURLs(ctx, projectID, hostID)

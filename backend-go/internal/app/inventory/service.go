@@ -560,6 +560,11 @@ func (s *Service) ListEndpoints(ctx context.Context, hostID int32) ([]Endpoint, 
 	return s.store.ListEndpointsForHost(ctx, hostID)
 }
 
+// ListEndpointsPage — постраничный плоский список эндпоинтов всего проекта.
+func (s *Service) ListEndpointsPage(ctx context.Context, projectID int32, offset, limit int) ([]EndpointRow, int64, error) {
+	return s.store.ListEndpointsPage(ctx, projectID, offset, limit)
+}
+
 // CreateEndpoint создаёт эндпоинт (UPSERT на (host,path,method); всегда 201).
 func (s *Service) CreateEndpoint(ctx context.Context, projectID, hostID int32, raw EndpointRaw, actorID int32) (*Endpoint, error) {
 	if _, err := s.getHost(ctx, projectID, hostID); err != nil {

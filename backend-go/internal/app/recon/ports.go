@@ -88,6 +88,10 @@ type Store interface {
 	ListStagedEndpoints(ctx context.Context, projectID, jobID int32) ([]StagedEndpoint, error)
 	// ListStagedEndpointsByIDs — выбранные staged-эндпоинты проекта по id (для импорта).
 	ListStagedEndpointsByIDs(ctx context.Context, projectID int32, ids []int32) ([]StagedEndpoint, error)
+	// ListStagedEndpointsForJobPage — страница staged-эндпоинтов одного прогона (по id).
+	ListStagedEndpointsForJobPage(ctx context.Context, projectID, jobID int32, offset, limit int) ([]StagedEndpoint, error)
+	// CountStagedEndpointsForJob — число staged-эндпоинтов одного прогона.
+	CountStagedEndpointsForJob(ctx context.Context, projectID, jobID int32) (int64, error)
 	// MarkStagedEndpointsImported помечает выбранные staged-эндпоинты импортированными.
 	MarkStagedEndpointsImported(ctx context.Context, projectID int32, ids []int32) error
 	// ClearStagedEndpoints удаляет staged-эндпоинты одного прогона; возвращает число удалённых.
@@ -103,6 +107,10 @@ type Store interface {
 	ListStagedJs(ctx context.Context, projectID, jobID int32) ([]StagedJs, error)
 	// ListStagedJsByIDs — выбранные staged-находки JS проекта по id (для импорта).
 	ListStagedJsByIDs(ctx context.Context, projectID int32, ids []int32) ([]StagedJs, error)
+	// ListStagedJsForJobPage — страница staged-находок JS одного прогона (по id).
+	ListStagedJsForJobPage(ctx context.Context, projectID, jobID int32, offset, limit int) ([]StagedJs, error)
+	// CountStagedJsForJob — число staged-находок JS одного прогона.
+	CountStagedJsForJob(ctx context.Context, projectID, jobID int32) (int64, error)
 	// MarkStagedJsImported помечает выбранные staged-находки JS импортированными.
 	MarkStagedJsImported(ctx context.Context, projectID int32, ids []int32) error
 	// ClearStagedJs удаляет staged-находки JS одного прогона; возвращает число удалённых.
@@ -110,6 +118,9 @@ type Store interface {
 
 	// ─── js-файлы (эндпоинты списка/архива) ───
 	ListJsFiles(ctx context.Context, projectID int32) ([]JSFileView, error)
+	// ListJsFilesPage — постраничный список JS-файлов проекта (тот же порядок,
+	// что и ListJsFiles). Возвращает страницу и общий счёт.
+	ListJsFilesPage(ctx context.Context, projectID int32, offset, limit int) ([]JSFileView, int64, error)
 	JSFileURLs(ctx context.Context, projectID int32, hostID *int32) ([]string, error)
 	DeleteJSFilesForHost(ctx context.Context, projectID, hostID int32) error
 	// BulkDeleteJSFiles удаляет JS-находки проекта по списку id одним DELETE;

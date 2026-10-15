@@ -262,8 +262,13 @@ export interface Host {
   project_id: number;
   ip_address: string | null;
   ip_addresses: HostIpAddress[];
-  /** Приходят вместе со списком — фронт не добирает их запросом на каждый хост. */
-  endpoints: HostEndpointSummary[];
+  /** Список хостов больше не тащит все эндпоинты (это давало ответы на десятки
+   *  тысяч строк). Приходит только их число; сами пути догружаются чанками через
+   *  постраничный /projects/{id}/endpoints и домердживаются на клиенте. */
+  endpoint_count?: number;
+  /** @deprecated список хостов их больше не присылает — оставлено для обратной
+   *  совместимости со старым бэкендом; на новом всегда undefined. */
+  endpoints?: HostEndpointSummary[];
   hostname: string | null;
   status: "up" | "down" | "unknown";
   os_type: OsType;

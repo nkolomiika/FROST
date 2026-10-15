@@ -17,12 +17,13 @@ FROM projectdiscovery/subfinder:latest AS subfinder
 FROM projectdiscovery/httpx:latest AS httpx
 FROM projectdiscovery/katana:latest AS katana
 
-# gau, waybackurls и ffuf не публикуют официальных образов — собираем их статически
-# в Go-стадии (все чистый Go) и COPY-им бинари в recon-стейдж.
+# gau, waybackurls, assetfinder и ffuf не публикуют официальных образов — собираем
+# их статически в Go-стадии (все чистый Go) и COPY-им бинари в recon-стейдж.
 FROM golang:1.26-alpine AS endpoint-tools
 RUN apk add --no-cache git \
  && GOBIN=/out CGO_ENABLED=0 go install github.com/lc/gau/v2/cmd/gau@latest \
  && GOBIN=/out CGO_ENABLED=0 go install github.com/tomnomnom/waybackurls@latest \
+ && GOBIN=/out CGO_ENABLED=0 go install github.com/tomnomnom/assetfinder@latest \
  && GOBIN=/out CGO_ENABLED=0 go install github.com/ffuf/ffuf/v2@latest
 
 # Базовый рантайм для api и mail-worker — без инструментов разведки.
@@ -77,6 +78,7 @@ ENTRYPOINT ["/usr/local/bin/app"]
 # Рантайм recon-worker: тот же бинарь + внешние инструменты разведки.
 #   nmap        — полный скан портов
 #   subfinder   — пассивные поддомены
+#   assetfinder — пассивные поддомены (второй источник рядом с subfinder/crt.sh)
 #   httpx-pd    — детект живости/технологий на портах (config: SERVICES_HTTPX_BIN=httpx-pd)
 #   dnsx        — резолв
 #   trufflehog  — verified-секреты в JS
@@ -103,6 +105,7 @@ COPY --from=httpx /usr/local/bin/httpx /usr/local/bin/httpx-pd
 COPY --from=katana /usr/local/bin/katana /usr/local/bin/katana
 COPY --from=endpoint-tools /out/gau /usr/local/bin/gau
 COPY --from=endpoint-tools /out/waybackurls /usr/local/bin/waybackurls
+COPY --from=endpoint-tools /out/assetfinder /usr/local/bin/assetfinder
 COPY --from=endpoint-tools /out/ffuf /usr/local/bin/ffuf
 USER app
 ENTRYPOINT ["/usr/local/bin/app"]

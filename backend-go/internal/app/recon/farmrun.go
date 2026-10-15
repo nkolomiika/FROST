@@ -67,9 +67,18 @@ func (s *Service) runSettings(cfg FarmConfig) reconnet.Settings {
 		rs.FarmMaxConcurrency = cfg.Concurrency
 		rs.ServicesMaxConcurrency = cfg.Concurrency
 	}
-	if cfg.SubsMaxResults > 0 {
+	// Лимит найденных поддоменов: глобальная настройка — это ПОЛ, проект может лишь
+	// поднять его выше. Иначе старый проект с сохранённым cfg=2000 навсегда упирался
+	// бы в 2000, даже когда дефолт подняли (жалоба «опять не все домены»).
+	if cfg.SubsMaxResults > rs.SubsMaxResults {
 		rs.SubsMaxResults = cfg.SubsMaxResults
 	}
+	// Тумблеры источников пассивного сбора из конфига прогона реально управляют
+	// коллектором. AND с глобальной ручкой: деплой-килл-свитч (SUBS_*_ENABLED=false)
+	// нельзя переопределить из UI, но выключить источник на прогон — можно.
+	rs.SubsCrtshEnabled = rs.SubsCrtshEnabled && cfg.Crtsh
+	rs.SubsSubfinderEnabled = rs.SubsSubfinderEnabled && cfg.Subfinder
+	rs.SubsAssetfinderEnabled = rs.SubsAssetfinderEnabled && cfg.Assetfinder
 	// Скоуп портов. Явные -p (web-набор / кастомный список) применяются ТОЛЬКО для
 	// своего scope — чтобы скрытое поле кастом-портов не перетирало web/top1000/all.
 	rs.PortscanTopPorts = 1000
@@ -278,6 +287,26 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		// ── стадия 2: резолв + liveness (dnsx resolve → httpx-pd) БЕЗ персиста ──
 		newSubs := s.filterNewSubs(ctx, claim.ProjectID, capped)
 		result.SubdomainsNew = len(newSubs)
+		// Всегда пробиваем сами корневые домены (liveness+порты), даже если они уже
+		// заведены как хосты проекта: иначе filterNewSubs выкидывает апекс из newSubs,
+		// stageResolve его не трогает, и seedAccumsFromProject сеет его alive=true БЕЗ
+		// пробива — апекс остаётся «пустой» шапкой в дереве без статуса, тогда как
+		// поддомены пробиты. Корни ставим в начало, чтобы их не срезал FarmMaxTargets.
+		probeSeen := make(map[string]bool, len(newSubs)+len(lowerRoots))
+		withRoots := make([]string, 0, len(newSubs)+len(lowerRoots))
+		for _, r := range lowerRoots {
+			if r != "" && !reconnet.IsIPLiteral(r) && !probeSeen[r] {
+				probeSeen[r] = true
+				withRoots = append(withRoots, r)
+			}
+		}
+		for _, hn := range newSubs {
+			if !probeSeen[hn] {
+				probeSeen[hn] = true
+				withRoots = append(withRoots, hn)
+			}
+		}
+		newSubs = withRoots
 		if len(newSubs) > rs.FarmMaxTargets {
 			result.Errors = append(result.Errors, "Поддоменов больше лимита пробива — часть не резолвилась")
 			newSubs = newSubs[:rs.FarmMaxTargets]
@@ -285,21 +314,21 @@ func (s *Service) runFarm(parentCtx context.Context, claim *JobClaim) (*FarmRunR
 		if canceled := s.stageResolve(ctx, &runSvc, newSubs, stagedSourceSub, "новые поддомены", accums, &order, prog, result, &wasCancelled); canceled {
 			return finalizeCancelled()
 		}
-		// tld+n: существующие поддомены выбранных доменов тоже включаем в скан (а не
-		// только новонайденные). Без сужения (пустой выбор) — не расширяем.
-		if scopeActive {
-			if existing, herr := s.store.ProjectAllHostnames(ctx, claim.ProjectID); herr == nil {
-				var scoped []string
-				for _, hn := range dedup(existing) {
-					if inScope(hn) && accums[hn] == nil {
-						scoped = append(scoped, hn)
-					}
+		// Существующие хосты/поддомены проекта ТОЖЕ включаем в скан, а не только
+		// новонайденные — чтобы JS-майнинг/эндпоинты/порты прошлись и по уже
+		// заведённым субхостам. При выбранном домене — только его поддерево (tld+n),
+		// при пустом выборе inScope=true → берём все хосты проекта.
+		if existing, herr := s.store.ProjectAllHostnames(ctx, claim.ProjectID); herr == nil {
+			var scoped []string
+			for _, hn := range dedup(existing) {
+				if inScope(hn) && accums[hn] == nil {
+					scoped = append(scoped, hn)
 				}
-				if len(scoped) > rs.FarmMaxTargets {
-					scoped = scoped[:rs.FarmMaxTargets]
-				}
-				seedAccumsFromProject(scoped, stagedSourceProject, accums, &order, result, prog)
 			}
+			if len(scoped) > rs.FarmMaxTargets {
+				scoped = scoped[:rs.FarmMaxTargets]
+			}
+			seedAccumsFromProject(scoped, stagedSourceProject, accums, &order, result, prog)
 		}
 	} else {
 		// Стадия поддоменов выключена: пере-скан известных хостов проекта. Резолв+
@@ -449,6 +478,25 @@ func (s *Service) cancelPoller(ctx context.Context, jobID int32, prog *progressT
 // одном bounded-пуле (SetLimit=concurrency). Пассивные и активные шаги видны в
 // прогрессе вместе, пока оба в полёте. Возвращает слитый набор, использованные
 // источники и ошибки.
+// passiveSources — включённые пассивные источники поддоменов (в порядке запуска
+// коллектором) для метки шага прогресса. Пусто → "passive" как заглушка.
+func passiveSources(rs reconnet.Settings) []string {
+	var out []string
+	if rs.SubsCrtshEnabled {
+		out = append(out, "crt.sh")
+	}
+	if rs.SubsSubfinderEnabled {
+		out = append(out, "subfinder")
+	}
+	if rs.SubsAssetfinderEnabled {
+		out = append(out, "assetfinder")
+	}
+	if len(out) == 0 {
+		out = append(out, "passive")
+	}
+	return out
+}
+
 func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmConfig, rs reconnet.Settings, roots []string, prog *progressTracker) (map[string]bool, []string, []string) {
 	passive := cfg.Mode == "passive" || cfg.Mode == "both"
 	active := cfg.Mode == "active" || cfg.Mode == "both"
@@ -506,7 +554,10 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 				// Свой контекст шага: per-step cancel рвёт только его, не весь прогон.
 				stepCtx, stepCancel := context.WithCancel(ctx)
 				defer stepCancel()
-				id := prog.addStep(RunStep{Tool: "subfinder", Args: "subfinder -d " + root + " -silent", Target: root, StartedAt: time.Now()}, stepCancel)
+				// Шаг ведёт коллектор, который параллельно гоняет несколько пассивных
+				// источников (crt.sh/subfinder/assetfinder) — раньше метка жёстко была
+				// "subfinder" и создавала впечатление, что работает только он.
+				id := prog.addStep(RunStep{Tool: "passive-subs", Args: strings.Join(passiveSources(rs), " + ") + " -d " + root, Target: root, StartedAt: time.Now()}, stepCancel)
 				defer prog.removeStep(id)
 				got, used, e := collector(stepCtx, []string{root})
 				mu.Lock()
@@ -551,6 +602,24 @@ func (s *Service) runSubdomains(ctx context.Context, runSvc *Service, cfg FarmCo
 		}
 	}
 	_ = eg.Wait()
+
+	// Регистрируемый корень (eTLD+1) каждого найденного поддомена тоже добавляем в
+	// набор — чтобы САМ основной домен резолвился/пробивался/стейджился как хост, а
+	// не оставался «пустой» синтетической шапкой в дереве. Корни прогона тоже.
+	extraRoots := map[string]bool{}
+	for sub := range subs {
+		if r := reconnet.RegistrableDomain(sub); r != "" && !reconnet.IsIPLiteral(r) {
+			extraRoots[r] = true
+		}
+	}
+	for _, root := range roots {
+		if r := reconnet.RegistrableDomain(root); r != "" && !reconnet.IsIPLiteral(r) {
+			extraRoots[r] = true
+		}
+	}
+	for r := range extraRoots {
+		subs[r] = true
+	}
 
 	used := make([]string, 0, len(usedSet))
 	for u := range usedSet {

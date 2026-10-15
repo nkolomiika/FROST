@@ -79,6 +79,8 @@ func (h *ReconHandler) Register(r chi.Router) {
 
 		// отчёт стейджинга прогона (ревью → импорт выбранного → очистка карантина)
 		ar.With(pa).Get(base+"/recon/farm/report", h.getFarmReport)
+		ar.With(pa).Get(base+"/recon/farm/report/endpoints", h.getFarmReportEndpoints)
+		ar.With(pa).Get(base+"/recon/farm/report/js", h.getFarmReportJs)
 		ar.With(pa).Post(base+"/recon/farm/report/import", h.importFarmReport)
 		ar.With(pa).Delete(base+"/recon/farm/report", h.deleteFarmReport)
 	})
@@ -290,6 +292,55 @@ func (h *ReconHandler) getFarmReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rep)
 }
 
+// getFarmReportEndpoints — постраничные staged-эндпоинты отчёта прогона
+// (GET .../recon/farm/report/endpoints?job_id=&page=&size=). job_id опционален:
+// без него — последний прогон (та же резолвинг-логика, что и у getFarmReport).
+// Форма items[i] идентична report.endpoints[i]. Только лид/админ.
+func (h *ReconHandler) getFarmReportEndpoints(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	jobID, err := optionalJobID(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	page := intQuery(r, "page", 1, 1, 1_000_000)
+	size := intQuery(r, "size", 2000, 1, 5000)
+	offset := (page - 1) * size
+	items, total, err := h.svc.FarmReportEndpointsPage(r.Context(), pid, jobID, offset, size)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, paginated(items, total, page, size))
+}
+
+// getFarmReportJs — постраничные staged-находки JS отчёта прогона
+// (GET .../recon/farm/report/js?job_id=&page=&size=). job_id опционален (как выше).
+// Форма items[i] идентична report.js[i]. Только лид/админ.
+func (h *ReconHandler) getFarmReportJs(w http.ResponseWriter, r *http.Request) {
+	if !h.requireLeadOrAdmin(w, r) {
+		return
+	}
+	jobID, err := optionalJobID(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	pid := projectFromContext(r.Context()).ID
+	page := intQuery(r, "page", 1, 1, 1_000_000)
+	size := intQuery(r, "size", 1000, 1, 2000)
+	offset := (page - 1) * size
+	items, total, err := h.svc.FarmReportJsPage(r.Context(), pid, jobID, offset, size)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, paginated(items, total, page, size))
+}
+
 // importFarmReport создаёт реальные объекты проекта из выбранных staged-строк
 // (хосты/эндпоинты/JS — что передано) и помечает их imported. Возвращает
 // {"imported_hosts","imported_endpoints","imported_js"}. Только лид/админ.
@@ -420,12 +471,15 @@ func (h *ReconHandler) getJSFarmJob(w http.ResponseWriter, r *http.Request) {
 
 func (h *ReconHandler) listJSFiles(w http.ResponseWriter, r *http.Request) {
 	pid := projectFromContext(r.Context()).ID
-	files, err := h.svc.ListJsFiles(r.Context(), pid)
+	page := intQuery(r, "page", 1, 1, 1_000_000)
+	size := intQuery(r, "size", 200, 1, 1000)
+	offset := (page - 1) * size
+	files, total, err := h.svc.ListJsFilesPage(r.Context(), pid, offset, size)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, jsFileResponses(files))
+	writeJSON(w, http.StatusOK, paginated(jsFileResponses(files), total, page, size))
 }
 
 func (h *ReconHandler) deleteJSForHost(w http.ResponseWriter, r *http.Request) {

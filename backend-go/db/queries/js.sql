@@ -48,3 +48,9 @@ DELETE FROM js_files WHERE project_id = $1 AND host_id = $2;
 -- Возвращает число реально удалённых.
 DELETE FROM js_files
 WHERE project_id = sqlc.arg('project_id') AND id = ANY(sqlc.arg('ids')::int[]);
+
+-- name: ListJsFilesForProjectPage :many
+SELECT * FROM js_files WHERE project_id = $1 ORDER BY secret_count DESC, url LIMIT $2 OFFSET $3;
+
+-- name: CountJsFilesForProject :one
+SELECT count(*) FROM js_files WHERE project_id = $1;

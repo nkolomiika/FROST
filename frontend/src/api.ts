@@ -19,6 +19,8 @@ import type {
   FarmRunJob,
   FarmRunListItem,
   FarmReport,
+  StagedEndpoint,
+  StagedJs,
   LeaksReport,
   LeakScanJob,
   Wordlist,
@@ -621,10 +623,24 @@ export async function deleteProject(projectId: number): Promise<void> {
 export async function getHosts(projectId: number): Promise<PaginatedResponse<Host>> {
   // origin=all — один запрос кормит и таблицу хостов, и таблицу IP: строки
   // origin='ip' отфильтровываются на клиенте (см. hostsList в FrostApp).
-  const { data } = await api.get<PaginatedResponse<Host>>(`/projects/${projectId}/hosts`, {
-    params: { page: 1, size: 100, origin: "all" },
-  });
-  return data;
+  // Тянем ВСЕ страницы (убрали лимит «100 хостов»): большими страницами, пока не
+  // выберем total. size=5000 — потолок бэкенда; на крупных таргетах несколько
+  // запросов, на обычных — один.
+  const size = 5000;
+  const items: Host[] = [];
+  let page = 1;
+  let total = 0;
+  let pages = 1;
+  do {
+    const { data } = await api.get<PaginatedResponse<Host>>(`/projects/${projectId}/hosts`, {
+      params: { page, size, origin: "all" },
+    });
+    items.push(...data.items);
+    total = data.total;
+    pages = data.pages;
+    page += 1;
+  } while (page <= pages);
+  return { items, total, page: 1, size: items.length, pages: 1 };
 }
 
 export async function createHost(
@@ -754,9 +770,17 @@ export async function getJsScanJob(projectId: number, jobId: number): Promise<Js
   return data;
 }
 
-/** JS-файлы проекта с находками — раздел JS группирует их по хосту. */
-export async function getJsFiles(projectId: number): Promise<JsFile[]> {
-  const { data } = await api.get<JsFile[]>(`/projects/${projectId}/js-files`);
+/** JS-файлы проекта с находками — раздел JS группирует их по хосту.
+ *  Постранично: раздел стримит страницы и склеивает их на клиенте, чтобы
+ *  проекты с тысячами файлов не упирались в один огромный ответ. */
+export async function getJsFilesPage(
+  projectId: number,
+  page: number,
+  size: number,
+): Promise<PaginatedResponse<JsFile>> {
+  const { data } = await api.get<PaginatedResponse<JsFile>>(`/projects/${projectId}/js-files`, {
+    params: { page, size },
+  });
   return data;
 }
 
@@ -831,6 +855,33 @@ export async function cancelAllFarmRuns(projectId: number): Promise<number> {
 export async function getFarmReport(projectId: number, jobId?: number): Promise<FarmReport> {
   const { data } = await api.get<FarmReport>(`/projects/${projectId}/recon/farm/report`, {
     params: jobId != null ? { job_id: jobId } : undefined,
+  });
+  return data;
+}
+
+/** Постраничные staged-эндпоинты отчёта фермы: сам отчёт теперь отдаёт только
+ *  summary+hosts, а эндпоинты/JS (десятки тысяч строк) раздел стримит чанками и
+ *  накапливает в farmReport.endpoints/.js. jobId берётся из загруженного отчёта. */
+export async function getFarmReportEndpointsPage(
+  projectId: number,
+  jobId: number | undefined,
+  page: number,
+  size: number,
+): Promise<PaginatedResponse<StagedEndpoint>> {
+  const { data } = await api.get<PaginatedResponse<StagedEndpoint>>(`/projects/${projectId}/recon/farm/report/endpoints`, {
+    params: { page, size, ...(jobId != null ? { job_id: jobId } : {}) },
+  });
+  return data;
+}
+
+export async function getFarmReportJsPage(
+  projectId: number,
+  jobId: number | undefined,
+  page: number,
+  size: number,
+): Promise<PaginatedResponse<StagedJs>> {
+  const { data } = await api.get<PaginatedResponse<StagedJs>>(`/projects/${projectId}/recon/farm/report/js`, {
+    params: { page, size, ...(jobId != null ? { job_id: jobId } : {}) },
   });
   return data;
 }
@@ -1026,6 +1077,28 @@ export async function deleteService(projectId: number, hostId: number, portId: n
 
 export async function getEndpoints(projectId: number, hostId: number): Promise<Endpoint[]> {
   const { data } = await api.get<Endpoint[]>(`/projects/${projectId}/hosts/${hostId}/endpoints`);
+  return data;
+}
+
+/** One row of the project-wide paginated endpoints stream: enough to render and
+ *  to merge into its host by `host_id` (the hosts list no longer embeds these). */
+export interface EndpointPageItem {
+  id: number;
+  host_id: number;
+  path: string;
+  method: string;
+}
+
+/** Постраничные эндпоинты всего проекта (упорядочены по id). Раздел Endpoints
+ *  стримит страницы и домердживает их в хосты вместо одного ответа на 68k строк. */
+export async function getEndpointsPage(
+  projectId: number,
+  page: number,
+  size: number,
+): Promise<PaginatedResponse<EndpointPageItem>> {
+  const { data } = await api.get<PaginatedResponse<EndpointPageItem>>(`/projects/${projectId}/endpoints`, {
+    params: { page, size },
+  });
   return data;
 }
 

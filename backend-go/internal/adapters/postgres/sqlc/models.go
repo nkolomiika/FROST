@@ -943,6 +943,17 @@ type ReconLeak struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type ReconStagingArchive struct {
+	JobID          int32              `json:"job_id"`
+	ProjectID      int32              `json:"project_id"`
+	ObjectKey      string             `json:"object_key"`
+	SizeBytes      pgtype.Int8        `json:"size_bytes"`
+	HostsCount     int32              `json:"hosts_count"`
+	EndpointsCount int32              `json:"endpoints_count"`
+	JsCount        int32              `json:"js_count"`
+	ArchivedAt     pgtype.Timestamptz `json:"archived_at"`
+}
+
 type ReconWordlist struct {
 	ID         int32              `json:"id"`
 	Name       string             `json:"name"`

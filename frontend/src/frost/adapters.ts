@@ -36,7 +36,7 @@ type ApiPortWithServices = ApiPort & { services?: ApiService[] };
 export const FROST_METHODS: Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 /** The API also emits HEAD/OPTIONS/null, which Frost's `Method` union has no pill for. */
-export function toFrostMethod(m: ApiEndpoint["method"]): Method {
+export function toFrostMethod(m: string | null | undefined): Method {
   return m && (FROST_METHODS as string[]).includes(m) ? (m as Method) : "GET";
 }
 
@@ -91,6 +91,7 @@ export function toFrostHost(h: ApiHost, endpoints: Endpoint[] = []): Host {
     status: h.status,
     ports: toFrostPorts(h),
     endpoints,
+    endpointCount: h.endpoint_count ?? (h.endpoints?.length ?? endpoints.length),
     created: h.created_at,
   };
 }

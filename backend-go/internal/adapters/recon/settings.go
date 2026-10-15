@@ -49,12 +49,15 @@ type Settings struct {
 	ServicesDetectTimeout  time.Duration
 	ServicesMaxConcurrency int
 
-	SubsCrtshEnabled     bool
-	SubsCrtshTimeout     time.Duration
-	SubsSubfinderEnabled bool
-	SubsSubfinderBin     string
-	SubsSubfinderTimeout time.Duration
-	SubsMaxResults       int
+	SubsCrtshEnabled       bool
+	SubsCrtshTimeout       time.Duration
+	SubsSubfinderEnabled   bool
+	SubsSubfinderBin       string
+	SubsSubfinderTimeout   time.Duration
+	SubsAssetfinderEnabled bool
+	SubsAssetfinderBin     string
+	SubsAssetfinderTimeout time.Duration
+	SubsMaxResults         int
 
 	PortscanNmapBin    string
 	PortscanTopPorts   int

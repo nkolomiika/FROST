@@ -163,6 +163,10 @@ func endpointTools(cfg FarmConfig) []string {
 	if active && (cfg.EndpointsWordlistID > 0 || cfg.EndpointsWordlistPath != "") {
 		tools = append(tools, "ffuf")
 	}
+	// Swagger/OpenAPI ищем ВСЕГДА, когда стадия эндпоинтов включена — независимо от
+	// passive/active: это прямой дёрг известных путей спеки, дешёвый и не «активный
+	// краул» в смысле шумности. Даёт API-ручки там, где архивов и ссылок нет.
+	tools = append(tools, "swagger")
 	return tools
 }
 
@@ -191,6 +195,8 @@ func (s *Service) scanEndpointTool(ctx context.Context, tool, host string, cfg r
 		return reconnet.WaybackURLs(ctx, host, s.settings)
 	case "ffuf":
 		return reconnet.FfufDirFuzz(ctx, host, cfg.FfufWordlist, reconnet.FfufConfig{RateLimit: cfg.RateLimit, Threads: cfg.Threads}, s.settings)
+	case "swagger":
+		return reconnet.SwaggerURLs(ctx, host, s.settings)
 	}
 	return nil, ""
 }
@@ -255,6 +261,8 @@ func (s *Service) runFarmEndpoints(ctx context.Context, runSvc *Service, cfg Far
 				case "ffuf":
 					// Путь словаря не светим — только ярлык (custom#id).
 					argsDisp = "ffuf -w " + ffufLabel + " -u https://" + host + "/FUZZ -mc " + reconnet.FfufDefaultMatchCodes()
+				case "swagger":
+					argsDisp = "swagger/openapi probe"
 				}
 				id := prog.addStep(RunStep{Tool: tool, Args: argsDisp + " (" + host + ")", Target: host, StartedAt: time.Now()}, stepCancel)
 				defer prog.removeStep(id)

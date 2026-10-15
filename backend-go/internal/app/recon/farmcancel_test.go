@@ -79,6 +79,10 @@ func TestRunFarm_PerStepCancel_RemovesStepRunCompletes(t *testing.T) {
 	}
 	svc := stubService(store, reconnet.Settings{FarmMaxConcurrency: 2, SubsMaxResults: 100, FarmMaxTargets: 64, PortscanMaxTargets: 64}, Config{WorkerEnabled: true, MaxAttempts: 3, ResultMaxItems: 200})
 	svc.collector = blockingCollector
+	// Корень прогона (example.com) теперь всегда попадает в набор на резолв, чтобы
+	// пробить и сам основной домен — стейджим его пустышкой, иначе стадия резолва
+	// пойдёт в реальную сеть и тест зависнет.
+	svc.dryProber = func(context.Context, string) ([]dryHost, []string) { return nil, nil }
 
 	done := make(chan error, 1)
 	go func() { done <- svc.RunReconJob(context.Background(), 1) }()

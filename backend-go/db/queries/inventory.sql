@@ -147,3 +147,18 @@ DELETE FROM endpoints WHERE id = $1;
 DELETE FROM endpoints
 WHERE id = ANY(sqlc.arg('ids')::int[])
   AND host_id IN (SELECT id FROM hosts WHERE project_id = sqlc.arg('project_id'));
+
+-- name: ListEndpointsForProjectPage :many
+-- Постраничный список эндпоинтов всего проекта (join hosts по host_id).
+-- Стабильная сортировка по e.id для консистентной пагинации.
+SELECT e.id, e.host_id, e.path, e.method
+FROM endpoints e
+JOIN hosts h ON h.id = e.host_id
+WHERE h.project_id = $1
+ORDER BY e.id
+LIMIT $2 OFFSET $3;
+
+-- name: CountEndpointsForProject :one
+SELECT count(*) FROM endpoints e
+JOIN hosts h ON h.id = e.host_id
+WHERE h.project_id = $1;

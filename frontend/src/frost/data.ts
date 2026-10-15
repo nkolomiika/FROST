@@ -80,6 +80,10 @@ export interface Host {
   cloudflare: CfState;
   ports: Port[];
   endpoints: Endpoint[];
+  /** Total endpoints on this host, from the host list. `endpoints` fills in
+   *  progressively as the paginated /endpoints stream merges in, so the summary
+   *  count comes from here rather than `endpoints.length` until streaming ends. */
+  endpointCount?: number;
 }
 
 export interface Member {

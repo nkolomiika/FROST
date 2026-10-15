@@ -933,6 +933,24 @@ func (r *Repo) ListStagedEndpointsByIDs(ctx context.Context, projectID int32, id
 	return out, nil
 }
 
+func (r *Repo) ListStagedEndpointsForJobPage(ctx context.Context, projectID, jobID int32, offset, limit int) ([]recon.StagedEndpoint, error) {
+	rows, err := r.q.ListStagedEndpointsForJobPage(ctx, sqlc.ListStagedEndpointsForJobPageParams{
+		ProjectID: projectID, JobID: jobID, Off: int32(offset), Lim: int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedEndpoint, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedEndpoint(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) CountStagedEndpointsForJob(ctx context.Context, projectID, jobID int32) (int64, error) {
+	return r.q.CountStagedEndpointsForJob(ctx, sqlc.CountStagedEndpointsForJobParams{ProjectID: projectID, JobID: jobID})
+}
+
 func (r *Repo) MarkStagedEndpointsImported(ctx context.Context, projectID int32, ids []int32) error {
 	if len(ids) == 0 {
 		return nil
@@ -1042,6 +1060,24 @@ func (r *Repo) ListStagedJsByIDs(ctx context.Context, projectID int32, ids []int
 	return out, nil
 }
 
+func (r *Repo) ListStagedJsForJobPage(ctx context.Context, projectID, jobID int32, offset, limit int) ([]recon.StagedJs, error) {
+	rows, err := r.q.ListStagedJsForJobPage(ctx, sqlc.ListStagedJsForJobPageParams{
+		ProjectID: projectID, JobID: jobID, Off: int32(offset), Lim: int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]recon.StagedJs, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mapStagedJs(row))
+	}
+	return out, nil
+}
+
+func (r *Repo) CountStagedJsForJob(ctx context.Context, projectID, jobID int32) (int64, error) {
+	return r.q.CountStagedJsForJob(ctx, sqlc.CountStagedJsForJobParams{ProjectID: projectID, JobID: jobID})
+}
+
 func (r *Repo) MarkStagedJsImported(ctx context.Context, projectID int32, ids []int32) error {
 	if len(ids) == 0 {
 		return nil
@@ -1060,6 +1096,33 @@ func (r *Repo) ListJsFiles(ctx context.Context, projectID int32) ([]recon.JSFile
 	if err != nil {
 		return nil, err
 	}
+	return r.hydrateJsFiles(ctx, projectID, files)
+}
+
+// ListJsFilesPage — постраничный список JS-файлов проекта (тот же порядок, что и
+// ListJsFiles: secret_count DESC, url). Секреты каждого файла гидрируются так же,
+// как в ListJsFiles, но только для файлов текущей страницы.
+func (r *Repo) ListJsFilesPage(ctx context.Context, projectID int32, offset, limit int) ([]recon.JSFileView, int64, error) {
+	total, err := r.q.CountJsFilesForProject(ctx, projectID)
+	if err != nil {
+		return nil, 0, err
+	}
+	files, err := r.q.ListJsFilesForProjectPage(ctx, sqlc.ListJsFilesForProjectPageParams{
+		ProjectID: projectID, Limit: int32(limit), Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	out, err := r.hydrateJsFiles(ctx, projectID, files)
+	if err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
+}
+
+// hydrateJsFiles превращает sqlc-строки js_files в JSFileView: подтягивает hostname
+// по host_id и секреты каждого файла (по строке на секрет).
+func (r *Repo) hydrateJsFiles(ctx context.Context, projectID int32, files []sqlc.JsFile) ([]recon.JSFileView, error) {
 	nameRows, err := r.q.ListProjectHostIDNames(ctx, projectID)
 	if err != nil {
 		return nil, err

@@ -39,14 +39,18 @@ type Querier interface {
 	// Удаляет staged-находки JS одного прогона; возвращает число удалённых.
 	ClearStagedJs(ctx context.Context, arg ClearStagedJsParams) (int64, error)
 	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
+	CountEndpointsForProject(ctx context.Context, projectID int32) (int64, error)
 	CountFileImagesForVuln(ctx context.Context, arg CountFileImagesForVulnParams) (int64, error)
 	CountHostAssetLinks(ctx context.Context, vulnerabilityID int32) (int64, error)
 	CountHosts(ctx context.Context, arg CountHostsParams) (int64, error)
+	CountJsFilesForProject(ctx context.Context, projectID int32) (int64, error)
 	// ─────────── note comments ───────────
 	CountNoteComments(ctx context.Context, arg CountNoteCommentsParams) (int64, error)
 	CountNotifications(ctx context.Context, arg CountNotificationsParams) (int64, error)
 	CountProjectsAdmin(ctx context.Context, status NullProjectStatus) (int64, error)
 	CountProjectsForMember(ctx context.Context, arg CountProjectsForMemberParams) (int64, error)
+	CountStagedEndpointsForJob(ctx context.Context, arg CountStagedEndpointsForJobParams) (int64, error)
+	CountStagedJsForJob(ctx context.Context, arg CountStagedJsForJobParams) (int64, error)
 	CountUnreadNotifications(ctx context.Context, userID int32) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	// ─────────── comments ───────────
@@ -257,6 +261,9 @@ type Querier interface {
 	ListEndpointsForHost(ctx context.Context, hostID int32) ([]Endpoint, error)
 	ListEndpointsForHostOrdered(ctx context.Context, hostID int32) ([]Endpoint, error)
 	ListEndpointsForHosts(ctx context.Context, hostIds []int32) ([]Endpoint, error)
+	// Постраничный список эндпоинтов всего проекта (join hosts по host_id).
+	// Стабильная сортировка по e.id для консистентной пагинации.
+	ListEndpointsForProjectPage(ctx context.Context, arg ListEndpointsForProjectPageParams) ([]ListEndpointsForProjectPageRow, error)
 	// История прогонов фермы проекта (новые сверху): статус, конфиг (raw) и итог
 	// (result) для показа в логах и перехода к отчёту/настройкам конкретного скана.
 	ListFarmRunJobs(ctx context.Context, arg ListFarmRunJobsParams) ([]ListFarmRunJobsRow, error)
@@ -272,6 +279,7 @@ type Querier interface {
 	ListJsFileURLsForHost(ctx context.Context, arg ListJsFileURLsForHostParams) ([]string, error)
 	ListJsFileURLsForProject(ctx context.Context, projectID int32) ([]string, error)
 	ListJsFilesForProject(ctx context.Context, projectID int32) ([]JsFile, error)
+	ListJsFilesForProjectPage(ctx context.Context, arg ListJsFilesForProjectPageParams) ([]JsFile, error)
 	ListJsSecretsForFile(ctx context.Context, jsFileID int32) ([]JsSecret, error)
 	// Все утечки проекта с необязательными фильтрами source/job_id (NULL = не фильтруем).
 	ListLeaks(ctx context.Context, arg ListLeaksParams) ([]ReconLeak, error)
@@ -311,6 +319,8 @@ type Querier interface {
 	ListStagedEndpoints(ctx context.Context, arg ListStagedEndpointsParams) ([]ReconFarmStagedEndpoint, error)
 	// Выбранные staged-эндпоинты проекта по id (для импорта). Скоуп проекта обязателен.
 	ListStagedEndpointsByIDs(ctx context.Context, arg ListStagedEndpointsByIDsParams) ([]ReconFarmStagedEndpoint, error)
+	// Страница staged-эндпоинтов одного прогона (для постраничного ревью), по id.
+	ListStagedEndpointsForJobPage(ctx context.Context, arg ListStagedEndpointsForJobPageParams) ([]ReconFarmStagedEndpoint, error)
 	// Все staged-строки одного прогона (для отчёта), по возрастанию id.
 	ListStagedHosts(ctx context.Context, arg ListStagedHostsParams) ([]ReconFarmStagedHost, error)
 	// Выбранные staged-строки проекта по id (для импорта). Скоуп проекта обязателен —
@@ -320,6 +330,8 @@ type Querier interface {
 	ListStagedJs(ctx context.Context, arg ListStagedJsParams) ([]ReconFarmStagedJ, error)
 	// Выбранные staged-находки JS проекта по id (для импорта). Скоуп проекта обязателен.
 	ListStagedJsByIDs(ctx context.Context, arg ListStagedJsByIDsParams) ([]ReconFarmStagedJ, error)
+	// Страница staged-находок JS одного прогона (для постраничного ревью), по id.
+	ListStagedJsForJobPage(ctx context.Context, arg ListStagedJsForJobPageParams) ([]ReconFarmStagedJ, error)
 	ListStandaloneIPHostIDs(ctx context.Context, arg ListStandaloneIPHostIDsParams) ([]int32, error)
 	ListSubtreeFolders(ctx context.Context, path string) ([]ProjectFolder, error)
 	ListSubtreeProjects(ctx context.Context, folder string) ([]Project, error)

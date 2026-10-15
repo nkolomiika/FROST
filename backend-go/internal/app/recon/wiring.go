@@ -49,10 +49,13 @@ func SettingsFromConfig(c *config.Config) reconnet.Settings {
 
 		SubsCrtshEnabled:     c.SubsCrtshEnabled,
 		SubsCrtshTimeout:     secs(c.SubsCrtshTimeoutSeconds),
-		SubsSubfinderEnabled: c.SubsSubfinderEnabled,
-		SubsSubfinderBin:     c.SubsSubfinderBin,
-		SubsSubfinderTimeout: secs(c.SubsSubfinderTimeoutSeconds),
-		SubsMaxResults:       c.SubsMaxResults,
+		SubsSubfinderEnabled:   c.SubsSubfinderEnabled,
+		SubsSubfinderBin:       c.SubsSubfinderBin,
+		SubsSubfinderTimeout:   secs(c.SubsSubfinderTimeoutSeconds),
+		SubsAssetfinderEnabled: c.SubsAssetfinderEnabled,
+		SubsAssetfinderBin:     c.SubsAssetfinderBin,
+		SubsAssetfinderTimeout: secs(c.SubsAssetfinderTimeoutSeconds),
+		SubsMaxResults:         c.SubsMaxResults,
 
 		PortscanNmapBin:    c.PortscanNmapBin,
 		PortscanTopPorts:   c.PortscanTopPorts,

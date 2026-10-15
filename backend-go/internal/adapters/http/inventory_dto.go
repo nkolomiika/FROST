@@ -230,30 +230,22 @@ func hostIPList(agg *inventory.HostAggregate) []map[string]any {
 	return ips
 }
 
-// hostListItem — элемент list_hosts (endpoints — краткая сводка {id,path,method}).
+// hostListItem — элемент list_hosts (endpoint_count — число эндпоинтов хоста;
+// полный список эндпоинтов отдаётся только в get_host / project-wide /endpoints).
 func hostListItem(agg *inventory.HostAggregate) map[string]any {
-	endpoints := make([]map[string]any, 0, len(agg.Endpoints))
-	for i := range agg.Endpoints {
-		e := &agg.Endpoints[i]
-		endpoints = append(endpoints, map[string]any{
-			"id":     e.ID,
-			"path":   e.Path,
-			"method": e.Method,
-		})
-	}
 	return map[string]any{
-		"id":           agg.Host.ID,
-		"project_id":   agg.Host.ProjectID,
-		"ip_address":   agg.Host.IPAddress,
-		"ip_addresses": hostIPList(agg),
-		"endpoints":    endpoints,
-		"hostname":     agg.Host.Hostname,
-		"status":       strings.ToLower(agg.Host.Status),
-		"os_type":      strings.ToLower(agg.Host.OsType),
-		"notes":        agg.Host.Notes,
-		"origin":       agg.Host.Origin,
-		"created_at":   agg.Host.CreatedAt,
-		"updated_at":   agg.Host.UpdatedAt,
+		"id":             agg.Host.ID,
+		"project_id":     agg.Host.ProjectID,
+		"ip_address":     agg.Host.IPAddress,
+		"ip_addresses":   hostIPList(agg),
+		"endpoint_count": len(agg.Endpoints),
+		"hostname":       agg.Host.Hostname,
+		"status":         strings.ToLower(agg.Host.Status),
+		"os_type":        strings.ToLower(agg.Host.OsType),
+		"notes":          agg.Host.Notes,
+		"origin":         agg.Host.Origin,
+		"created_at":     agg.Host.CreatedAt,
+		"updated_at":     agg.Host.UpdatedAt,
 	}
 }
 

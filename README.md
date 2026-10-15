@@ -17,7 +17,7 @@
 - **Word-отчёты** (кнопка «Generate report» на странице проекта): «Отчёт для сертификации» (СЗИ, `POST /projects/{id}/reports/szi`) и «Отчёт внутренней приёмки» (ПП, landscape, `POST /projects/{id}/reports/pp`). PDF не поддерживается — в образе нет конвертера.
 - **Audit-журнал** в PostgreSQL с фильтрами и full-text поиском.
 - **Machine API `/v2`** для AI-агентов: bearer-токены, скоупы, white-list проектов.
-- **Mail outbox**: RabbitMQ + воркер `aiosmtplib` (Gmail / корпоративный SMTP через `.env`).
+- **Mail outbox**: Go-воркер `cmd/mail-worker` — поллер БД по таблице `mail_jobs`, отправка через SMTP (Gmail / корпоративный / mailpit, настраивается `.env`).
 
 ## Стек
 

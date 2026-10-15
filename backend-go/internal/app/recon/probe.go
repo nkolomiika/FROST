@@ -284,12 +284,14 @@ func (s *Service) probeIPs(ctx context.Context, projectID, actorID int32, raw st
 	result.Errors = append(parseErrors, resolveErrors(resolved)...)
 
 	if resolveHosts && s.settings.FarmIPResolveHostsEnabled {
+		// Promote EVERY reverse-discovered hostname to the hosts inventory, not just
+		// forward-confirmed PTRs. persistIPs attaches all rev.Names to the IP, so the
+		// hosts section must match — otherwise a reverse name shows on the IP but never
+		// becomes a host.
 		promotedSet := map[string]bool{}
 		for _, rev := range reverse {
 			for _, n := range rev.Names {
-				if n.Confirmed {
-					promotedSet[n.Hostname] = true
-				}
+				promotedSet[n.Hostname] = true
 			}
 		}
 		if len(promotedSet) > 0 {

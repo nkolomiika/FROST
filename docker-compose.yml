@@ -1,5 +1,14 @@
+# Ротация логов контейнеров: без неё json-file-логи растут без предела и медленно
+# забивают диск дублирующимися строками. 10 МБ × 3 файла на контейнер — потолок.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
+    logging: *default-logging
     build:
       context: ./backend-go
       target: runtime
@@ -28,6 +37,7 @@ services:
       start_period: 5s
 
   mail-worker:
+    logging: *default-logging
     build:
       context: ./backend-go
       target: runtime
@@ -43,6 +53,7 @@ services:
 
   # Рекон-ферма: пробив вставленных списков хостов/IP отдельным процессом.
   recon-worker:
+    logging: *default-logging
     build:
       context: ./backend-go
       target: recon
@@ -57,6 +68,7 @@ services:
   # Python-sidecar генерации Word-отчётов (интерим Go-миграции): Go-API дёргает
   # его по внутренней сети. Переиспользует образ backend (word_builder + шаблоны).
   report-sidecar:
+    logging: *default-logging
     build:
       context: ./backend
     command: uvicorn app.report_sidecar:app --host 0.0.0.0 --port 8100
@@ -71,6 +83,7 @@ services:
       - ./backend:/app
 
   frontend:
+    logging: *default-logging
     build:
       context: ./frontend
     depends_on:
@@ -87,6 +100,7 @@ services:
       - /app/node_modules
 
   db:
+    logging: *default-logging
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: pcf
@@ -104,6 +118,7 @@ services:
       start_period: 5s
 
   minio:
+    logging: *default-logging
     image: minio/minio
     command: server /data --console-address ":9001"
     environment:
@@ -122,6 +137,7 @@ services:
       start_period: 5s
 
   rabbitmq:
+    logging: *default-logging
     image: rabbitmq:3-management
     environment:
       RABBITMQ_ERLANG_COOKIE: pcf_rabbitmq_dev_cookie_1234567890
@@ -135,6 +151,7 @@ services:
       start_period: 5s
 
   mailpit:
+    logging: *default-logging
     image: axllent/mailpit
     ports:
       - "1025:1025"
@@ -142,6 +159,7 @@ services:
 
   # TLS-terminating reverse proxy: 80 -> 301 https, 443 -> app.
   nginx:
+    logging: *default-logging
     image: nginx:1.27-alpine
     depends_on:
       frontend:

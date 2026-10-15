@@ -192,6 +192,13 @@ func (s *stubStore) ListStagedEndpointsByIDs(_ context.Context, _ int32, ids []i
 	}
 	return out, nil
 }
+func (s *stubStore) ListStagedEndpointsForJobPage(_ context.Context, _ int32, jobID int32, offset, limit int) ([]StagedEndpoint, error) {
+	all := s.stagedEndpointsByJob[jobID]
+	return pageSlice(all, offset, limit), nil
+}
+func (s *stubStore) CountStagedEndpointsForJob(_ context.Context, _ int32, jobID int32) (int64, error) {
+	return int64(len(s.stagedEndpointsByJob[jobID])), nil
+}
 func (s *stubStore) MarkStagedEndpointsImported(_ context.Context, _ int32, ids []int32) error {
 	s.markedEndpointsImp = append(s.markedEndpointsImp, ids...)
 	return nil
@@ -227,6 +234,25 @@ func (s *stubStore) ListStagedJsByIDs(_ context.Context, _ int32, ids []int32) (
 		}
 	}
 	return out, nil
+}
+func (s *stubStore) ListStagedJsForJobPage(_ context.Context, _ int32, jobID int32, offset, limit int) ([]StagedJs, error) {
+	all := s.stagedJsByJob[jobID]
+	return pageSlice(all, offset, limit), nil
+}
+func (s *stubStore) CountStagedJsForJob(_ context.Context, _ int32, jobID int32) (int64, error) {
+	return int64(len(s.stagedJsByJob[jobID])), nil
+}
+
+// pageSlice — тестовый помощник постраничной нарезки.
+func pageSlice[T any](all []T, offset, limit int) []T {
+	if offset >= len(all) {
+		return []T{}
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end]
 }
 func (s *stubStore) MarkStagedJsImported(_ context.Context, _ int32, ids []int32) error {
 	s.markedJsImp = append(s.markedJsImp, ids...)

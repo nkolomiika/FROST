@@ -70,26 +70,75 @@ func (s *Service) FarmReport(ctx context.Context, projectID int32, jobID *int32)
 		}
 	}
 
-	eps, err := s.store.ListStagedEndpoints(ctx, projectID, jid)
+	// Отчёт лёгкий: большие массивы endpoints/js больше НЕ вкладываются (68k/2k
+	// строк). Поля остаются (пустые []), а summary-счётчики считаем COUNT-запросами —
+	// фронт использует их для бейджей. Сами строки отдают постраничные роуты
+	// .../recon/farm/report/endpoints и .../recon/farm/report/js.
+	epsTotal, err := s.store.CountStagedEndpointsForJob(ctx, projectID, jid)
 	if err != nil {
 		return FarmReport{}, err
 	}
-	if eps == nil {
-		eps = []StagedEndpoint{}
-	}
-	rep.Endpoints = eps
-	rep.Summary.EndpointsTotal = len(eps)
+	rep.Summary.EndpointsTotal = int(epsTotal)
 
-	js, err := s.store.ListStagedJs(ctx, projectID, jid)
+	jsTotal, err := s.store.CountStagedJsForJob(ctx, projectID, jid)
 	if err != nil {
 		return FarmReport{}, err
 	}
-	if js == nil {
-		js = []StagedJs{}
-	}
-	rep.Js = js
-	rep.Summary.JsTotal = len(js)
+	rep.Summary.JsTotal = int(jsTotal)
 	return rep, nil
+}
+
+// FarmReportEndpointsPage — постраничные staged-эндпоинты прогона (по jobID либо
+// последнего). Форма элемента идентична report.endpoints[i] (StagedEndpoint).
+// Прогонов нет / чужой job → пустая страница (total=0). Порядок стабильный (по id).
+func (s *Service) FarmReportEndpointsPage(ctx context.Context, projectID int32, jobID *int32, offset, limit int) ([]StagedEndpoint, int64, error) {
+	jid, ok, err := s.resolveReportJobID(ctx, projectID, jobID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !ok {
+		return []StagedEndpoint{}, 0, nil
+	}
+	// Как и отчёт: если стейджинг был выгружен в MinIO (холодный прогон),
+	// прозрачно возвращаем его в БД перед чтением.
+	s.rehydrateStaging(ctx, projectID, jid)
+	total, err := s.store.CountStagedEndpointsForJob(ctx, projectID, jid)
+	if err != nil {
+		return nil, 0, err
+	}
+	items, err := s.store.ListStagedEndpointsForJobPage(ctx, projectID, jid, offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	if items == nil {
+		items = []StagedEndpoint{}
+	}
+	return items, total, nil
+}
+
+// FarmReportJsPage — постраничные staged-находки JS прогона (по jobID либо
+// последнего). Форма элемента идентична report.js[i] (StagedJs). Порядок по id.
+func (s *Service) FarmReportJsPage(ctx context.Context, projectID int32, jobID *int32, offset, limit int) ([]StagedJs, int64, error) {
+	jid, ok, err := s.resolveReportJobID(ctx, projectID, jobID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !ok {
+		return []StagedJs{}, 0, nil
+	}
+	s.rehydrateStaging(ctx, projectID, jid)
+	total, err := s.store.CountStagedJsForJob(ctx, projectID, jid)
+	if err != nil {
+		return nil, 0, err
+	}
+	items, err := s.store.ListStagedJsForJobPage(ctx, projectID, jid, offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	if items == nil {
+		items = []StagedJs{}
+	}
+	return items, total, nil
 }
 
 // ImportStagedHosts создаёт реальные хосты проекта (+IP +порты +сервисы) из

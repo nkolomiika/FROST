@@ -31,6 +31,17 @@ func (q *Queries) BulkDeleteJsFiles(ctx context.Context, arg BulkDeleteJsFilesPa
 	return result.RowsAffected(), nil
 }
 
+const countJsFilesForProject = `-- name: CountJsFilesForProject :one
+SELECT count(*) FROM js_files WHERE project_id = $1
+`
+
+func (q *Queries) CountJsFilesForProject(ctx context.Context, projectID int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countJsFilesForProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteJsFilesForHost = `-- name: DeleteJsFilesForHost :exec
 DELETE FROM js_files WHERE project_id = $1 AND host_id = $2
 `
@@ -172,6 +183,52 @@ SELECT id, project_id, host_id, url, sha256, size_bytes, content_type, status, e
 
 func (q *Queries) ListJsFilesForProject(ctx context.Context, projectID int32) ([]JsFile, error) {
 	rows, err := q.db.Query(ctx, listJsFilesForProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []JsFile{}
+	for rows.Next() {
+		var i JsFile
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.HostID,
+			&i.Url,
+			&i.Sha256,
+			&i.SizeBytes,
+			&i.ContentType,
+			&i.Status,
+			&i.Error,
+			&i.SecretCount,
+			&i.EndpointCount,
+			&i.Endpoints,
+			&i.FetchedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listJsFilesForProjectPage = `-- name: ListJsFilesForProjectPage :many
+SELECT id, project_id, host_id, url, sha256, size_bytes, content_type, status, error, secret_count, endpoint_count, endpoints, fetched_at, created_at, updated_at FROM js_files WHERE project_id = $1 ORDER BY secret_count DESC, url LIMIT $2 OFFSET $3
+`
+
+type ListJsFilesForProjectPageParams struct {
+	ProjectID int32 `json:"project_id"`
+	Limit     int32 `json:"limit"`
+	Offset    int32 `json:"offset"`
+}
+
+func (q *Queries) ListJsFilesForProjectPage(ctx context.Context, arg ListJsFilesForProjectPageParams) ([]JsFile, error) {
+	rows, err := q.db.Query(ctx, listJsFilesForProjectPage, arg.ProjectID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

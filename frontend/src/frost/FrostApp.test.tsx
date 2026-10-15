@@ -225,7 +225,12 @@ vi.mock("../api", async (importOriginal) => {
       id: 902, project_id: 2, kind: "js", status: "done", targets_total: 1, error: null, created_at: "2026-07-19T00:00:00Z",
       result: { domains_scanned: 1, files_found: 1, files_scanned: 1, files_failed: 0, secrets_found: 1, endpoints_found: 2, files: [], errors: [] },
     })),
-    getJsFiles: vi.fn(async () => [
+    getEndpointsPage: vi.fn(async () => ({ items: [], total: 0, page: 1, size: 2000, pages: 1 })),
+    getFarmReportEndpointsPage: vi.fn(async () => ({ items: [], total: 0, page: 1, size: 2000, pages: 1 })),
+    getFarmReportJsPage: vi.fn(async () => ({ items: [], total: 0, page: 1, size: 1000, pages: 1 })),
+    getJsFilesPage: vi.fn(async () => ({
+      total: 1, page: 1, size: 200, pages: 1,
+      items: [
       {
         id: 1, host_id: 11, hostname: "api.northwind.test", url: "https://api.northwind.test/static/app.bundle.js",
         status: "ok", size_bytes: 4096, content_type: "application/javascript", secret_count: 1, endpoint_count: 2,
@@ -238,7 +243,8 @@ vi.mock("../api", async (importOriginal) => {
         status: "ok", size_bytes: 20480, content_type: "application/javascript", secret_count: 0, endpoint_count: 0,
         endpoints: [], secrets: [], fetched_at: "2026-07-19T00:00:00Z",
       },
-    ]),
+      ],
+    })),
     downloadJsArchive: vi.fn(async () => new Blob(["zip"], { type: "application/zip" })),
     getHostFarmJob: vi.fn(async () => ({
       id: 900, project_id: 2, status: "done", targets_total: 2, error: null, created_at: "2026-07-19T00:00:00Z",
@@ -595,6 +601,41 @@ describe("FrostApp workspace screen", () => {
     expect(within(total).getByText("3")).toBeInTheDocument();
   });
 
+  it("groups multi-part-TLD siblings under a synthetic domain header, sorted", async () => {
+    // Три поддомена prudential.com.hk без самого апекса среди хостов — должны
+    // собраться под ОДНОЙ синтетической шапкой домена, а не тремя строками.
+    const sub = (id: number, name: string) => ({
+      id, project_id: 2, ip_address: "1.1.1.1", hostname: name, origin: "host",
+      ip_addresses: [{ id: 300 + id, host_id: id, ip_address: "1.1.1.1", label: null, is_primary: true, ports: [], hostnames: [], is_cloudflare: false, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" }],
+      status: "up", os_type: "linux", notes: null, endpoints: [], created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    });
+    // Порядок в payload намеренно НЕ алфавитный — проверяем, что сортируем мы.
+    const orig = vi.mocked(api.getHosts).getMockImplementation();
+    vi.mocked(api.getHosts).mockResolvedValue({
+      items: [sub(201, "appsvcuat9.prudential.com.hk"), sub(202, "appsvcuat80.prudential.com.hk"), sub(203, "appservice.prudential.com.hk")],
+      total: 3, page: 1, size: 100, pages: 1,
+    } as never);
+    try {
+      await openHostsSection();
+      // Синтетическая шапка домена появляется как единственная верхнеуровневая строка.
+      const header = await screen.findByText("prudential.com.hk", { selector: ".hostname" });
+      // Поддомены свёрнуты под ней — до раскрытия их не видно.
+      expect(screen.queryByText("appservice.prudential.com.hk", { selector: ".hostname" })).not.toBeInTheDocument();
+      // Раскрываем группу — теперь поддомены видны, строго по алфавиту.
+      fireEvent.click(header.closest(".prow") as HTMLElement);
+      await screen.findByText("appservice.prudential.com.hk", { selector: ".hostname" });
+      const names = screen.getAllByText(/prudential\.com\.hk/, { selector: ".hostname" }).map((n) => n.textContent);
+      expect(names).toEqual([
+        "prudential.com.hk",
+        "appservice.prudential.com.hk",
+        "appsvcuat80.prudential.com.hk",
+        "appsvcuat9.prudential.com.hk",
+      ]);
+    } finally {
+      if (orig) vi.mocked(api.getHosts).mockImplementation(orig); // вернуть дефолтный мок
+    }
+  });
+
   it("filters hosts by the status pills (empty = all)", async () => {
     await openHostsSection();
     await screen.findByText("api.northwind.test", { selector: ".hostname" });
@@ -690,7 +731,7 @@ describe("FrostApp workspace screen", () => {
     expect(screen.getByText("/api/v1/secret-data")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Export paths/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Export secrets/i })).toBeInTheDocument();
-    expect(vi.mocked(api.getJsFiles)).toHaveBeenCalledWith(2);
+    expect(vi.mocked(api.getJsFilesPage)).toHaveBeenCalledWith(2, 1, 200);
   });
 
   it("exports one file's paths and secrets as separate lists", async () => {

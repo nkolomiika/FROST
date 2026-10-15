@@ -115,6 +115,9 @@ func (f *fakeInvStore) DeleteService(context.Context, int32) error { return nil 
 func (f *fakeInvStore) ListEndpointsForHost(context.Context, int32) ([]Endpoint, error) {
 	return nil, nil
 }
+func (f *fakeInvStore) ListEndpointsPage(context.Context, int32, int, int) ([]EndpointRow, int64, error) {
+	return nil, 0, nil
+}
 func (f *fakeInvStore) GetEndpointForHost(context.Context, int32, int32) (*Endpoint, error) {
 	return nil, ErrNoRows
 }

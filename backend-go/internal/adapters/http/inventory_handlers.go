@@ -66,6 +66,7 @@ func (h *InventoryHandler) Register(r chi.Router) {
 		ar.With(pa).Delete(base+"/hosts/{host_id}/ports/{port_id}/services/{service_id}", h.deleteService)
 
 		// endpoints
+		ar.With(pa).Get(base+"/endpoints", h.listProjectEndpoints)
 		ar.With(pa).Post(base+"/endpoints/bulk-delete", h.bulkDeleteEndpoints)
 		ar.With(pa).Get(base+"/hosts/{host_id}/endpoints", h.listEndpoints)
 		ar.With(pa).Post(base+"/hosts/{host_id}/endpoints", h.createEndpoint)
@@ -84,7 +85,10 @@ func (h *InventoryHandler) Register(r chi.Router) {
 func (h *InventoryHandler) listHosts(w http.ResponseWriter, r *http.Request) {
 	pid := projectFromContext(r.Context()).ID
 	page := intQuery(r, "page", 1, 1, 1_000_000)
-	size := intQuery(r, "size", 20, 1, 200)
+	// Потолок страницы поднят с 200 до 5000 — фронт грузит хосты постранично и
+	// показывает ВСЕ (убрали лимит «100 хостов»), большими страницами меньше
+	// round-trip'ов на крупных таргетах.
+	size := intQuery(r, "size", 20, 1, 5000)
 	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
 	origin := strings.TrimSpace(r.URL.Query().Get("origin"))
 	if origin == "" {
@@ -479,6 +483,31 @@ func (h *InventoryHandler) listEndpoints(w http.ResponseWriter, r *http.Request)
 		out = append(out, endpointOut(&endpoints[i]))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// listProjectEndpoints — постраничный плоский список эндпоинтов всего проекта
+// (GET .../endpoints?page&size). Каждый item: {id,host_id,path,method}.
+func (h *InventoryHandler) listProjectEndpoints(w http.ResponseWriter, r *http.Request) {
+	pid := projectFromContext(r.Context()).ID
+	page := intQuery(r, "page", 1, 1, 1_000_000)
+	size := intQuery(r, "size", 500, 1, 2000)
+	offset := (page - 1) * size
+	rows, total, err := h.svc.ListEndpointsPage(r.Context(), pid, offset, size)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	items := make([]map[string]any, 0, len(rows))
+	for i := range rows {
+		e := &rows[i]
+		items = append(items, map[string]any{
+			"id":      e.ID,
+			"host_id": e.HostID,
+			"path":    e.Path,
+			"method":  e.Method,
+		})
+	}
+	writeJSON(w, http.StatusOK, paginated(items, total, page, size))
 }
 
 func (h *InventoryHandler) createEndpoint(w http.ResponseWriter, r *http.Request) {

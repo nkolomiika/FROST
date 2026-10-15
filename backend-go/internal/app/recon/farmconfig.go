@@ -131,7 +131,7 @@ func DefaultFarmConfig() FarmConfig {
 		Crtsh:             true,
 		CtTimeCorrelation: false,
 		ActiveBrute:       false,
-		SubsMaxResults:    2000,
+		SubsMaxResults:    100000,
 
 		Dnsx:         true,
 		Httpx:        true,
@@ -207,7 +207,7 @@ func (c *FarmConfig) Sanitize() {
 	c.RateLimit = clampInt(c.RateLimit, 1, 500)
 	c.Concurrency = clampInt(c.Concurrency, 1, 100)
 	c.KatanaDepth = clampInt(c.KatanaDepth, 1, 10)
-	c.SubsMaxResults = clampInt(c.SubsMaxResults, 1, 100000)
+	c.SubsMaxResults = clampInt(c.SubsMaxResults, 1, 1000000)
 	c.HttpxThreads = clampInt(c.HttpxThreads, 1, 1000)
 
 	// Leaks-входы: trim → нормализация → drop невалидных → дедуп → cap.

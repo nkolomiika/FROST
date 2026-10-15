@@ -101,7 +101,9 @@ func TestRunSubdomains_PassiveAndActiveConcurrent(t *testing.T) {
 		}
 		mu.Lock()
 		for _, st := range p.Steps {
-			if st.Tool == "subfinder" {
+			// Пассивный сбор теперь идёт одним шагом "passive-subs" (crt.sh +
+			// subfinder + assetfinder), а не жёстко "subfinder".
+			if st.Tool == "passive-subs" {
 				sawSubfinderStep = true
 			}
 		}

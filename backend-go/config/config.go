@@ -91,7 +91,7 @@ type Config struct {
 
 	// --- Recon-ферма: серверный пробив вставленных списков хостов и IP ---
 	// Зеркало config.py §5. float-секунды парсим как float64 (совпадает с .env).
-	FarmMaxTargets               int     `env:"FARM_MAX_TARGETS" envDefault:"256"`
+	FarmMaxTargets               int     `env:"FARM_MAX_TARGETS" envDefault:"100000"`
 	FarmMaxPortsPerHost          int     `env:"FARM_MAX_PORTS_PER_HOST" envDefault:"32"`
 	FarmProbeTimeoutSeconds      float64 `env:"FARM_PROBE_TIMEOUT_SECONDS" envDefault:"8.0"`
 	FarmMaxConcurrency           int     `env:"FARM_MAX_CONCURRENCY" envDefault:"20"`
@@ -152,7 +152,10 @@ type Config struct {
 	SubsSubfinderEnabled        bool    `env:"SUBS_SUBFINDER_ENABLED" envDefault:"true"`
 	SubsSubfinderBin            string  `env:"SUBS_SUBFINDER_BIN" envDefault:"subfinder"`
 	SubsSubfinderTimeoutSeconds float64 `env:"SUBS_SUBFINDER_TIMEOUT_SECONDS" envDefault:"120.0"`
-	SubsMaxResults              int     `env:"SUBS_MAX_RESULTS" envDefault:"2000"`
+	SubsAssetfinderEnabled        bool    `env:"SUBS_ASSETFINDER_ENABLED" envDefault:"true"`
+	SubsAssetfinderBin            string  `env:"SUBS_ASSETFINDER_BIN" envDefault:"assetfinder"`
+	SubsAssetfinderTimeoutSeconds float64 `env:"SUBS_ASSETFINDER_TIMEOUT_SECONDS" envDefault:"120.0"`
+	SubsMaxResults              int     `env:"SUBS_MAX_RESULTS" envDefault:"100000"`
 
 	// --- Scanner: скан портов (nmap) ---
 	PortscanEnabled        bool    `env:"PORTSCAN_ENABLED" envDefault:"true"`

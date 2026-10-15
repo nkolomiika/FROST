@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type ClipboardEvent as ReactClipboardEvent,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -65,7 +64,7 @@ import {
   getIpFarmJob as apiGetIpFarmJob,
   startJsScan as apiStartJsScan,
   getJsScanJob as apiGetJsScanJob,
-  getJsFiles as apiGetJsFiles,
+  getJsFilesPage as apiGetJsFilesPage,
   downloadJsArchive as apiDownloadJsArchive,
   deleteJsFilesForHost as apiDeleteJsFilesForHost,
   getReconFarmConfig as apiGetReconFarmConfig,
@@ -78,6 +77,8 @@ import {
   cancelFarmStep as apiCancelFarmStep,
   cancelAllFarmRuns as apiCancelAllFarmRuns,
   getFarmReport as apiGetFarmReport,
+  getFarmReportEndpointsPage as apiGetFarmReportEndpointsPage,
+  getFarmReportJsPage as apiGetFarmReportJsPage,
   importFarmReport as apiImportFarmReport,
   clearFarmReport as apiClearFarmReport,
   getLeaks as apiGetLeaks,
@@ -91,6 +92,7 @@ import {
   setIntegration as apiSetIntegration,
   createEndpoint as apiCreateEndpoint,
   getEndpoints as apiGetEndpoints,
+  getEndpointsPage as apiGetEndpointsPage,
   deleteEndpoint as apiDeleteEndpoint,
   getProjectMembers as apiGetProjectMembers,
   addProjectMember as apiAddProjectMember,
@@ -290,6 +292,7 @@ interface FrostState {
   modalOpen: boolean;
   sidebarCollapsed: boolean;
   lightboxSrc: string | null;
+  filePreview: ApiVulnFile | null;
   apiProjects: ApiProjectRow[] | null;
   projectsLoading: boolean;
   projectsError: string | null;
@@ -388,7 +391,7 @@ interface FrostState {
   /** Выбранные для импорта застейдженные JS-находки (по staged id). */
   farmReportJsSel: number[];
   /** Активная вкладка отчёта: хосты / эндпоинты / JS. */
-  farmReportTab: "hosts" | "endpoints" | "js";
+  farmReportTab: "hosts" | "endpoints" | "js" | "leaks";
   /** Фильтры отчёта: поиск по имени, источник, «только живые», «только с портами». */
   farmReportQuery: string;
   farmReportSource: string;
@@ -398,6 +401,8 @@ interface FrostState {
   farmReportUnimportedOnly: boolean;
   /** Открытая карточка JS-файла (id) — как openHostId/openIp у хостов и адресов. */
   openJsFileId: number | null;
+  /** Хост, чья страница «все JS-файлы хоста» открыта, либо null. */
+  openJsHost: string | null;
   jsTick: number;
   jsQuery: string;
   /** Only show files that leaked at least one secret. */
@@ -441,6 +446,8 @@ interface FrostState {
   leaksSel: number[];
   /** Фильтр по источнику (пустая строка = все). */
   leaksSource: string;
+  leaksKind: string;
+  leaksQuery: string;
   /** Утечки, чьё значение сейчас раскрыто (по умолчанию маскируется). */
   leaksRevealed: number[];
   /** Поле URL для запуска GitHub-скана (репозиторий/организация). */
@@ -534,7 +541,8 @@ interface FrostState {
   projEditEnd: string;
   projEditStatus: ProjectStatus;
   section: SectionId;
-  expanded: number[];
+  /** Раскрытые группы дерева хостов — ключ группы (регистрируемый домен), не id. */
+  expanded: string[];
   profileTab: ProfileTab;
   apiKeys: ApiKey[];
   apiKeyModalOpen: boolean;
@@ -604,6 +612,7 @@ const initialState: FrostState = {
   modalOpen: false,
   sidebarCollapsed: false,
   lightboxSrc: null,
+  filePreview: null,
   apiProjects: null,
   projectsLoading: false,
   projectsError: null,
@@ -644,6 +653,7 @@ const initialState: FrostState = {
   wordlistsLoading: false,
   wordlistUploading: false,
   openJsFileId: null,
+  openJsHost: null,
   jsTick: 0,
   jsQuery: "",
   jsSecretsOnly: false,
@@ -675,7 +685,11 @@ const initialState: FrostState = {
   farmReportSource: "",
   farmReportAliveOnly: false,
   farmReportPortsOnly: false,
-  farmReportUnimportedOnly: true,
+  // Показываем ВСЕ находки прогона по умолчанию (уже импортированные — с бейджем):
+  // отчёт нужен и чтобы просто смотреть результаты скана, а не только импортировать.
+  // Когда все находки раздела уже импортированы, «unimported only» прятал их целиком
+  // и раздел выглядел пустым. Фильтр остаётся тумблером, просто выключен по старту.
+  farmReportUnimportedOnly: false,
   apiMembers: null,
   membersTick: 0,
   apiVulns: null,
@@ -698,6 +712,8 @@ const initialState: FrostState = {
   leaksBusy: false,
   leaksSel: [],
   leaksSource: "",
+  leaksKind: "",
+  leaksQuery: "",
   leaksRevealed: [],
   leaksScanUrl: "",
   leaksScanJob: null,
@@ -816,6 +832,26 @@ const initialState: FrostState = {
 const CARD: CSSProperties = { background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 16 };
 const PILL_ON: CSSProperties = { background: "var(--fr-accent-2)", color: "var(--fr-on-accent)", border: "1px solid var(--fr-accent-2)" };
 const PILL_OFF: CSSProperties = { background: "var(--fr-surface)", color: "var(--fr-text-2)", border: "1px solid var(--fr-border)" };
+
+/* Второй уровень публичного суффикса: <SLD>.<двухбуквенный ccTLD> — co.uk, com.hk,
+   com.au, co.jp, com.br, gov.uk… Список покрывает частые случаи; чего в нём нет —
+   считаем обычным двухсоставным TLD (2 метки). Полный PSL не тянем ради одного
+   экрана; этой эвристики хватает, чтобы хосты одного домена не разъезжались. */
+const MULTI_SLD = new Set([
+  "co", "com", "net", "org", "edu", "gov", "gob", "gouv", "mil", "ac", "go",
+  "or", "ne", "ad", "in", "ltd", "plc", "web", "sch", "nic", "nom",
+]);
+
+/** Регистрируемый домен (eTLD+1): apuat9.prudential.com.hk → prudential.com.hk,
+ *  www.acme.com → acme.com. Пустую/односоставную строку возвращаем как есть. */
+function registrableDomain(host: string): string {
+  const labels = host.toLowerCase().replace(/\.+$/, "").split(".").filter(Boolean);
+  if (labels.length <= 2) return labels.join(".");
+  const tld = labels[labels.length - 1];
+  const sld = labels[labels.length - 2];
+  const take = tld.length === 2 && MULTI_SLD.has(sld) ? 3 : 2;
+  return labels.slice(-take).join(".");
+}
 
 /* Styled hover tooltip — a themed replacement for the browser's native `title`
    bubble. Rendered through a portal to document.body so it is never clipped by an
@@ -1006,6 +1042,83 @@ interface ApiProjectRow {
   openFindings: number;
   totalFindings: number;
   hostsCount: number;
+}
+
+/* Attachment preview modal. Clicking a finding's file opens this instead of
+   downloading it: the bytes are fetched once into a blob URL (so nothing is
+   saved to disk), previewed by content type, and only written out if the user
+   presses the download arrow. Images, PDFs and text/code render inline; other
+   types show a "no preview" card with the download button as the only action. */
+function FilePreview({ file, onClose }: { file: ApiVulnFile; onClose: () => void }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [text, setText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const ct = file.content_type || "";
+  const isImage = ct.startsWith("image/");
+  const isPdf = ct === "application/pdf";
+  const isText = ct.startsWith("text/") || /(json|xml|javascript|x-sh|yaml|csv|html)/.test(ct);
+
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelled = false;
+    setBlobUrl(null);
+    setText(null);
+    setError(null);
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/files/${file.id}/download`, { credentials: "same-origin" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+        if (isText) setText(await blob.text());
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [file.id, isText]);
+
+  const loading = !blobUrl && !error;
+
+  return createPortal(
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 95, background: "rgba(10,16,26,.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 40, animation: "frost-fade .18s ease both" }}>
+      <div onClick={stop} style={{ display: "flex", flexDirection: "column", width: "min(1000px, 100%)", maxHeight: "100%", background: "var(--fr-surface)", border: "1px solid var(--fr-border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,.5)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", borderBottom: "1px solid var(--fr-divider)" }}>
+          <Icon name="doc" size={16} color="var(--fr-text-3)" />
+          <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.original_name}</span>
+          <span className="mono" style={{ flex: "none", fontSize: 11, color: "var(--fr-text-faint)" }}>{kb(file.size_bytes)}</span>
+          <a href={`/api/v1/files/${file.id}/download`} download={file.original_name} className="clk" title={t("Download")} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", borderRadius: 9, background: "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 12.5px Inter,sans-serif", textDecoration: "none", cursor: "pointer" }}>
+            <Icon name="download" size={15} sw={2.2} />{t("Download")}
+          </a>
+          <div className="clk" onClick={onClose} title={t("Close")} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 9, background: "var(--fr-elevated)", color: "var(--fr-text-2)", cursor: "pointer" }}>
+            <Icon name="close" size={16} />
+          </div>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: "var(--fr-sunken)", display: "flex", alignItems: isImage ? "center" : "stretch", justifyContent: "center" }}>
+          {loading && <div style={{ padding: 60, color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading preview…")}</div>}
+          {error && <div style={{ padding: 60, color: "var(--fr-danger)", font: "500 14px Inter,sans-serif" }}>{t("Could not load this file.")} ({error})</div>}
+          {blobUrl && isImage && <img src={blobUrl} alt={file.original_name} style={{ maxWidth: "100%", maxHeight: "78vh", objectFit: "contain", display: "block" }} />}
+          {blobUrl && isPdf && <iframe src={blobUrl} title={file.original_name} style={{ width: "100%", height: "78vh", border: "none", background: "#fff" }} />}
+          {blobUrl && isText && text != null && (
+            <pre className="mono" style={{ margin: 0, padding: "16px 18px", width: "100%", fontSize: 12.5, lineHeight: 1.6, color: "var(--fr-text-2)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{text}</pre>
+          )}
+          {blobUrl && !isImage && !isPdf && !isText && (
+            <div style={{ padding: 60, textAlign: "center", color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>
+              <Icon name="doc" size={40} color="var(--fr-text-faint)" />
+              <div style={{ marginTop: 14 }}>{t("No preview available for this file type.")}</div>
+              <div style={{ marginTop: 6, fontSize: 12.5 }}>{t("Use the download button to save it.")}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 export function FrostApp() {
@@ -1298,8 +1411,11 @@ export function FrostApp() {
       setStateRaw((s) => (cached ? { ...s, apiHosts: cached, hostsLoading: false } : { ...s, hostsLoading: true }));
       try {
         const res = await apiGetHosts(pid);
-        // Пути приезжают внутри списка (HostOut.endpoints) — раньше здесь был
-        // запрос на каждый хост, и проект с 69 хостами открывался за 70 round-trip'ов.
+        // Список хостов больше НЕ везёт все эндпоинты (проекты с 68k путей давали
+        // ответ в десятки МБ). Он отдаёт только endpoint_count; сами пути наливает
+        // отдельный стрим-эффект ниже, чанками через постраничный /endpoints, и
+        // домердживает их в host.endpoints. На старом бэкенде h.endpoints ещё
+        // может прийти — тогда используем его как есть.
         const rows = res.items.map((h) =>
           toFrostHost(h, (h.endpoints ?? []).map((e) => ({ id: e.id, m: toFrostMethod(e.method), p: e.path })))
         );
@@ -1335,18 +1451,84 @@ export function FrostApp() {
       return;
     }
     let cancelled = false;
+    // Стримим JS-файлы страницами и склеиваем накопитель: список появляется
+    // сразу после первой страницы и доливается, вместо одного ответа на тысячи
+    // файлов (каждый со своими secrets/endpoints). Каждая страница ЗАМЕНЯЕТ
+    // apiJsFiles накопленным срезом — идемпотентно даже при рефетче по jsTick.
     void (async () => {
-      try {
-        const files = await apiGetJsFiles(pid);
-        if (!cancelled) setStateRaw((s) => ({ ...s, apiJsFiles: files }));
-      } catch {
-        if (!cancelled) setStateRaw((s) => ({ ...s, apiJsFiles: [] }));
+      const PAGE = 200;
+      const acc: ApiJsFile[] = [];
+      let page = 1;
+      let first = true;
+      for (;;) {
+        let res;
+        try {
+          res = await apiGetJsFilesPage(pid, page, PAGE);
+        } catch {
+          if (first && !cancelled) setStateRaw((s) => ({ ...s, apiJsFiles: [] }));
+          return;
+        }
+        if (cancelled) return;
+        acc.push(...res.items);
+        const snapshot = acc.slice();
+        setStateRaw((s) => (s.openProjectId === pid ? { ...s, apiJsFiles: snapshot } : s));
+        first = false;
+        if (res.items.length < PAGE || page >= (res.pages || 1)) break;
+        page++;
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [state.openProjectId, state.jsTick]);
+
+  // ================= Endpoints: streamed in pages and merged into hosts =================
+  /* The hosts list no longer embeds endpoints; we page through the project-wide
+     /endpoints route and merge each chunk into its host by id. `endpoints` on a
+     host therefore fills in progressively while the Endpoints view is already
+     usable (groups are collapsed, so nothing renders 68k rows at once). Keyed on
+     hostsTick so a hosts refresh re-streams; the accumulator is rebuilt fresh each
+     run, and each page REPLACES host.endpoints with the accumulated slice — never
+     appends — so a re-stream can't double rows. */
+  useEffect(() => {
+    const pid = state.openProjectId;
+    if (pid == null) return;
+    let cancelled = false;
+    void (async () => {
+      const PAGE = 2000;
+      const byHost = new Map<number, Endpoint[]>();
+      let page = 1;
+      for (;;) {
+        let res;
+        try {
+          res = await apiGetEndpointsPage(pid, page, PAGE);
+        } catch {
+          return; // старый бэкенд без роута /endpoints — молча выходим (эмбед уже мог наполнить hosts)
+        }
+        if (cancelled) return;
+        for (const e of res.items) {
+          const arr = byHost.get(e.host_id);
+          const ep: Endpoint = { id: e.id, m: toFrostMethod(e.method), p: e.path };
+          if (arr) arr.push(ep);
+          else byHost.set(e.host_id, [ep]);
+        }
+        setStateRaw((s) => {
+          if (s.openProjectId !== pid || !s.apiHosts) return s;
+          const hosts = s.apiHosts.map((h) => {
+            const eps = byHost.get(h.id);
+            return eps ? { ...h, endpoints: eps } : h;
+          });
+          return { ...s, apiHosts: hosts };
+        });
+        if (res.items.length < PAGE || page >= (res.pages || 1)) break;
+        page++;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.openProjectId, state.hostsTick]);
 
   // ================= Farm config: loaded when the Farm settings view opens =================
   useEffect(() => {
@@ -1413,6 +1595,34 @@ export function FrostApp() {
   // Reset the loaded config when the project changes, so the next open reloads it.
   useEffect(() => {
     setStateRaw((s) => ({ ...s, farmCfg: null, farmCfgSaved: null, wordlists: null }));
+  }, [state.openProjectId]);
+
+  // Restore an in-flight farm run on project open / page reload: the run keeps
+  // going on the server, but farmRunJob only got set in the session that clicked
+  // Start. Without this the live progress, the "Stop run" button and the sidebar
+  // process badge vanish after a reload until the run finishes. Ask the server
+  // for the run list, and if one is still in flight, adopt it so polling resumes.
+  useEffect(() => {
+    const pid = state.openProjectId;
+    setStateRaw((s) => ({ ...s, farmRunJob: null }));
+    if (pid == null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const runs = await apiGetFarmRuns(pid);
+        const live = runs.find((r) => isFarmJobInFlight(r.status));
+        if (!live || cancelled) return;
+        const job = await apiGetFarmRun(pid, live.id);
+        if (!cancelled) setStateRaw((s) => (s.openProjectId === pid && !s.farmRunJob ? { ...s, farmRunJob: job } : s));
+      } catch {
+        // A failed restore is non-fatal — the user can still open the farm view,
+        // which reloads the run list and its history on its own.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.openProjectId]);
 
   // Patch one field of the working farm-config copy.
@@ -1809,12 +2019,25 @@ export function FrostApp() {
   // массив каждый рендер, и все зависящие от hosts мемо пересчитывались бы зря.
   const hosts: Host[] = useMemo(() => state.apiHosts ?? [], [state.apiHosts]);
   const hostNameById = (id: number) => hosts.find((h) => h.id === id)?.host ?? "";
-  /* Subdomains are not a stored field — they are simply the project's other hosts
-     that live under this one's name (www.acme.com under acme.com). Derived here so
-     the tree reflects the real host list instead of a parallel, hand-kept one. */
-  const subdomainsOf = (host: Host): Host[] =>
-    hosts.filter((h) => h.id !== host.id && h.host.toLowerCase().endsWith(`.${host.host.toLowerCase()}`));
 
+  /* ── Leaks: общие для раздела Vault→Leaks и вкладки Leaks в отчёте фермы ── */
+  // Движок (github/intelx/…) компактным чипом.
+  const leakEngineChip = (src: string) =>
+    src ? <span className="mono" style={{ display: "inline-block", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{src}</span> : <span style={{ color: "var(--fr-text-faint)" }}>—</span>;
+  // Источник (путь к файлу/ресурсу, где найдено) + прямая ссылка, если есть.
+  const leakResource = (l: ApiLeak): { label: string; href: string } => {
+    const d = (l.detail ?? {}) as Record<string, unknown>;
+    const link = typeof d.link === "string" && /^https?:\/\//.test(d.link) ? d.link : "";
+    if (l.source === "github") {
+      const repo = d.repo ?? (Array.isArray(d.repos) ? d.repos[0] : "");
+      const loc = [d.file, d.line ? `L${d.line}` : ""].filter(Boolean).join(":");
+      return { label: [repo, loc].filter(Boolean).map(String).join(" · ") || String(d.link || ""), href: link };
+    }
+    if (l.source === "linkedin") return { label: [d.company, d.headline].filter(Boolean).map(String).join(" · "), href: link };
+    const breaches = d.breaches;
+    if (Array.isArray(breaches) && breaches.length) return { label: breaches.slice(0, 3).map(String).join(", ") + (breaches.length > 3 ? "…" : ""), href: link };
+    return { label: String(d.breach ?? d.database ?? d.domain ?? ""), href: link };
+  };
   // ================= members: load from backend =================
   const reloadMembers = () => setStateRaw((s) => ({ ...s, membersTick: s.membersTick + 1 }));
   useEffect(() => {
@@ -1849,6 +2072,17 @@ export function FrostApp() {
      project's already-loaded hosts. The author's name, by contrast, ships with
      the payload (`created_by_username`), because /users is admin-only. */
   const reloadVulns = () => setStateRaw((s) => ({ ...s, vulnsTick: s.vulnsTick + 1 }));
+  /* Стабильный ключ набора хостов (только id, отсортированы). Резолвинг имени хоста
+     у находки зависит от списка хостов, но НЕ должен перезапрашивать весь список
+     уязвимостей (там N+1 на detail) на каждое изменение apiHosts — а он теперь
+     меняется десятки раз, пока стримятся эндпоинты. Набор id при этом стабилен,
+     поэтому эффект больше не дёргается на каждый чанк, только когда хосты реально
+     появились/сменились. */
+  const vulnsHostsKey = useMemo(() => (state.apiHosts ?? []).map((h) => h.id).join(","), [state.apiHosts]);
+  /* Кэш уязвимостей на проект (stale-while-revalidate, как у хостов): уход со
+     страницы обнулял apiVulns, и обзор при возврате снова моргал нулями, пока шёл
+     N+1. Держим последний список и показываем его сразу, сеть догоняет в фоне. */
+  const vulnsCacheRef = useRef<Map<number, Vuln[]>>(new Map());
   useEffect(() => {
     const pid = state.openProjectId;
     if (pid == null) {
@@ -1856,6 +2090,8 @@ export function FrostApp() {
       return;
     }
     let cancelled = false;
+    const cached = vulnsCacheRef.current.get(pid);
+    if (cached) setStateRaw((s) => ({ ...s, apiVulns: cached }));
     void (async () => {
       try {
         const res = await apiGetVulnerabilities(pid);
@@ -1872,10 +2108,12 @@ export function FrostApp() {
             return toFrostVuln(v, hostName);
           })
         );
+        vulnsCacheRef.current.set(pid, rows);
         if (!cancelled) setStateRaw((s) => ({ ...s, apiVulns: rows }));
       } catch (e) {
         if (!cancelled) {
-          setStateRaw((s) => ({ ...s, apiVulns: [] }));
+          // Кэш при ошибке не трогаем — показанные строки честнее пустого списка.
+          setStateRaw((s) => ({ ...s, apiVulns: cached ?? [] }));
           handleProjectError(e, "Couldn't load vulnerabilities");
         }
       }
@@ -1884,7 +2122,7 @@ export function FrostApp() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.openProjectId, state.vulnsTick, state.apiHosts]);
+  }, [state.openProjectId, state.vulnsTick, vulnsHostsKey]);
 
   // ================= notes: load from backend =================
   const reloadNotes = () => setStateRaw((s) => ({ ...s, notesTick: s.notesTick + 1 }));
@@ -1998,6 +2236,27 @@ export function FrostApp() {
   const canEditProjectRow = (row: ApiProjectRow) =>
     isAdmin || (authUser != null && row.createdBy === authUser.id) || authUser?.project_role === "lead";
 
+  // Число утечек нужно на бейдже в навигации ещё до открытия раздела — тянем отчёт
+  // заранее (только тем, кому раздел доступен). Тихо, без тоста, и не перетираем уже
+  // загруженный отчёт: у него мог быть применён фильтр/свежий рефетч.
+  useEffect(() => {
+    const pid = state.openProjectId;
+    if (pid == null || !canEditProject) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const report = await apiGetLeaks(pid);
+        if (!cancelled) setStateRaw((s) => (s.leaksReport ? s : { ...s, leaksReport: report }));
+      } catch {
+        /* нет доступа или данных ещё нет — бейдж просто не покажется */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.openProjectId, canEditProject]);
+
   // ================= navigation =================
   // Возврат к списку обязан сбрасывать открытый проект — иначе состояние всё ещё
   // «в проекте», и URL может залипнуть на /projects/{id}.
@@ -2042,8 +2301,8 @@ export function FrostApp() {
      "Add hosts") — otherwise coming back would drop the user into a stale form
      instead of the list they asked for. */
   const setSection = (s: SectionId) =>
-    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), ...(s === "vault" ? {} : { vaultView: "creds" as VaultView }), reconMenuOpen: false, vaultMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
-  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+    setState({ section: s, ...(s === "hosts" ? {} : { reconView: "hosts" as ReconView }), ...(s === "vault" ? {} : { vaultView: "creds" as VaultView }), reconMenuOpen: false, vaultMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, openJsFileId: null, openJsHost: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
+  const selRecon = (v: ReconView) => setState({ section: "hosts", reconView: v, reconMenuOpen: false, openHostId: null, openIp: null, openJsFileId: null, openJsHost: null, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, hostImportOpen: false, ipImportOpen: false, epImportOpen: false, jsScanSetupOpen: false });
   /* Vault-дропдаун зеркалит Recon: выбор подраздела закрывает меню, сбрасывает
      выбор/раскрытие утечек и уводит из чужих форм раздела. */
   const selVault = (v: VaultView) => setState({ section: "vault", vaultView: v, vaultMenuOpen: false, reconMenuOpen: false, openVulnId: null, openNoteId: null, noteEditorOpen: false, exportPageOpen: false, farmReportOpen: false, bulkDelOpen: null, leaksSel: [] });
@@ -2295,7 +2554,9 @@ export function FrostApp() {
        весь отфильтрованный список. Так кнопка «Экспорт» на странице файла даёт
        ровно его находки, а та же кнопка в списке — находки всего раздела. */
     if (scope === "js-endpoints" || scope === "js-secrets") {
-      const src = _jsd ? [_jsd] : jsFilesFiltered;
+      // Приоритет источника: открытая карточка файла → страница «все файлы хоста»
+      // (только его файлы) → весь отфильтрованный список раздела.
+      const src = _jsd ? [_jsd] : _jsHost ? jsFiles.filter((f) => f.host === _jsHost) : jsFilesFiltered;
       const out: string[] = [];
       const uniq = new Set<string>();
       for (const f of src) {
@@ -2389,12 +2650,71 @@ export function FrostApp() {
     try {
       // Тянем отчёт конкретного прогона (по farmReportJobId) — или последнего,
       // когда id нет (прямая ссылка /farm/report или обычное открытие отчёта).
+      // Отчёт теперь лёгкий: summary + hosts, а endpoints/js (десятки тысяч строк)
+      // доливаются стримом ниже — экран открывается сразу, данные наливаются чанками.
       const report = await apiGetFarmReport(pid, state.farmReportJobId ?? undefined);
       setState({ farmReport: report, farmReportLoading: false });
+      void streamFarmReportBig(pid, report.job_id);
     } catch (e) {
       setState({ farmReportLoading: false });
       pushToast(getApiErrorMessage(e, t("Couldn't load the farm report")), "error");
     }
+  };
+  /* Стримит крупные массивы отчёта фермы (endpoints, js) страницами и накапливает
+     их в farmReport.endpoints/.js. Пишем только пока в state лежит ТОТ ЖЕ прогон
+     (сверяем job_id) — уход со страницы, «Обновить» или смена прогона отменяют
+     доливку старого отчёта. Обе категории льются параллельно. */
+  const streamFarmReportBig = async (pid: number, jobId: number) => {
+    const same = (s: FrostState) => s.farmReport != null && s.farmReport.job_id === jobId && s.openProjectId === pid;
+    const streamEndpoints = async () => {
+      const acc: ApiStagedEndpoint[] = [];
+      const SIZE = 2000;
+      let page = 1;
+      for (;;) {
+        let res;
+        try {
+          res = await apiGetFarmReportEndpointsPage(pid, jobId, page, SIZE);
+        } catch {
+          return;
+        }
+        acc.push(...res.items);
+        const snap = acc.slice();
+        let stop = true;
+        setStateRaw((s) => {
+          if (!same(s)) return s;
+          stop = false;
+          return { ...s, farmReport: { ...s.farmReport!, endpoints: snap } };
+        });
+        if (stop) return; // прогон сменился — прекращаем доливку
+        if (res.items.length < SIZE || page >= (res.pages || 1)) break;
+        page++;
+      }
+    };
+    const streamJs = async () => {
+      const acc: ApiStagedJs[] = [];
+      const SIZE = 1000;
+      let page = 1;
+      for (;;) {
+        let res;
+        try {
+          res = await apiGetFarmReportJsPage(pid, jobId, page, SIZE);
+        } catch {
+          return;
+        }
+        acc.push(...res.items);
+        const snap = acc.slice();
+        let stop = true;
+        setStateRaw((s) => {
+          if (!same(s)) return s;
+          stop = false;
+          return { ...s, farmReport: { ...s.farmReport!, js: snap } };
+        });
+        if (stop) return;
+        if (res.items.length < SIZE || page >= (res.pages || 1)) break;
+        page++;
+      }
+    };
+    await Promise.all([streamEndpoints(), streamJs()]);
   };
   // Тянет журнал прошлых прогонов фермы (история сканов) в state. Зовётся при
   // открытии страницы настроек и после завершения прогона.
@@ -2589,8 +2909,8 @@ export function FrostApp() {
   };
 
   // ================= detail: hosts / recon =================
-  const toggleHost = (id: number) =>
-    setState((s) => ({ expanded: s.expanded.includes(id) ? s.expanded.filter((x) => x !== id) : [...s.expanded, id] }));
+  const toggleHost = (key: string) =>
+    setState((s) => ({ expanded: s.expanded.includes(key) ? s.expanded.filter((x) => x !== key) : [...s.expanded, key] }));
   const openHostDetail = (id: number) => setState({ openHostId: id });
   const closeHostDetail = () => setState({ openHostId: null });
   const openIpDetail = (ip: string) => setState({ openIp: ip });
@@ -3466,22 +3786,18 @@ export function FrostApp() {
       list[i] = val;
       return { vulnDetailForm: { ...s.vulnDetailForm, stepsList: list } };
     });
-  const pasteVdStepImage = (i: number, e: ReactClipboardEvent<HTMLInputElement>) => {
-    const items = e.clipboardData?.items ?? [];
-    for (const it of Array.from(items)) {
-      if (it.type && it.type.indexOf("image") === 0) {
-        e.preventDefault();
-        const file = it.getAsFile();
-        if (!file) continue;
-        const reader = new FileReader();
-        reader.onload = (ev) =>
-          setState((s) => {
-            const imgs = { ...(s.vulnDetailForm.stepImages ?? {}) };
-            imgs[i] = [...(imgs[i] ?? []), String(ev.target?.result ?? "")];
-            return { vulnDetailForm: { ...s.vulnDetailForm, stepImages: imgs } };
-          });
-        reader.readAsDataURL(file);
-      }
+  /** Read image files (from a paste or an editor drop) and append them to step i. */
+  const attachVdStepImages = (i: number, files: File[]) => {
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
+      const reader = new FileReader();
+      reader.onload = (ev) =>
+        setState((s) => {
+          const imgs = { ...(s.vulnDetailForm.stepImages ?? {}) };
+          imgs[i] = [...(imgs[i] ?? []), String(ev.target?.result ?? "")];
+          return { vulnDetailForm: { ...s.vulnDetailForm, stepImages: imgs } };
+        });
+      reader.readAsDataURL(file);
     }
   };
   const removeVdStepImage = (i: number, imgIdx: number) =>
@@ -3916,9 +4232,6 @@ export function FrostApp() {
     code < 300 ? "var(--fr-success)" : code < 400 ? "var(--fr-warn)" : "var(--fr-danger)";
 
   // Hosts are searched by name here; addresses have their own search in the IPs view.
-  /** A host that is a subdomain of another host in the project (shown nested, not top-level). */
-  const isNestedSubdomain = (h: Host) =>
-    hosts.some((p) => p.origin !== "ip" && p.id !== h.id && h.host.toLowerCase().endsWith(`.${p.host.toLowerCase()}`));
   /* Rows the hosts table shows. The IP farm has to create a parent Host per address
      (ports hang off host_ip_addresses, which hangs off hosts), but the user added an
      address, not a host — a nameless row here would just be noise. They stay visible
@@ -3947,39 +4260,62 @@ export function FrostApp() {
     matchesStatusFilters(h.ports, h.status, state.hostFilters) && matchesCfFilter(h.cloudflare, state.hostCfFilter);
   /** Status pills offered in the hosts and IPs views (empty selection = all). */
   const STATUS_FILTER_KEYS = ["up", "200", "301", "401", "403", "down"];
-  /** Subdomains of a host, filtered by the active pills (empty = all). */
-  const visibleSubdomainsOf = (h: Host): Host[] => subdomainsOf(h).filter(hostMatchesFilters);
-  // Мемоизация тяжёлых дериваций: раньше пересчитывались на КАЖДЫЙ рендер (а их
-  // много в секунду — тосты, тики поллинга, ввод в фильтрах), теперь только при
-  // смене входов (hosts/фильтры). Ключи — реальные срезы состояния, от которых
-  // зависит выход; хелперы (hostMatchesFilters/subdomainsOf/…) чисты над hosts.
-  const hostsList = useMemo(() => hosts
-    .map((h, idx) => ({ h, idx }))
-    .filter((x) => {
-      const hq = state.hostQuery.trim().toLowerCase();
-      // Only a *search* flattens the tree; filtering keeps subdomains nested under
-      // their parent. A parent is shown if it OR a subdomain matches the filter.
-      const flat = hq !== "";
-      const nameOk = hq ? x.h.host.toLowerCase().includes(hq) : true;
-      const nestOk = flat || !isNestedSubdomain(x.h);
-      const filterOk = hostMatchesFilters(x.h) || (!flat && visibleSubdomainsOf(x.h).length > 0);
-      return !isIpFarmRow(x.h) && nameOk && nestOk && filterOk;
-    }),
+
+  /* Дерево хостов группируется по РЕГИСТРИРУЕМОМУ домену (eTLD+1), а не по тому,
+     заведён ли в проекте хост-апекс. Поэтому apuat9.prudential.com.hk и
+     apuat3.prudential.com.hk всегда попадают под одну группу prudential.com.hk,
+     даже если самого prudential.com.hk среди хостов нет (тогда шапка группы —
+     синтетическая, header=null). Правила шапки:
+       • есть реальный апекс-хост (host === домен) → он и есть шапка, прочие вложены;
+       • апекса нет, но в группе ≥2 хостов → синтетическая шапка-домен, все вложены;
+       • апекса нет и хост один → он сам верхнеуровневая строка (без лишней шапки).
+     Поиск (flat) распрямляет дерево в плоский список совпавших хостов. Фильтры
+     оставляют группу, если им соответствует шапка ИЛИ хотя бы один поддомен.
+     Ключ раскрытия/группы — имя домена (string), чтобы работать и для синтетики. */
+  type HostRef = { h: Host; idx: number };
+  type HostGroup = { key: string; header: HostRef | null; headerMatches: boolean; subs: HostRef[] };
+  const hostGroups: HostGroup[] = useMemo(() => {
+    const hq = state.hostQuery.trim().toLowerCase();
+    const real: HostRef[] = hosts.map((h, idx) => ({ h, idx })).filter((x) => x.h.origin !== "ip");
+
+    if (hq !== "") {
+      // Поиск распрямляет дерево: совпавшие хосты — плоским списком, без вложений.
+      return real
+        .filter((x) => x.h.host.toLowerCase().includes(hq) && hostMatchesFilters(x.h))
+        .sort((a, b) => a.h.host.localeCompare(b.h.host))
+        .map((x) => ({ key: x.h.host.toLowerCase(), header: x, headerMatches: true, subs: [] as HostRef[] }));
+    }
+
+    const byDomain = new Map<string, HostRef[]>();
+    for (const x of real) {
+      const key = registrableDomain(x.h.host);
+      const arr = byDomain.get(key);
+      if (arr) arr.push(x); else byDomain.set(key, [x]);
+    }
+    const out: HostGroup[] = [];
+    for (const [key, members] of byDomain) {
+      const apex = members.find((m) => m.h.host.toLowerCase().replace(/\.+$/, "") === key) ?? null;
+      const rest = members.filter((m) => m !== apex).sort((a, b) => a.h.host.localeCompare(b.h.host));
+      // Одинокий поддомен без апекса — сам себе верхнеуровневая строка (не прячем
+      // под синтетическую шапку ради единственного элемента).
+      const header: HostRef | null = apex ?? (rest.length === 1 ? rest[0] : null);
+      const subs = (apex ? rest : rest.length === 1 ? [] : rest).filter((m) => hostMatchesFilters(m.h));
+      const headerMatches = header ? hostMatchesFilters(header.h) : false;
+      if (!headerMatches && subs.length === 0) continue; // ни шапка, ни дети под фильтры не подходят
+      out.push({ key, header, headerMatches, subs });
+    }
+    return out.sort((a, b) => a.key.localeCompare(b.key));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hosts, state.hostQuery, state.hostFilters, state.hostCfFilter]);
+  }, [hosts, state.hostQuery, state.hostFilters, state.hostCfFilter]);
 
   // Число «настоящих» хостов — как в таблице: БЕЗ IP-фермовых строк (origin==="ip",
   // они живут во вкладке IP). Дашборд-карточка и сайдбар считали hosts.length (со
   // всеми IP-строками), из-за чего счётчик расходился с реальным списком хостов.
   const realHostCount = useMemo(() => hosts.filter((h) => h.origin !== "ip").length, [hosts]);
 
-  /* Каждый хост, реально показанный в таблице: корневые строки плюс раскрытые
-     под ними поддомены, без дублей. Таблица держит поддомены вложенными, поэтому
-     hostsList сам по себе — это только корни (домен с 68 поддоменами даёт длину 1).
-     Счётчик «Total hosts», экспорт и список доменов для JS-скана обязаны видеть
-     одно и то же множество, иначе разъезжаются. Дедуп нужен, потому что поиск
-     распрямляет дерево (поддомен уже идёт отдельной строкой), а subdomainsOf
-     отдаёт всех потомков — на глубоких деревьях они повторяются. */
+  /* Каждый РЕАЛЬНЫЙ хост, показанный в таблице: шапки-хосты (кроме синтетических
+     домен-шапок) плюс раскрытые под ними поддомены, без дублей. Счётчик «Total
+     hosts», экспорт и список доменов обязаны видеть одно множество. */
   const visibleHostRows = (): Host[] => {
     const seen = new Set<number>();
     const rows: Host[] = [];
@@ -3988,11 +4324,9 @@ export function FrostApp() {
       seen.add(x.id);
       rows.push(x);
     };
-    hostsList.forEach(({ h }) => {
-      // Родитель попадает в список и тогда, когда пилюлям соответствует только его
-      // поддомен, — сам он засчитывается лишь если проходит фильтры и сам.
-      if (hostMatchesFilters(h)) add(h);
-      visibleSubdomainsOf(h).forEach(add);
+    hostGroups.forEach((g) => {
+      if (g.header && g.headerMatches) add(g.header.h);
+      g.subs.forEach((s) => add(s.h));
     });
     return rows;
   };
@@ -4225,8 +4559,14 @@ export function FrostApp() {
       hostId: files[0]?.hostId,
       files,
       count: files.length,
+      // Сколько путей (эндпоинтов) суммарно вытащено из JS этого хоста.
+      paths: files.reduce((n, f) => n + f.endpoints.length, 0),
     }));
   }, [jsFilesFiltered]);
+  /** Открытая страница «все файлы хоста» (агрегат JS по хосту), либо null. */
+  const _jsHost = state.openJsHost;
+  const openJsHostDetail = (host: string) => setState({ openJsHost: host, openJsFileId: null });
+  const closeJsHostDetail = () => setState({ openJsHost: null });
 
   /* Домены, доступные JS-скану: ВСЕ домены проекта, кроме IP-строк фермы и
      IP-литералов (ферма ходит по именам, а не по адресам). Поддомены попадают
@@ -4885,7 +5225,9 @@ export function FrostApp() {
               { v: "endpoints" as const, icon: "link" as const, label: "Endpoints", count: endpointTotal as number | null },
               { v: "js" as const, icon: "doc" as const, label: "JS", count: jsFiles.length as number | null },
               // Farm settings — только лидам/админам (конфиг рекон-фермы проекта).
-              ...(canEditProject ? [{ v: "farm" as const, icon: "settings" as const, label: "Recon farm", count: null }] : []),
+              // Бейдж «Recon farm» показывает число запущенных прямо сейчас процессов
+              // прогона (активные шаги), чтобы прогресс был виден даже из свёрнутого меню.
+              ...(canEditProject ? [{ v: "farm" as const, icon: "settings" as const, label: "Recon farm", count: (isFarmJobInFlight(state.farmRunJob?.status ?? "") ? (state.farmRunJob?.progress?.steps?.length ?? 0) : 0) || null }] : []),
             ]).map((it) => {
               // Nothing is highlighted while another section is open: the recon
               // view only counts as active when Recon itself is the open section.
@@ -4998,6 +5340,27 @@ export function FrostApp() {
                 {sec === "hosts" && !_hd && !_ipd && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{reconTotalLabel} <b className="mono" style={{ color: "var(--fr-text)" }}>{reconTotal}</b></span>
                 )}
+                {/* Total-пилюля рядом с заголовком раздела — как в реконе. */}
+                {sec === "vault" && state.vaultView === "creds" && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{t("Total")} <b className="mono" style={{ color: "var(--fr-text)" }}>{d.creds.length}</b></span>
+                )}
+                {sec === "vault" && state.vaultView === "leaks" && canEditProject && state.leaksReport != null && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)", borderRadius: 20, padding: "5px 13px" }}>{t("Total")} <b className="mono" style={{ color: "var(--fr-text)" }}>{(state.leaksReport.leaks ?? []).filter((l) => l.imported).length}</b></span>
+                )}
+                {/* Прогресс пробинга хостов — компактной синей пилюлей справа от Total hosts. */}
+                {sec === "hosts" && rv === "hosts" && !_hd && isFarmJobInFlight(state.hostFarmJob?.status ?? "") && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "600 12.5px Inter,sans-serif", color: "var(--fr-accent)", background: "var(--fr-accent-soft)", borderRadius: 20, padding: "5px 13px" }}>
+                    <span className="frost-spin" style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+                    {t("Probing")} {state.hostFarmJob?.targets_total ?? ""} {t("hosts")}
+                  </span>
+                )}
+                {/* То же для пробинга IP — пилюля справа от Total IPs. */}
+                {sec === "hosts" && rv === "ips" && !_ipd && isFarmJobInFlight(state.ipFarmJob?.status ?? "") && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "600 12.5px Inter,sans-serif", color: "var(--fr-accent)", background: "var(--fr-accent-soft)", borderRadius: 20, padding: "5px 13px" }}>
+                    <span className="frost-spin" style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
+                    {t("Probing")} {state.ipFarmJob?.targets_total ?? ""} {t("IPs")}
+                  </span>
+                )}
                 {/* Прогресс JS-скана — компактной синей пилюлей справа от Total. */}
                 {sec === "hosts" && rv === "js" && isFarmJobInFlight(state.jsFarmJob?.status ?? "") && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "600 12.5px Inter,sans-serif", color: "var(--fr-accent)", background: "var(--fr-accent-soft)", borderRadius: 20, padding: "5px 13px" }}>
@@ -5043,8 +5406,8 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
-                  <button className="addbtn clk" onClick={openHostImport} style={{ height: 42 }}>
-                    <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add hosts")}
+                  <button className="clk" onClick={openHostImport} style={{ height: 42, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--fr-accent)", font: "700 13px Inter,sans-serif", color: "var(--fr-on-accent)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="upload" size={16} sw={2.2} color="var(--fr-on-accent)" />{t("Add hosts")}
                   </button>
                 </>
               )}
@@ -5062,8 +5425,8 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("ips")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
-                  <button className="addbtn clk" onClick={openIpImport} style={{ height: 42 }}>
-                    <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add IPs")}
+                  <button className="clk" onClick={openIpImport} style={{ height: 42, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--fr-accent)", font: "700 13px Inter,sans-serif", color: "var(--fr-on-accent)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="upload" size={16} sw={2.2} color="var(--fr-on-accent)" />{t("Add IPs")}
                   </button>
                 </>
               )}
@@ -5078,8 +5441,8 @@ export function FrostApp() {
                   <button className="clk" onClick={() => openReconExport("endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
-                  <button className="addbtn clk" onClick={openEpImport} style={{ height: 42 }}>
-                    <Icon name="plus" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Add endpoints")}
+                  <button className="clk" onClick={openEpImport} style={{ height: 42, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--fr-accent)", font: "700 13px Inter,sans-serif", color: "var(--fr-on-accent)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                    <Icon name="upload" size={16} sw={2.2} color="var(--fr-on-accent)" />{t("Add endpoints")}
                   </button>
                 </>
               )}
@@ -5351,8 +5714,12 @@ export function FrostApp() {
     onPreview: (v: string) => void;
     onCancel: () => void;
     onSubmit: () => void;
+    /** Override for the "(N)" badge — number of objects that will actually be
+     *  created, when it differs from the line count (hosts/IPs merge ports per
+     *  name, so several `host:port` lines become one host row). */
+    count?: number;
   }) => {
-    const previewCount = cfg.preview.split(/\r?\n/).filter((l) => l.trim()).length;
+    const previewCount = cfg.count ?? cfg.preview.split(/\r?\n/).filter((l) => l.trim()).length;
     const fillArea: CSSProperties = { flex: 1, minHeight: 0, resize: "none", width: "100%", fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 };
     const paneCol: CSSProperties = { display: "flex", flexDirection: "column", minHeight: 0 };
     return (
@@ -5382,6 +5749,20 @@ export function FrostApp() {
     );
   };
 
+  /* Сколько РЕАЛЬНЫХ хостов создаст импорт: несколько строк host:port на одно имя
+     сливаются в один хост (порты вешаются на него), поэтому строки превью и число
+     будущих хостов расходятся. Считаем по уникальному имени (без :порта), чтобы
+     бейдж «(N)» и итог совпадали и не пугали «вставил 256 — добавилось 100». */
+  const distinctHostCount = (preview: string): number => {
+    const set = new Set<string>();
+    for (const line of preview.split(/\r?\n/)) {
+      const l = line.trim();
+      if (!l) continue;
+      const m = /^(\[[^\]]+\]|[^:]+)(?::\d+)?$/.exec(l);
+      set.add((m ? m[1] : l).toLowerCase());
+    }
+    return set.size;
+  };
   const renderHostImport = () =>
     renderImportPage({
       title: t("Add hosts"),
@@ -5391,6 +5772,7 @@ export function FrostApp() {
       raw: state.hostImportRaw,
       preview: state.hostImportPreview,
       busy: state.hostImportBusy,
+      count: distinctHostCount(state.hostImportPreview),
       onRaw: (v) => setState({ hostImportRaw: v, hostImportPreview: normalizeHostList(v) }),
       onPreview: (v) => setState({ hostImportPreview: v }),
       onCancel: closeHostImport,
@@ -5406,6 +5788,7 @@ export function FrostApp() {
       raw: state.ipImportRaw,
       preview: state.ipImportPreview,
       busy: state.ipImportBusy,
+      count: distinctHostCount(state.ipImportPreview),
       onRaw: (v) => setState({ ipImportRaw: v, ipImportPreview: normalizeIpList(v) }),
       onPreview: (v) => setState({ ipImportPreview: v }),
       onCancel: closeIpImport,
@@ -6054,7 +6437,7 @@ export function FrostApp() {
           {/* Domains — выбор корневых доменов для ЭТОГО прогона (чипы-тумблеры).
               Пусто → прогон по всем корневым доменам проекта. */}
           {(() => {
-            const roots = [...new Set(hosts.filter((h) => h.origin !== "ip" && !isNestedSubdomain(h)).map((h) => h.host.trim().toLowerCase()).filter(Boolean))].sort();
+            const roots = [...new Set(hosts.filter((h) => h.origin !== "ip").map((h) => registrableDomain(h.host)).filter(Boolean))].sort();
             if (roots.length === 0) return null;
             const sel = state.farmRunDomains;
             const chip = (on: boolean): CSSProperties => ({ padding: "6px 12px", borderRadius: 999, border: `1px solid ${on ? "var(--fr-accent)" : "var(--fr-border)"}`, background: on ? "var(--fr-accent)" : "var(--fr-surface)", color: on ? "var(--fr-on-accent)" : "var(--fr-text-2)", font: "700 12.5px Inter,sans-serif", cursor: "pointer" });
@@ -6075,15 +6458,16 @@ export function FrostApp() {
               {stage("globe", t("Subdomains"), t("Discover subdomains of the scope roots."), "stage_subdomains",
                 <>
                   {row(t("Mode"), t("Passive collects without touching the target; active brute-forces; both run at the same time."), seg(cfg.mode, ["passive", "active", "both"] as const, (m) => setFarmField("mode", m)))}
-                  {wordlistBlock(
-                    t("Wordlist"),
-                    t("Pick a bundled list (SecLists / n0kovo) or a custom uploaded one for subdomain brute-forcing."),
-                    subWlValue,
-                    subWlOptions,
-                    onPickSubWl,
-                    "subdomains",
-                    true,
-                  )}
+                  {(cfg.mode === "active" || cfg.mode === "both") &&
+                    wordlistBlock(
+                      t("Wordlist"),
+                      t("Pick a bundled list (SecLists / n0kovo) or a custom uploaded one for subdomain brute-forcing."),
+                      subWlValue,
+                      subWlOptions,
+                      onPickSubWl,
+                      "subdomains",
+                      true,
+                    )}
                 </>
               )}
               {stage("link", t("Endpoints"), t("Crawl each host for URLs and endpoints."), "stage_endpoints",
@@ -6300,8 +6684,17 @@ export function FrostApp() {
     const allHosts: ApiStagedHost[] = report?.hosts ?? [];
     const allEndpoints: ApiStagedEndpoint[] = report?.endpoints ?? [];
     const allJs: ApiStagedJs[] = report?.js ?? [];
+    // Утечки — отдельный (проектный) отчёт, но ревьюим их здесь же, отдельной вкладкой:
+    // «найдено → ревью в отчёте → импорт → раздел Vault→Leaks».
+    const allLeaksR: ApiLeak[] = state.leaksReport?.leaks ?? [];
+    const leaksTotalR = allLeaksR.length;
     const tab = state.farmReportTab;
-    const totalItems = allHosts.length + allEndpoints.length + allJs.length;
+    // Отчёт отдаёт summary+hosts сразу, а endpoints/js доливаются стримом. Счётчики
+    // вкладок и «есть ли что ревьюить» берём из summary (полные числа доступны сразу),
+    // а не из длины ещё догружающихся массивов — иначе бейдж рос бы с нуля.
+    const endpointsTotal = report ? summary.endpoints_total : allEndpoints.length;
+    const jsTotal = report ? summary.js_total : allJs.length;
+    const totalItems = allHosts.length + endpointsTotal + jsTotal + leaksTotalR;
 
     const q = state.farmReportQuery.trim().toLowerCase();
     // Пер-вкладочные фильтры. Поиск и «только не импортированные» действуют на всех
@@ -6325,14 +6718,31 @@ export function FrostApp() {
       if (state.farmReportUnimportedOnly && j.imported) return false;
       return true;
     });
+    const filteredLeaks = allLeaksR.filter((l) => {
+      if (q && !((l.value ?? "").toLowerCase().includes(q) || (l.subject ?? "").toLowerCase().includes(q) || (l.kind ?? "").toLowerCase().includes(q) || (l.source ?? "").toLowerCase().includes(q))) return false;
+      if (state.farmReportSource && l.source !== state.farmReportSource) return false;
+      if (state.farmReportUnimportedOnly && l.imported) return false;
+      return true;
+    });
 
-    // Источники для пилюль берём из данных активной вкладки (JS без источника).
-    const sourceRows: { source: string }[] = tab === "hosts" ? allHosts : tab === "endpoints" ? allEndpoints : [];
+    // Источники (движки) для пилюль берём из данных активной вкладки (JS без источника).
+    const sourceRows: { source: string }[] = tab === "hosts" ? allHosts : tab === "endpoints" ? allEndpoints : tab === "leaks" ? allLeaksR : [];
     const sources = Array.from(new Set(sourceRows.map((x) => x.source).filter(Boolean))).sort();
 
     // Выбор по каждой категории отдельно; импорт уносит всё выбранное разом.
     const hostSel = state.farmReportSel, epSel = state.farmReportEndpointSel, jsSel = state.farmReportJsSel;
     const totalSel = hostSel.length + epSel.length + jsSel.length;
+    // Утечки: собственный выбор (leaksSel) и импорт (importLeaksSelected) — не путаем
+    // с farm-выбором выше; на вкладке Leaks нижняя панель переключается на них.
+    const leakSelSet = new Set(state.leaksSel);
+    const leakSelectable = filteredLeaks.filter((l) => !l.imported);
+    const leakAllSel = leakSelectable.length > 0 && leakSelectable.every((l) => leakSelSet.has(l.id));
+    const toggleLeakRow = (id: number) => setState((s) => ({ leaksSel: toggleIn(s.leaksSel, id) }));
+    const toggleAllLeaksRows = () => {
+      const ids = leakSelectable.map((l) => l.id);
+      if (leakAllSel) { const drop = new Set(ids); setState((s) => ({ leaksSel: s.leaksSel.filter((x) => !drop.has(x)) })); }
+      else setState((s) => ({ leaksSel: Array.from(new Set([...s.leaksSel, ...ids])) }));
+    };
 
     // ─ Хосты: select-all уважает фильтр и не трогает уже импортированные ─
     const hostSelectable = filteredHosts.filter((h) => !h.imported);
@@ -6365,9 +6775,11 @@ export function FrostApp() {
       else setState((s) => ({ farmReportJsSel: Array.from(new Set([...s.farmReportJsSel, ...ids])) }));
     };
 
-    const hostsGrid = "30px minmax(0,1.25fr) minmax(0,1.7fr) 128px 108px";
-    const epGrid = "30px 78px minmax(0,0.9fr) minmax(0,2fr) 104px";
-    const jsGrid = "30px 132px minmax(0,0.85fr) minmax(0,2fr) 104px";
+    // Без чекбоксов — как обычные таблицы recon; импорт делает кнопка сверху.
+    const hostsGrid = "24px minmax(0,1.25fr) minmax(0,1.4fr) 140px 108px";
+    const epGrid = "78px minmax(0,0.9fr) minmax(0,2fr) 104px";
+    const jsGrid = "132px minmax(0,0.7fr) minmax(0,1.1fr) minmax(0,1.2fr) 104px";
+    const leaksGrid = "132px 120px minmax(0,1.2fr) minmax(0,1.3fr) 132px";
 
     const stat = (label: string, n: number) => (
       <div key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 7, padding: "6px 14px", borderRadius: 20, background: "var(--fr-surface)", border: "1px solid var(--fr-border-strong)" }}>
@@ -6377,12 +6789,34 @@ export function FrostApp() {
     );
 
     // Одна вкладка отчёта: подпись + счётчик; активная подчёркнута акцентом.
-    const tabBtn = (id: "hosts" | "endpoints" | "js", label: string, n: number) => {
+    // Вкладки-«листы» как в Google Sheets: холмики со скруглённым верхом, активный
+    // Вкладки-«листы» (Google Sheets): скруглённые холмики, активный — белый и
+    // сливается с таблицей ниже; без акцентной дуги сверху.
+    const tabBtn = (id: "hosts" | "endpoints" | "js" | "leaks", label: string, n: number) => {
       const on = tab === id;
       return (
-        <div key={id} className="clk" onClick={() => setState({ farmReportTab: id })} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 4px", cursor: "pointer", borderBottom: on ? "2px solid var(--fr-accent)" : "2px solid transparent", font: "700 13px Inter,sans-serif", color: on ? "var(--fr-text)" : "var(--fr-text-3)" }}>
+        <div
+          key={id}
+          className="clk"
+          onClick={() => setState({ farmReportTab: id, farmReportQuery: "", farmReportSource: "", farmReportAliveOnly: false, farmReportPortsOnly: false })}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            cursor: "pointer",
+            padding: "10px 15px",
+            marginBottom: -1, // активный лист «прирастает» к таблице, перекрывая её верхнюю границу
+            borderRadius: "8px 8px 0 0",
+            border: "1px solid var(--fr-divider)",
+            borderBottom: on ? "1px solid var(--fr-surface)" : "1px solid var(--fr-divider)",
+            background: on ? "var(--fr-surface)" : "var(--fr-elevated)",
+            color: on ? "var(--fr-text)" : "var(--fr-text-3)",
+            font: `${on ? 800 : 600} 13px Inter,sans-serif`,
+            transition: "background .15s, color .15s",
+          }}
+        >
           {label}
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, borderRadius: 10, padding: "1px 8px", background: on ? "var(--fr-accent-soft)" : "var(--fr-elevated)", color: on ? "var(--fr-accent)" : "var(--fr-text-faint)" }}>{n}</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, borderRadius: 10, padding: "1px 8px", background: on ? "var(--fr-accent-soft)" : "var(--fr-surface)", color: on ? "var(--fr-accent)" : "var(--fr-text-faint)" }}>{n}</span>
         </div>
       );
     };
@@ -6403,12 +6837,20 @@ export function FrostApp() {
     };
 
     // Общая шапка списка с чекбоксом select-all под конкретную вкладку.
-    const listHeader = (gridCols: string, allSel: boolean, onAll: () => void, canAll: boolean, cells: ReactNode) => (
-      <div style={{ display: "grid", gridTemplateColumns: gridCols, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
-        <input type="checkbox" checked={allSel} onChange={onAll} disabled={!canEditProject || !canAll} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: canAll ? "pointer" : "default" }} />
+    const listHeader = (gridCols: string, cells: ReactNode) => (
+      <div style={{ display: "grid", gridTemplateColumns: gridCols, gap: 14, alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
         {cells}
       </div>
     );
+    // Корзина очистки отчёта — в последней колонке шапки таблицы, тем же
+    // контурным дизайном, что и bulk-trash в recon (единый вид у всех корзин).
+    const clearTrash = canEditProject ? (
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button className="clk" title={t("Clear report")} aria-label={t("Clear report")} disabled={busy || totalItems === 0} onClick={() => void clearFarmReport()} style={{ width: 27, height: 27, flex: "none", padding: 0, border: "1px solid var(--fr-border)", borderRadius: 8, background: "var(--fr-surface)", color: "var(--fr-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: busy || totalItems === 0 ? "not-allowed" : "pointer", opacity: busy || totalItems === 0 ? 0.4 : 1 }}>
+          <Icon name="trash" size={15} sw={2.2} color="var(--fr-danger)" />
+        </button>
+      </div>
+    ) : <div />;
 
     const emptySection = (msg: string) => (
       <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{msg}</div>
@@ -6427,9 +6869,11 @@ export function FrostApp() {
 
     return (
       <div className="route">
-        {/* Фильтры — поиск слева, пилюли справа. Набор пилюль зависит от вкладки. */}
+        {/* Верхняя панель: назад, поиск, фильтры и действия (Refresh / Import) — как
+            в основных разделах recon (никаких чекбоксов и нижней панели). */}
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
-          {searchBox(tab === "hosts" ? t("Filter by hostname or IP…") : tab === "endpoints" ? t("Filter by URL, host or method…") : t("Filter by URL, host or kind…"), state.farmReportQuery, (v) => setState({ farmReportQuery: v }))}
+          <span className="clk" onClick={closeFarmReport} title={t("Back")} style={{ display: "inline-flex", alignItems: "center", color: "var(--fr-text-3)", cursor: "pointer", padding: 2 }}><Icon name="chevron-left" size={20} /></span>
+          {searchBox(tab === "hosts" ? t("Filter by hostname or IP…") : tab === "endpoints" ? t("Filter by URL, host or method…") : tab === "leaks" ? t("Filter by value, kind or engine…") : t("Filter by URL, host or kind…"), state.farmReportQuery, (v) => setState({ farmReportQuery: v }))}
           <div style={{ flex: 1 }} />
           {sources.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -6443,127 +6887,294 @@ export function FrostApp() {
             {tab === "hosts" && filterPill(t("Has ports"), state.farmReportPortsOnly, () => toggle("farmReportPortsOnly"))}
             {filterPill(t("Not imported"), state.farmReportUnimportedOnly, () => toggle("farmReportUnimportedOnly"))}
           </div>
+          <button className="clk" onClick={() => void loadFarmReport()} disabled={loading} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>
+            <Icon name="activity" size={15} sw={2.2} color="var(--fr-accent-2)" />{loading ? t("Refreshing…") : t("Refresh")}
+          </button>
+          {(() => {
+            // Импорт «как экспорт»: кнопка сверху над таблицей, вносит ВСЕ отфильтрованные
+            // ещё-не-импортированные объекты активной вкладки в обычные таблицы.
+            const ids = tab === "leaks" ? filteredLeaks.filter((l) => !l.imported).map((l) => l.id)
+              : tab === "hosts" ? filteredHosts.filter((h) => !h.imported).map((h) => h.id)
+              : tab === "endpoints" ? filteredEndpoints.filter((e) => !e.imported).map((e) => e.id)
+              : filteredJs.filter((j) => !j.imported).map((j) => j.id);
+            const canImport = ids.length > 0 && canEditProject && !busy;
+            const doImport = () => tab === "leaks" ? importLeaksSelected(ids) : importFarmSelected(tab === "hosts" ? ids : [], tab === "endpoints" ? ids : [], tab === "js" ? ids : []);
+            return (
+              <button className="clk" onClick={() => void doImport()} disabled={!canImport} style={{ height: 42, padding: "0 16px", border: "none", borderRadius: 10, background: canImport ? "var(--fr-accent)" : "var(--fr-accent-muted)", font: "700 13px Inter,sans-serif", color: "var(--fr-on-accent)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canImport ? "pointer" : "not-allowed" }}>
+                <Icon name="download" size={16} sw={2.2} color="var(--fr-on-accent)" />{t("Import")}{ids.length > 0 ? ` (${ids.length})` : ""}
+              </button>
+            );
+          })()}
         </div>
 
-        <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 300px)" }}>
-          {/* Шапка: назад к настройкам фермы, заголовок, ручное обновление. */}
-          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
-            <span className="clk" onClick={closeFarmReport} style={{ display: "flex", color: "var(--fr-text-3)", cursor: "pointer" }}><Icon name="chevron-left" size={20} /></span>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{t("Farm report")}</h2>
-            <div style={{ flex: 1 }} />
-            <button className="clk" onClick={() => void loadFarmReport()} disabled={loading} style={{ height: 38, padding: "0 15px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>
-              <Icon name="activity" size={15} sw={2.2} color="var(--fr-accent-2)" />{loading ? t("Refreshing…") : t("Refresh")}
-            </button>
-          </div>
+        {/* Вкладки-холмики НАД таблицей: сидят на фоне страницы (без полоски-фона
+            позади), активный «прирастает» к карточке ниже, перекрывая её верхнюю
+            границу. Видно только сами холмики. */}
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 0, padding: 0, marginBottom: -1, position: "relative", zIndex: 1 }}>
+          {tabBtn("hosts", t("Hosts"), allHosts.length)}
+          {tabBtn("endpoints", t("Endpoints"), endpointsTotal)}
+          {tabBtn("js", t("JS"), jsTotal)}
+          {tabBtn("leaks", t("Leaks"), leaksTotalR)}
+        </div>
 
-          {/* Сводка отчёта — маленькие статы по всем категориям. */}
-          <div style={{ flex: "none", display: "flex", gap: 10, flexWrap: "wrap", padding: "14px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
-            {stat(t("Hosts"), summary.hosts_total)}
-            {stat(t("Alive"), summary.alive)}
-            {stat(t("Ports"), summary.ports_total)}
-            {stat(t("Endpoints"), summary.endpoints_total)}
-            {stat(t("JS"), summary.js_total)}
-            {stat(t("Imported"), summary.imported)}
-          </div>
-
-          {/* Вкладки: Hosts / Endpoints / JS со счётчиками. */}
-          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 22, padding: "0 22px", borderBottom: "1px solid var(--fr-divider)" }}>
-            {tabBtn("hosts", t("Hosts"), allHosts.length)}
-            {tabBtn("endpoints", t("Endpoints"), allEndpoints.length)}
-            {tabBtn("js", t("JS"), allJs.length)}
-          </div>
-
-          {/* Список активной вкладки (прокручивается внутри карточки). */}
-          <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        {/* Таблица: верх квадратный (стыкуется с холмами), низ скруглён. */}
+        <div style={{ ...CARD, padding: 0, overflow: "hidden", borderRadius: "0 0 16px 16px" }}>
+          {/* Список активной вкладки — карточка растёт по контенту, скроллит страница. */}
+          <div>
             {loading && totalItems === 0 ? (
               <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading the farm report…")}</div>
             ) : totalItems === 0 ? (
               overallEmpty
             ) : tab === "hosts" ? (
               <>
-                {listHeader(hostsGrid, hostAllSel, toggleAllHosts, hostSelectable.length > 0, (
-                  <><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Source")}</div><div /></>
+                {listHeader(hostsGrid, (
+                  <><div /><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Source")}</div>{clearTrash}</>
                 ))}
-                {filteredHosts.map((h) => {
-                  const selectableRow = !h.imported && canEditProject;
-                  return (
-                    <div key={h.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleHost(h.id) : undefined} style={{ display: "grid", gridTemplateColumns: hostsGrid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: h.imported ? 0.55 : 1 }}>
-                      <input type="checkbox" checked={hostSelSet.has(h.id)} disabled={h.imported || !canEditProject} onChange={() => toggleHost(h.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-                          <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: h.alive ? "var(--fr-success)" : "var(--fr-danger)" }} />
-                          <span className="mono hostname" style={{ font: "700 13.5px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.hostname}</span>
+                {(() => {
+                  // Группируем staged-хосты по сабдоменам, как в реконе: корневые
+                  // домены — раскрывающиеся строки, поддомены вложены под ними.
+                  // Группируем по РЕГИСТРИРУЕМОМУ домену (eTLD+1), ровно как в разделе
+                  // Hosts: есть апекс-хост (host===домен) → он шапка; апекса нет, но
+                  // ≥2 поддомена → синтетическая шапка-домен; одинокий поддомен без
+                  // апекса → сам верхнеуровневая строка.
+                  const low = (s: string) => (s || "").toLowerCase().replace(/\.+$/, "");
+                  const byDomain = new Map<string, ApiStagedHost[]>();
+                  for (const h of filteredHosts) {
+                    const k = registrableDomain(h.hostname);
+                    const a = byDomain.get(k);
+                    if (a) a.push(h); else byDomain.set(k, [h]);
+                  }
+                  type Grp = { key: string; header: ApiStagedHost | null; subs: ApiStagedHost[] };
+                  const groups: Grp[] = [];
+                  for (const [k, members] of byDomain) {
+                    const apex = members.find((m) => low(m.hostname) === k) ?? null;
+                    const rest = members.filter((m) => m !== apex).sort((a, b) => a.hostname.localeCompare(b.hostname));
+                    const header: ApiStagedHost | null = apex ?? (rest.length === 1 ? rest[0] : null);
+                    const subs = apex ? rest : rest.length === 1 ? [] : rest;
+                    groups.push({ key: k, header, subs });
+                  }
+                  groups.sort((a, b) => a.key.localeCompare(b.key));
+                  return groups.map((g) => {
+                    const expKey = `farmhost:${g.key}`;
+                    const exp = state.epExpanded.includes(expKey);
+                    const header = g.header;
+                    const subs = g.subs;
+                    return (
+                      <div key={g.key} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
+                        <div className={subs.length > 0 ? "prow clk" : "prow"} onClick={subs.length > 0 ? () => toggleEpGroup(expKey) : undefined} style={{ display: "grid", gridTemplateColumns: hostsGrid, alignItems: "start", gap: 14, padding: "14px 20px", cursor: subs.length > 0 ? "pointer" : "default", opacity: header?.imported ? 0.55 : 1 }}>
+                          {subs.length > 0
+                            ? <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ marginTop: 3, transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                            : <div />}
+                          {header ? (
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                                <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: header.alive ? "var(--fr-success)" : "var(--fr-danger)" }} />
+                                <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{header.hostname}</span>
+                                {subs.length > 0 && <span className="mono" style={{ flex: "none", fontSize: 10.5, fontWeight: 700, color: "var(--fr-text-faint)", background: "var(--fr-hover)", borderRadius: 6, padding: "1px 7px" }}>{subs.length}</span>}
+                              </div>
+                              {header.ip && <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)", marginTop: 3, marginLeft: 15 }}>{header.ip}</div>}
+                            </div>
+                          ) : (
+                            /* Синтетическая шапка-домен: сам домен как хост не застейджен. */
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                                <Icon name="globe2" size={14} sw={2.2} color="var(--fr-text-faint)" style={{ flex: "none" }} />
+                                <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.key}</span>
+                                <span className="mono" style={{ flex: "none", fontSize: 10.5, fontWeight: 700, color: "var(--fr-text-faint)", background: "var(--fr-hover)", borderRadius: 6, padding: "1px 7px" }}>{subs.length}</span>
+                              </div>
+                            </div>
+                          )}
+                          {header ? <div style={{ minWidth: 0 }}>{stagedPortPills(header.ports)}</div> : <div />}
+                          {header ? <div style={{ minWidth: 0 }}>{sourcePill(header.source)}</div> : <div />}
+                          {header ? <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(header.imported)}</div> : <div />}
                         </div>
-                        {h.ip && <div className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-faint)", marginTop: 3, marginLeft: 15 }}>{h.ip}</div>}
+                        {exp && subs.length > 0 && (
+                          <div style={{ background: "var(--fr-elevated)", animation: "frost-fade .2s ease both" }}>
+                            {subs.map((sub) => (
+                              <div key={sub.id} className="prow" style={{ display: "grid", gridTemplateColumns: hostsGrid, alignItems: "start", gap: 14, padding: "12px 20px 12px 44px", borderTop: "1px solid var(--fr-divider)", opacity: sub.imported ? 0.55 : 1 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: sub.alive ? "var(--fr-success)" : "var(--fr-danger)", marginTop: 7, justifySelf: "end" }} />
+                                <div style={{ minWidth: 0 }}>
+                                  <span className="mono hostname" style={{ font: "600 13px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{sub.hostname}</span>
+                                  {sub.ip && <div className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)", marginTop: 2 }}>{sub.ip}</div>}
+                                </div>
+                                <div style={{ minWidth: 0 }}>{stagedPortPills(sub.ports)}</div>
+                                <div style={{ minWidth: 0 }}>{sourcePill(sub.source)}</div>
+                                <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(sub.imported)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ minWidth: 0 }}>{stagedPortPills(h.ports)}</div>
-                      <div style={{ minWidth: 0 }}>{sourcePill(h.source)}</div>
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(h.imported)}</div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
                 {filteredHosts.length === 0 && emptySection(allHosts.length === 0 ? t("No staged hosts.") : t("No staged hosts match these filters."))}
               </>
             ) : tab === "endpoints" ? (
               <>
-                {listHeader(epGrid, epAllSel, toggleAllEps, epSelectable.length > 0, (
-                  <><div>{t("Method")}</div><div>{t("Host")}</div><div>{t("URL")}</div><div /></>
-                ))}
-                {filteredEndpoints.map((e) => {
-                  const selectableRow = !e.imported && canEditProject;
-                  return (
-                    <div key={e.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleEp(e.id) : undefined} style={{ display: "grid", gridTemplateColumns: epGrid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: e.imported ? 0.55 : 1 }}>
-                      <input type="checkbox" checked={epSelSet.has(e.id)} disabled={e.imported || !canEditProject} onChange={() => toggleEp(e.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
-                      <div style={{ minWidth: 0 }}>
-                        {e.method ? <span className="mono" style={{ display: "inline-block", fontSize: 10.5, fontWeight: 800, letterSpacing: ".4px", borderRadius: 6, padding: "3px 8px", background: "var(--fr-accent-soft)", color: "var(--fr-accent)" }}>{e.method.toUpperCase()}</span> : <span style={{ color: "var(--fr-text-faint)" }}>—</span>}
+                {/* Заголовок с корзиной справа — колонки живут внутри раскрытых групп. */}
+                <div style={{ display: "flex", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+                  <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>{t("Host")}</span>
+                  <div style={{ flex: 1 }} />
+                  {clearTrash}
+                </div>
+                {(() => {
+                  // Группируем эндпоинты по хосту и раскрываем, как в реконе. Очень
+                  // крупные группы режем до CAP строк, чтобы не подвесить рендер.
+                  const CAP = 1000;
+                  const byHost = new Map<string, ApiStagedEndpoint[]>();
+                  for (const e of filteredEndpoints) { const a = byHost.get(e.host); if (a) a.push(e); else byHost.set(e.host, [e]); }
+                  return [...byHost.entries()].map(([host, eps]) => {
+                    const key = `farmep:${host}`;
+                    const exp = state.epExpanded.includes(key);
+                    const shown = eps.slice(0, CAP);
+                    return (
+                      <div key={host} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
+                        <div className="prow clk" onClick={() => toggleEpGroup(key)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px" }}>
+                          <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                          <Icon name="globe2" size={16} color="var(--fr-text-3)" />
+                          <span className="mono" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{host}</span>
+                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fr-text-2)", background: "var(--fr-hover)", borderRadius: 7, padding: "3px 9px" }}>{eps.length}</span>
+                        </div>
+                        {exp && (
+                          <div style={{ borderTop: "1px solid var(--fr-divider)", background: "var(--fr-elevated)", animation: "frost-fade .2s ease both" }}>
+                            <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: "72px minmax(0,1fr) 96px", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+                              <div>{t("Method")}</div><div>{t("URL")}</div><div />
+                            </div>
+                            {shown.map((e) => (
+                              <div key={e.id} className="prow" style={{ display: "grid", gridTemplateColumns: "72px minmax(0,1fr) 96px", alignItems: "center", gap: 10, padding: "11px 20px 11px 50px", borderBottom: "1px solid var(--fr-divider)", opacity: e.imported ? 0.55 : 1 }}>
+                                <span className="mono" style={{ justifySelf: "start", fontWeight: 800, borderRadius: 6, padding: "3px 8px", fontSize: 10.5, letterSpacing: ".4px", background: e.method ? "var(--fr-accent-soft)" : "var(--fr-hover)", color: e.method ? "var(--fr-accent)" : "var(--fr-text-faint)" }}>{e.method ? e.method.toUpperCase() : "—"}</span>
+                                <a className="mono" href={e.url} target="_blank" rel="noreferrer" title={e.url} onClick={stop} style={{ fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none" }}>{e.url}</a>
+                                <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(e.imported)}</div>
+                              </div>
+                            ))}
+                            {eps.length > CAP && (
+                              <div style={{ padding: "10px 20px 10px 50px", font: "500 12px Inter,sans-serif", color: "var(--fr-text-faint)" }}>+{eps.length - CAP} {t("more — narrow with the filter above")}</div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.host}</div>
-                      <div className="mono" title={e.url} style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.url}</div>
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(e.imported)}</div>
-                    </div>
-                  );
-                })}
-                {filteredEndpoints.length === 0 && emptySection(allEndpoints.length === 0 ? t("No staged endpoints.") : t("No staged endpoints match these filters."))}
+                    );
+                  });
+                })()}
+                {filteredEndpoints.length === 0 && emptySection(endpointsTotal > 0 && allEndpoints.length === 0 ? t("Loading endpoints…") : allEndpoints.length === 0 ? t("No staged endpoints.") : t("No staged endpoints match these filters."))}
+              </>
+            ) : tab === "js" ? (
+              <>
+                {/* Заголовок с корзиной справа — находки живут внутри раскрытых файлов. */}
+                <div style={{ display: "flex", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+                  <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>{t("JS file")}</span>
+                  <div style={{ flex: 1 }} />
+                  {clearTrash}
+                </div>
+                {(() => {
+                  // Двухуровневая группировка как в разделе JS: ХОСТ → файлы →
+                  // находки. Раньше репорт группировал сразу по файлу и выпадал из
+                  // стиля раздела JS (там верхний уровень — хост).
+                  const CAP = 500;
+                  const byHost = new Map<string, ApiStagedJs[]>();
+                  for (const j of filteredJs) {
+                    const a = byHost.get(j.host);
+                    if (a) a.push(j); else byHost.set(j.host, [j]);
+                  }
+                  const jsHostGroups = [...byHost.entries()].map(([host, items]) => {
+                    const byFile = new Map<string, ApiStagedJs[]>();
+                    for (const j of items) { const k = j.url || "—"; const a = byFile.get(k); if (a) a.push(j); else byFile.set(k, [j]); }
+                    const secrets = items.filter((x) => x.kind === "secret" || !!x.severity).length;
+                    return { host, files: [...byFile.entries()], fileCount: byFile.size, paths: items.length - secrets, secrets };
+                  }).sort((a, b) => a.host.localeCompare(b.host));
+                  return jsHostGroups.map((hg) => {
+                    const hkey = `farmjshost:${hg.host}`;
+                    const hexp = state.epExpanded.includes(hkey);
+                    return (
+                      <div key={hg.host} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
+                        <div className="prow clk" onClick={() => toggleEpGroup(hkey)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px" }}>
+                          <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ transform: hexp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                          <Icon name="globe2" size={16} color="var(--fr-text-3)" />
+                          <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hg.host}</span>
+                          <span className="mono" style={{ flex: "none", fontSize: 11, fontWeight: 700, color: "var(--fr-text-2)", background: "var(--fr-hover)", borderRadius: 7, padding: "3px 9px" }}>{hg.fileCount} {t("files")}</span>
+                          {hg.paths > 0 && <span className="mono" style={{ flex: "none", fontSize: 11, fontWeight: 700, color: "var(--fr-text-2)", background: "var(--fr-hover)", borderRadius: 7, padding: "3px 9px" }}>{hg.paths} {t("paths")}</span>}
+                          {hg.secrets > 0 && <span className="mono" style={{ flex: "none", fontSize: 11, fontWeight: 700, color: "var(--fr-danger)", background: "var(--fr-danger-soft, var(--fr-surface))", borderRadius: 7, padding: "3px 9px" }}>{hg.secrets} {t("secrets")}</span>}
+                        </div>
+                        {hexp && (
+                          <div style={{ background: "var(--fr-elevated)", animation: "frost-fade .2s ease both" }}>
+                            {hg.files.map(([file, items]) => {
+                              const key = `farmjs:${file}`;
+                              const exp = state.epExpanded.includes(key);
+                              const isUrl = /^https?:\/\//.test(file);
+                              const short = isUrl ? file.replace(/^https?:\/\/[^/]+\//, "") || file : file;
+                              const secrets = items.filter((x) => x.kind === "secret" || !!x.severity);
+                              const paths = items.length - secrets.length;
+                              return (
+                                <div key={file} style={{ borderTop: "1px solid var(--fr-divider)" }}>
+                                  <div className="prow clk" onClick={() => toggleEpGroup(key)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px 12px 44px" }}>
+                                    <Icon name="chevron-right" size={14} color="var(--fr-text-faint)" sw={2.4} style={{ transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                                    <Icon name="doc" size={15} color="var(--fr-text-3)" />
+                                    <div className="mono" title={file} style={{ font: "600 12.5px 'JetBrains Mono',monospace", color: "var(--fr-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{short}</div>
+                                    {paths > 0 && <span className="mono" style={{ flex: "none", fontSize: 11, fontWeight: 700, color: "var(--fr-text-2)", background: "var(--fr-hover)", borderRadius: 7, padding: "3px 9px" }}>{paths} {t("paths")}</span>}
+                                    {secrets.length > 0 && <span className="mono" style={{ flex: "none", fontSize: 11, fontWeight: 700, color: "var(--fr-danger)", background: "var(--fr-danger-soft, var(--fr-surface))", borderRadius: 7, padding: "3px 9px" }}>{secrets.length} {t("secrets")}</span>}
+                                    {isUrl && <a href={file} target="_blank" rel="noreferrer" title={t("Open file")} onClick={stop} className="actbtn clk" style={{ flex: "none", textDecoration: "none" }}><Icon name="link" size={15} color="var(--fr-text-3)" /></a>}
+                                  </div>
+                                  {exp && (
+                                    <div style={{ borderTop: "1px solid var(--fr-divider)", background: "var(--fr-surface)" }}>
+                                      <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: "120px minmax(0,1fr) 96px", gap: 10, padding: "11px 20px 11px 66px", borderBottom: "1px solid var(--fr-divider)", font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+                                        <div>{t("Kind")}</div><div>{t("Value")}</div><div />
+                                      </div>
+                                      {items.slice(0, CAP).map((it) => (
+                                        <div key={it.id} className="prow" style={{ display: "grid", gridTemplateColumns: "120px minmax(0,1fr) 96px", alignItems: "center", gap: 10, padding: "11px 20px 11px 66px", borderBottom: "1px solid var(--fr-divider)", opacity: it.imported ? 0.55 : 1 }}>
+                                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                                            <span className="mono" style={{ fontSize: 10.5, fontWeight: 800, borderRadius: 6, padding: "3px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)" }}>{it.kind}</span>
+                                            {it.severity && <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "2px 6px", background: "var(--fr-elevated)", border: `1px solid ${sevColor(it.severity)}`, color: sevColor(it.severity) }}>{it.severity}</span>}
+                                          </div>
+                                          <div className="mono" title={it.value} style={{ minWidth: 0, fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.value || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
+                                          <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(it.imported)}</div>
+                                        </div>
+                                      ))}
+                                      {items.length > CAP && (
+                                        <div style={{ padding: "10px 20px 10px 66px", font: "500 12px Inter,sans-serif", color: "var(--fr-text-faint)" }}>+{items.length - CAP} {t("more — narrow with the filter above")}</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+                {filteredJs.length === 0 && emptySection(jsTotal > 0 && allJs.length === 0 ? t("Loading JS findings…") : allJs.length === 0 ? t("No staged JS findings.") : t("No staged JS findings match these filters."))}
               </>
             ) : (
               <>
-                {listHeader(jsGrid, jsAllSel, toggleAllJs, jsSelectable.length > 0, (
-                  <><div>{t("Kind")}</div><div>{t("Host")}</div><div>{t("Value")}</div><div /></>
+                {listHeader(leaksGrid, (
+                  <><div>{t("Engine")}</div><div>{t("Kind")}</div><div>{t("Value")}</div><div>{t("Source")}</div>{clearTrash}</>
                 ))}
-                {filteredJs.map((j) => {
-                  const selectableRow = !j.imported && canEditProject;
+                {filteredLeaks.map((l) => {
+                  const selectableRow = !l.imported && canEditProject;
+                  const res = leakResource(l);
                   return (
-                    <div key={j.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleJs(j.id) : undefined} style={{ display: "grid", gridTemplateColumns: jsGrid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: j.imported ? 0.55 : 1 }}>
-                      <input type="checkbox" checked={jsSelSet.has(j.id)} disabled={j.imported || !canEditProject} onChange={() => toggleJs(j.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
-                      <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <span className="mono" style={{ fontSize: 10.5, fontWeight: 800, borderRadius: 6, padding: "3px 8px", background: "var(--fr-elevated)", color: "var(--fr-text-3)" }}>{j.kind}</span>
-                        {j.severity && <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 7px", background: "var(--fr-surface)", border: `1px solid ${sevColor(j.severity)}`, color: sevColor(j.severity) }}>{j.severity}</span>}
-                      </div>
-                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.host}</div>
+                    <div key={l.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleLeakRow(l.id) : undefined} style={{ display: "grid", gridTemplateColumns: leaksGrid, gap: 14, alignItems: "center", padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: l.imported ? 0.55 : 1 }}>
+                      <div style={{ minWidth: 0 }}>{leakEngineChip(l.source)}</div>
+                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.kind || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
+                      <div className="mono" title={l.value || l.subject} style={{ minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.value || l.subject || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
                       <div style={{ minWidth: 0 }}>
-                        <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.value}</div>
-                        {j.url && <div className="mono" title={j.url} style={{ fontSize: 11, color: "var(--fr-text-faint)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.url}</div>}
+                        {res.label
+                          ? (res.href
+                            ? <a className="mono" href={res.href} target="_blank" rel="noreferrer" title={res.href} onClick={stop} style={{ fontSize: 12, color: "var(--fr-accent-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "underline" }}>{res.label}</a>
+                            : <div className="mono" title={res.label} style={{ fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{res.label}</div>)
+                          : <span style={{ color: "var(--fr-text-faint)" }}>—</span>}
                       </div>
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(j.imported)}</div>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>{importedBadge(l.imported)}</div>
                     </div>
                   );
                 })}
-                {filteredJs.length === 0 && emptySection(allJs.length === 0 ? t("No staged JS findings.") : t("No staged JS findings match these filters."))}
+                {filteredLeaks.length === 0 && emptySection(allLeaksR.length === 0 ? t("No leaks yet — run the Recon farm with the Leaks stage enabled.") : t("No leaks match these filters."))}
               </>
             )}
           </div>
 
-          {/* Действия: очистить отчёт (слева, danger) и импортировать выбранное (справа). */}
-          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "14px 22px", borderTop: "1px solid var(--fr-divider)" }}>
-            <button className="clk" onClick={() => void clearFarmReport()} disabled={busy || totalItems === 0} style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: busy || totalItems === 0 ? "not-allowed" : "pointer", opacity: busy || totalItems === 0 ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <Icon name="trash" size={15} color="var(--fr-danger)" sw={2.2} />{t("Clear report")}
-            </button>
-            <div style={{ flex: 1 }} />
-            {totalSel > 0 && <span style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-3)" }}>{totalSel} {t("selected")}</span>}
-            <button className="clk" onClick={() => void importFarmSelected(hostSel, epSel, jsSel)} disabled={busy || totalSel === 0 || !canEditProject} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: busy || totalSel === 0 || !canEditProject ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: busy || totalSel === 0 || !canEditProject ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <Icon name="download" size={15} color="var(--fr-on-accent)" sw={2.4} />{t("Import selected")}
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -6578,23 +7189,16 @@ export function FrostApp() {
     if (rv === "ips") {
       if (state.ipImportOpen) return renderIpImport();
       if (_ipd) return renderIpDetail(_ipd);
-      const ipFarmRunning = isFarmJobInFlight(state.ipFarmJob?.status ?? "");
       // Grid shared by the header and every row — Status is gone, Cloudflare took its place.
       const ipGrid = "minmax(0,1fr) minmax(0,1.4fr) minmax(0,1fr) 104px 72px";
       return (
         <div className="route">
           {reconFilterRow("ips")}
-          {/* Та же плашка, что у фермы хостов: синяя, со спиннером. */}
-          {ipFarmRunning && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
-              <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
-              {t("Probing")} {state.ipFarmJob?.targets_total ?? ""} {t("IPs — hostnames and ports update automatically.")}
-            </div>
-          )}
+          {/* Индикатор пробинга IP — компактной пилюлей справа от «Total IPs» (выше). */}
           <div style={{ ...CARD, overflow: "hidden" }}>
             {/* No column headers over an empty table (same as the hosts table). */}
             {ipsRows.length > 0 && (
-              <div style={{ display: "grid", alignItems: "center", textAlign: "center", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+              <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: ipGrid, gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".6px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
                 <div>{t("IP address")}</div><div>{t("Hostname")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("ips")}</div>
               </div>
             )}
@@ -6668,20 +7272,24 @@ export function FrostApp() {
       );
     }
     if (rv === "js") {
+      // Порядок важен: открытая карточка файла имеет приоритет над страницей хоста,
+      // чтобы клик по файлу со страницы хоста показывал файл, а «назад» (closeJsFile)
+      // возвращал на страницу хоста (openJsHost при этом не сбрасывается).
       if (_jsd) return renderJsFileDetail(_jsd);
-      const jsRunning = isFarmJobInFlight(state.jsFarmJob?.status ?? "");
+      if (_jsHost) return renderJsHostDetail(_jsHost);
       /* Та же сетка, что у таблицы хостов: домен — раскрывающаяся строка, файлы
          под ним — вложенные, как поддомены. Раньше это были отдельные карточки на
-         домен, и раздел выпадал из общего стиля раздела Recon. */
-      const jsGrid = "24px minmax(0,1.6fr) 96px 96px 96px";
+         домен, и раздел выпадал из общего стиля раздела Recon. Столбцы: хост, файлы,
+         пути, секреты, действия. */
+      const jsGrid = "24px minmax(0,1.6fr) 84px 84px 96px";
       return (
         <div className="route">
           {reconFilterRow("js")}
           {/* Прогресс скана — компактной пилюлей в шапке (справа от Total), не баннером. */}
           <div style={{ ...CARD, overflow: "hidden" }}>
             {jsGroups.length > 0 && (
-              <div style={{ display: "grid", alignItems: "center", textAlign: "center", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
-                <div /><div>{t("Host")}</div><div>{t("Files")}</div><div>{t("Secrets")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("js")}</div>
+              <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: jsGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+                <div /><div>{t("Host")}</div><div>{t("Paths")}</div><div>{t("Secrets")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("js")}</div>
               </div>
             )}
             {jsGroups.map((g) => {
@@ -6691,9 +7299,11 @@ export function FrostApp() {
                 <div key={g.host} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
                   <div className="prow clk" onClick={() => toggleJsGroup(g.host)} style={{ display: "grid", gridTemplateColumns: jsGrid, alignItems: "center", gap: 14, padding: "15px 20px" }}>
                     <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
-                    <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.host}</span>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--fr-text-2)" }}>{g.count} {t("files")}</span>
-                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: groupSecrets ? "var(--fr-danger)" : "var(--fr-text-faint)" }}>{groupSecrets}</span>
+                    {/* Клик по имени хоста открывает страницу «все файлы хоста»; клик по
+                        остальной строке — раскрывает список файлов под ней. */}
+                    <span className="mono hostname clk" onClick={(ev) => { ev.stopPropagation(); openJsHostDetail(g.host); }} title={t("Open all files of this host")} style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{g.host}</span>
+                    <span className="mono" style={{ fontSize: 12, color: g.paths ? "var(--fr-text-2)" : "var(--fr-text-faint)" }}>{g.paths} {t("paths")}</span>
+                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: groupSecrets ? "var(--fr-danger)" : "var(--fr-text-faint)" }}>{groupSecrets} {t("secrets")}</span>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                       {/* Re-downloads this host's .js into a zip (files aren't stored). */}
                       <Tip label={t("Download JS archive")}><div className="actbtn" onClick={(ev) => { ev.stopPropagation(); downloadJsArchive(g.hostId, g.host); }}><Icon name="download" size={15} /></div></Tip>
@@ -6707,7 +7317,7 @@ export function FrostApp() {
                           <span />
                           <span className="mono hostname" title={file.url} style={{ font: "600 13px 'JetBrains Mono',monospace", color: file.status === "ok" ? "var(--fr-text)" : "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{fileBase(file.url)}</span>
                           <span className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-3)" }}>{file.endpoints.length} {t("paths")}</span>
-                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: file.secrets.length ? "var(--fr-danger)" : "var(--fr-text-faint)" }}>{file.secrets.length}</span>
+                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: file.secrets.length ? "var(--fr-danger)" : "var(--fr-text-faint)" }}>{file.secrets.length} {t("secrets")}</span>
                           <span className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)", textAlign: "right" }}>{file.status === "ok" ? kb(file.size) : file.status}</span>
                         </div>
                       ))}
@@ -6730,66 +7340,83 @@ export function FrostApp() {
     // rv === "hosts"
     if (state.hostImportOpen) return renderHostImport();
     if (_hd) return renderHostDetail(_hd);
-    const farmRunning = isFarmJobInFlight(state.hostFarmJob?.status ?? "");
     // Grid shared by the header, each host row and each nested subdomain row.
     const hostGrid = "24px minmax(0,1.25fr) minmax(0,1fr) 104px 72px";
     return (
       <div className="route">
-        {/* While a probe job runs, statuses fill in live in the table below. */}
-        {farmRunning && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "11px 16px", borderRadius: 12, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", font: "600 12.5px Inter,sans-serif" }}>
-            <span className="frost-spin" style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--fr-accent)", borderTopColor: "transparent", display: "inline-block" }} />
-            {t("Probing")} {state.hostFarmJob?.targets_total ?? ""} {t("hosts — statuses update automatically.")}
-          </div>
-        )}
+        {/* Индикатор пробинга — компактной пилюлей справа от «Total hosts» (выше),
+            отдельной плашки здесь больше нет: статусы и так наливаются в таблицу. */}
         {reconFilterRow("hosts")}
         <div style={{ ...CARD, overflow: "hidden" }}>
           {/* No column headers over an empty table — only show them with rows. */}
-          {hostsList.length > 0 && (
-            <div style={{ display: "grid", alignItems: "center", textAlign: "center", gridTemplateColumns: hostGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+          {hostGroups.length > 0 && (
+            <div style={{ display: "grid", alignItems: "center", gridTemplateColumns: hostGrid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div /><div>{t("Host")}</div><div>{t("Ports")}</div><div>{t("Cloudflare")}</div><div style={{ display: "flex", justifyContent: "flex-end" }}>{bulkDelButton("hosts")}</div>
             </div>
           )}
-          {hostsList.map(({ h, idx }) => {
-            const exp = state.expanded.includes(h.id);
+          {hostGroups.map((g) => {
+            const exp = state.expanded.includes(g.key);
+            const header = g.header;      // реальный хост-шапка, либо null → синтетическая домен-шапка
+            const subCount = g.subs.length;
+            const countBadge = subCount > 0 ? (
+              <span style={{ font: "600 11px Inter,sans-serif", color: "var(--fr-text-faint)", background: "var(--fr-elevated)", border: "1px solid var(--fr-border)", borderRadius: 20, padding: "1px 8px", flex: "none" }}>{subCount}</span>
+            ) : null;
             return (
-              <div key={h.id} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
-                <div className="prow clk" onClick={() => toggleHost(h.id)} style={{ display: "grid", gridTemplateColumns: hostGrid, alignItems: "start", gap: 14, padding: "15px 20px" }}>
+              <div key={g.key} style={{ borderBottom: "1px solid var(--fr-divider)" }}>
+                <div className="prow clk" onClick={() => toggleHost(g.key)} style={{ display: "grid", gridTemplateColumns: hostGrid, alignItems: "start", gap: 14, padding: "15px 20px" }}>
                   <Icon name="chevron-right" size={15} color="var(--fr-text-faint)" sw={2.4} style={{ marginTop: 3, transform: exp ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                      <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: STDOT[h.status] ?? STDOT.unknown }} />
-                      <span className="clk" onClick={(ev) => { ev.stopPropagation(); openHostDetail(h.id); }} style={{ display: "inline-block", minWidth: 0 }}>
-                        <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{h.host}</span>
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ minWidth: 0 }}>{portPills(h.ports, h.status === "down")}</div>
-                  {/* True when any address of the host sits in a Cloudflare range. */}
-                  <div style={{ marginTop: 1 }}>{cloudflarePill(h.cloudflare)}</div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
-                    <div className="actbtn" onClick={(ev) => { ev.stopPropagation(); openEditor("host", "edit", idx); }}><Icon name="edit" size={15} /></div>
-                    <div className="actbtn del" onClick={(ev) => { ev.stopPropagation(); askDelete("host", idx, h.host); }}><Icon name="trash" size={15} /></div>
-                  </div>
+                  {header ? (
+                    <>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                          <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: STDOT[header.h.status] ?? STDOT.unknown }} />
+                          <span className="clk" onClick={(ev) => { ev.stopPropagation(); openHostDetail(header.h.id); }} style={{ display: "inline-block", minWidth: 0 }}>
+                            <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{header.h.host}</span>
+                          </span>
+                          {countBadge}
+                        </div>
+                      </div>
+                      <div style={{ minWidth: 0 }}>{portPills(header.h.ports, header.h.status === "down")}</div>
+                      {/* True when any address of the host sits in a Cloudflare range. */}
+                      <div style={{ marginTop: 1 }}>{cloudflarePill(header.h.cloudflare)}</div>
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
+                        <div className="actbtn" onClick={(ev) => { ev.stopPropagation(); openEditor("host", "edit", header.idx); }}><Icon name="edit" size={15} /></div>
+                        <div className="actbtn del" onClick={(ev) => { ev.stopPropagation(); askDelete("host", header.idx, header.h.host); }}><Icon name="trash" size={15} /></div>
+                      </div>
+                    </>
+                  ) : (
+                    /* Синтетическая домен-шапка: сам домен как хост в проект не заведён,
+                       строка лишь группирует поддомены. Ни портов, ни действий у неё нет. */
+                    <>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                          <Icon name="globe2" size={14} sw={2.2} color="var(--fr-text-faint)" style={{ flex: "none" }} />
+                          <span className="mono hostname" style={{ font: "700 14px 'JetBrains Mono',monospace", color: "var(--fr-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.key}</span>
+                          {countBadge}
+                        </div>
+                      </div>
+                      <div /><div /><div />
+                    </>
+                  )}
                 </div>
-                {/* Expanding a host lists its subdomains — the addresses live in the IPs view. */}
+                {/* Expanding a group lists its subdomains — the addresses live in the IPs view. */}
                 {exp && (
                   <div style={{ background: "var(--fr-elevated)", animation: "frost-fade .2s ease both" }}>
-                    {visibleSubdomainsOf(h).map((sub) => (
-                      <div key={sub.id} className="prow clk" onClick={(ev) => { ev.stopPropagation(); openHostDetail(sub.id); }} style={{ display: "grid", gridTemplateColumns: hostGrid, alignItems: "start", gap: 14, padding: "13px 20px 13px 44px", borderTop: "1px solid var(--fr-divider)" }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: STDOT[sub.status] ?? STDOT.unknown, marginTop: 8, justifySelf: "end" }} />
+                    {g.subs.map((sub) => (
+                      <div key={sub.h.id} className="prow clk" onClick={(ev) => { ev.stopPropagation(); openHostDetail(sub.h.id); }} style={{ display: "grid", gridTemplateColumns: hostGrid, alignItems: "start", gap: 14, padding: "13px 20px 13px 44px", borderTop: "1px solid var(--fr-divider)" }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: STDOT[sub.h.status] ?? STDOT.unknown, marginTop: 8, justifySelf: "end" }} />
                         <div style={{ minWidth: 0 }}>
-                          <span className="mono hostname" style={{ font: "600 13px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", cursor: "pointer" }}>{sub.host}</span>
+                          <span className="mono hostname" style={{ font: "600 13px 'JetBrains Mono',monospace", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", cursor: "pointer" }}>{sub.h.host}</span>
                         </div>
-                        <div style={{ minWidth: 0 }}>{portPills(sub.ports, sub.status === "down")}</div>
-                        <div style={{ marginTop: 1 }}>{cloudflarePill(sub.cloudflare)}</div>
+                        <div style={{ minWidth: 0 }}>{portPills(sub.h.ports, sub.h.status === "down")}</div>
+                        <div style={{ marginTop: 1 }}>{cloudflarePill(sub.h.cloudflare)}</div>
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
-                          <div className="actbtn" onClick={(ev) => { ev.stopPropagation(); openEditor("host", "edit", hosts.findIndex((x) => x.id === sub.id)); }}><Icon name="edit" size={15} /></div>
-                          <div className="actbtn del" onClick={(ev) => { ev.stopPropagation(); askDelete("host", hosts.findIndex((x) => x.id === sub.id), sub.host); }}><Icon name="trash" size={15} /></div>
+                          <div className="actbtn" onClick={(ev) => { ev.stopPropagation(); openEditor("host", "edit", sub.idx); }}><Icon name="edit" size={15} /></div>
+                          <div className="actbtn del" onClick={(ev) => { ev.stopPropagation(); askDelete("host", sub.idx, sub.h.host); }}><Icon name="trash" size={15} /></div>
                         </div>
                       </div>
                     ))}
-                    {visibleSubdomainsOf(h).length === 0 && (
+                    {g.subs.length === 0 && (
                       <div style={{ padding: "13px 20px 13px 44px", borderTop: "1px solid var(--fr-divider)", font: "500 12.5px Inter,sans-serif", color: "var(--fr-text-faint)" }}>{t("No subdomains discovered.")}</div>
                     )}
                   </div>
@@ -6798,7 +7425,7 @@ export function FrostApp() {
             );
           })}
           {state.apiHosts === null && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading hosts…")}</div>}
-          {state.apiHosts !== null && hostsList.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No hosts found.")}</div>}
+          {state.apiHosts !== null && hostGroups.length === 0 && <div style={{ padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("No hosts found.")}</div>}
         </div>
       </div>
     );
@@ -6808,6 +7435,99 @@ export function FrostApp() {
      остаётся списком, а разбор находок живёт на своей странице. Экспорт здесь
      ограничен этим файлом (см. exportLinesFor: открытая карточка задаёт источник),
      поэтому «Пути» и «Секреты» выгружаются ровно из него и по отдельности. */
+  /* Страница «все JS-файлы хоста» — агрегат по хосту: все файлы, все секреты и все
+     (уникальные) пути этого хоста на одной странице, как карточка файла, но по
+     всему хосту. Экспорт отсюда ограничен файлами хоста (см. exportLinesFor). */
+  const renderJsHostDetail = (host: string) => {
+    const files = jsFiles.filter((f) => f.host === host);
+    const allSecrets = files.flatMap((f) => f.secrets.map((s) => ({ ...s, file: fileBase(f.url) })));
+    const allPaths = [...new Set(files.flatMap((f) => f.endpoints))].sort();
+    const totalBytes = files.reduce((n, f) => n + (f.status === "ok" ? (f.size ?? 0) : 0), 0);
+    const canExport = allPaths.length > 0 || allSecrets.length > 0;
+    return (
+      <div style={{ animation: "frost-fade .2s ease both" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+          <span className="clk" onClick={closeJsHostDetail} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-2)", background: "var(--fr-surface)", border: "1px solid var(--fr-border-light)", borderRadius: 20, padding: "7px 13px", cursor: "pointer" }}>
+            <Icon name="chevron-left" size={15} />{t("All JS files")}
+          </span>
+          <div style={{ flex: 1 }} />
+          <button className="clk" onClick={() => openReconExport(allPaths.length ? "js-endpoints" : "js-secrets")} disabled={!canExport} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canExport ? "pointer" : "default" }}>
+            <Icon name="download" size={16} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
+          </button>
+        </div>
+        <div style={{ ...CARD, padding: "22px 24px", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Icon name="globe2" size={17} sw={2.2} color="var(--fr-text-2)" style={{ flex: "none" }} />
+            <span className="mono" style={{ font: "800 18px 'JetBrains Mono',monospace", color: "var(--fr-text)", wordBreak: "break-all" }}>{host}</span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 6, padding: "3px 9px" }}>{files.length} {t("files")}</span>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 6, padding: "3px 9px" }}>{allPaths.length} {t("paths")}</span>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: allSecrets.length ? "var(--fr-danger)" : "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 6, padding: "3px 9px" }}>{allSecrets.length} secrets</span>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--fr-text-2)", background: "var(--fr-hover)", border: "1px solid var(--fr-border-light)", borderRadius: 6, padding: "3px 9px" }}>{kb(totalBytes)}</span>
+          </div>
+        </div>
+
+        {/* Список файлов хоста — клик открывает отдельную карточку файла. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Files")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{files.length}</span></span>
+        </div>
+        <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
+          {files.map((f) => (
+            <div key={f.id} className="prow clk" onClick={() => openJsFile(f.id)} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 84px 84px 96px", alignItems: "center", gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+              <span className="mono hostname" title={f.url} style={{ font: "600 13px 'JetBrains Mono',monospace", color: f.status === "ok" ? "var(--fr-text)" : "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{fileBase(f.url)}</span>
+              <span className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-3)" }}>{f.endpoints.length} {t("paths")}</span>
+              <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: f.secrets.length ? "var(--fr-danger)" : "var(--fr-text-faint)" }}>{f.secrets.length}</span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--fr-text-faint)", textAlign: "right" }}>{f.status === "ok" ? kb(f.size) : f.status}</span>
+            </div>
+          ))}
+          {files.length === 0 && (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No JS files on this host.")}</div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Secrets")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{allSecrets.length}</span></span>
+        </div>
+        <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
+          {allSecrets.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,130px) minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+              <div>{t("File")}</div><div>{t("Kind")}</div><div>{t("Match")}</div><div>{t("Snippet")}</div>
+            </div>
+          )}
+          {allSecrets.map((sec, i) => {
+            const c = SECRET_SEV[sec.severity] ?? SECRET_SEV.low;
+            return (
+              <div key={i} className="prow" style={{ display: "grid", gridTemplateColumns: "minmax(0,130px) minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", alignItems: "start", gap: 14, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+                <span className="mono" style={{ fontSize: 11, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sec.file}>{sec.file}</span>
+                <span className="mono" style={{ justifySelf: "start", fontSize: 10.5, fontWeight: 700, borderRadius: 5, padding: "2px 8px", background: c.bg, color: c.color }}>{sec.kind}</span>
+                <span className="mono" style={{ fontSize: 12, color: "var(--fr-text-2)", wordBreak: "break-all" }}>{sec.match}</span>
+                <span className="mono" style={{ fontSize: 11.5, color: "var(--fr-text-2)", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.55, userSelect: "text" }}>{sec.snippet}</span>
+              </div>
+            );
+          })}
+          {allSecrets.length === 0 && (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No secrets on this host.")}</div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Paths")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{allPaths.length}</span></span>
+        </div>
+        <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
+          {allPaths.map((path, i) => (
+            <div key={i} className="prow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+              <span className="mono" style={{ fontSize: 12.5, color: "var(--fr-text)", wordBreak: "break-all" }}>{path}</span>
+            </div>
+          ))}
+          {allPaths.length === 0 && (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No paths on this host.")}</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderJsFileDetail = (f: JsFileEntry) => (
     <div style={{ animation: "frost-fade .2s ease both" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
@@ -6840,7 +7560,7 @@ export function FrostApp() {
       </div>
       <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
         {f.secrets.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,150px) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
             <div>{t("Kind")}</div><div>{t("Match")}</div><div>{t("Snippet")}</div>
           </div>
         )}
@@ -6903,7 +7623,7 @@ export function FrostApp() {
         </div>
         <div style={{ ...CARD, overflow: "hidden", marginBottom: 20 }}>
           {h.ports.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div>{t("Port")}</div><div>{t("Service")}</div><div>{t("HTTP")}</div><div>{t("State")}</div>
             </div>
           )}
@@ -6929,7 +7649,7 @@ export function FrostApp() {
           {h.ports.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No ports yet.")}</div>}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Endpoints")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{h.endpoints.length}</span></span>
+          <span style={{ font: "700 13px Inter,sans-serif", color: "var(--fr-text)" }}>{t("Endpoints")} <span className="mono" style={{ color: "var(--fr-text-3)", fontWeight: 600 }}>{h.endpointCount ?? h.endpoints.length}</span></span>
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
           {h.endpoints.map((e, ei) => {
@@ -6945,7 +7665,7 @@ export function FrostApp() {
               </div>
             );
           })}
-          {h.endpoints.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No endpoints yet.")}</div>}
+          {h.endpoints.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{(h.endpointCount ?? 0) > 0 ? t("Loading endpoints…") : t("No endpoints yet.")}</div>}
         </div>
       </div>
     );
@@ -6983,7 +7703,7 @@ export function FrostApp() {
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
           {row.ports.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,120px) minmax(0,1fr) 80px 110px", gap: 14, alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div>{t("Port")}</div><div>{t("Service")}</div><div>{t("HTTP")}</div><div>{t("State")}</div>
             </div>
           )}
@@ -7023,9 +7743,12 @@ export function FrostApp() {
             экранах правый блок переносится под поиски, оставаясь выровненным по
             правому краю. */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-            {searchBox(t("Filter by host…"), state.vulnFilterHost, (v) => setState({ vulnFilterHost: v }), 190)}
-            {searchBox(t("Filter by author…"), state.vulnFilterAuthor, (v) => setState({ vulnFilterAuthor: v }), 190)}
+          {/* Статус и критичность — это два ряда пилюль справа. Чтобы левый блок
+              вставал с ними вровень по высоте, поиски по хосту и автору кладём друг
+              под друга (и делаем их длиннее — места по ширине хватает). */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {searchBox(t("Filter by host…"), state.vulnFilterHost, (v) => setState({ vulnFilterHost: v }), 300)}
+            {searchBox(t("Filter by author…"), state.vulnFilterAuthor, (v) => setState({ vulnFilterAuthor: v }), 300)}
           </div>
           {/* Status / severity are multi-select: pills toggle, several can be held at
               once, and clearing the last one falls back to "All". Driven by the token
@@ -7045,12 +7768,12 @@ export function FrostApp() {
         </div>
         <div style={{ ...CARD, overflow: "hidden" }}>
           {vulns.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.8fr) minmax(0,1fr) 140px 110px 130px 120px 64px", gap: 10, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.5fr) minmax(0,1.4fr) 140px 110px 130px 120px 64px", gap: 10, padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase" }}>
               <div>#</div><div>{t("Title")}</div><div>{t("Asset")}</div><div>{t("Status")}</div><div>{t("Severity")}</div><div>{t("Author")}</div><div>{t("Updated")}</div><div />
             </div>
           )}
           {vulns.map((v) => (
-            <div key={v.num} className="prow clk" onClick={v.onOpen} style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.8fr) minmax(0,1fr) 140px 110px 130px 120px 64px", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
+            <div key={v.num} className="prow clk" onClick={v.onOpen} style={{ display: "grid", gridTemplateColumns: "48px minmax(0,1.5fr) minmax(0,1.4fr) 140px 110px 130px 120px 64px", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid var(--fr-divider)" }}>
               <div className="mono" style={{ fontSize: 13, color: "var(--fr-text-faint)", fontWeight: 600 }}>{String(v.num).padStart(2, "0")}</div>
               <div style={{ font: "600 14px Inter,sans-serif", color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title}</div>
               <div className="mono" style={{ fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.host}</div>
@@ -7176,9 +7899,13 @@ export function FrostApp() {
                 const imgs = (vd.stepImages ?? {})[i] ?? [];
                 return (
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                       <span className="mono" style={{ flex: "none", width: 26, height: 26, borderRadius: 8, background: "var(--fr-accent-soft)", color: "var(--fr-accent)", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-                      <input className="finp" placeholder={t("Describe this step… (paste a screenshot to attach)")} value={s} onChange={(e) => updateVdStep(i, e.target.value)} onPaste={(e) => pasteVdStepImage(i, e)} style={{ flex: 1, fontFamily: "ui-monospace,Menlo,monospace", fontSize: 12.5 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Suspense fallback={<div className="frostmd" style={{ minHeight: 44, color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading editor…")}</div>}>
+                          <FrostMarkdownEditor value={s} onChange={(md) => updateVdStep(i, md)} onImagePaste={(files) => attachVdStepImages(i, files)} placeholder={t("Describe this step… (paste a screenshot to attach)")} minHeight={44} />
+                        </Suspense>
+                      </div>
                       <div className="actbtn del" onClick={() => removeVdStep(i)}><Icon name="trash" size={15} /></div>
                     </div>
                     {imgs.length > 0 && (
@@ -7218,16 +7945,27 @@ export function FrostApp() {
                 {state.vulnFiles.map((f) => (
                   <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid var(--fr-divider)", borderRadius: 10, background: "var(--fr-surface)" }}>
                     <Icon name="doc" size={15} color="var(--fr-text-3)" />
-                    <a href={`/api/v1/files/${f.id}/download`} target="_blank" rel="noreferrer" className="mono" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--fr-accent-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none" }}>{f.original_name}</a>
+                    <span className="mono clk" title={t("Click to preview")} onClick={() => setState({ filePreview: f })} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--fr-accent-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{f.original_name}</span>
                     <span className="mono" style={{ flex: "none", fontSize: 11, color: "var(--fr-text-faint)" }}>{kb(f.size_bytes)}</span>
+                    <a href={`/api/v1/files/${f.id}/download`} download={f.original_name} className="actbtn clk" title={t("Download")} style={{ cursor: "pointer", textDecoration: "none" }} onClick={(e) => e.stopPropagation()}><Icon name="download" size={14} color="var(--fr-text-3)" /></a>
                     <div className="actbtn del clk" title={t("Delete file")} onClick={() => void removeVulnFile(f.id)} style={{ cursor: "pointer" }}><Icon name="trash" size={14} color="var(--fr-danger)" /></div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          <div style={{ marginBottom: 18 }}><label className="flabel">{t("Impact")}</label><textarea className="finp" rows={2} placeholder={t("Business/security impact if exploited…")} value={vd.impact || ""} onChange={(e) => updateVulnDetailForm("impact", e.target.value)} /></div>
-          <div><label className="flabel">{t("Remediation")}</label><textarea className="finp" rows={3} placeholder={t("How to fix or mitigate this vulnerability…")} value={vd.remediation || ""} onChange={(e) => updateVulnDetailForm("remediation", e.target.value)} /></div>
+          <div style={{ marginBottom: 18 }}>
+            <label className="flabel">{t("Impact")}</label>
+            <Suspense fallback={<div className="frostmd" style={{ minHeight: 90, color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading editor…")}</div>}>
+              <FrostMarkdownEditor value={vd.impact || ""} onChange={(md) => updateVulnDetailForm("impact", md)} placeholder={t("Business/security impact if exploited…")} minHeight={90} />
+            </Suspense>
+          </div>
+          <div>
+            <label className="flabel">{t("Remediation")}</label>
+            <Suspense fallback={<div className="frostmd" style={{ minHeight: 120, color: "var(--fr-text-faint)", font: "500 14px Inter,sans-serif" }}>{t("Loading editor…")}</div>}>
+              <FrostMarkdownEditor value={vd.remediation || ""} onChange={(md) => updateVulnDetailForm("remediation", md)} placeholder={t("How to fix or mitigate this vulnerability…")} minHeight={120} />
+            </Suspense>
+          </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 22, fontSize: 12, color: "var(--fr-text-faint)" }}>
             <span>{t("Reported by")} <b style={{ color: "var(--fr-text-3)" }}>{original?.author}</b> · {original?.updated}</span>
             <div style={{ display: "flex", gap: 10 }}>
@@ -7270,12 +8008,28 @@ export function FrostApp() {
     const loading = state.leaksLoading;
     const busy = state.leaksBusy;
     const summary = report?.summary ?? { total: 0, verified: 0, imported: 0, by_source: {} as Record<string, number> };
-    const allLeaks: ApiLeak[] = report?.leaks ?? [];
+    // Раздел Vault→Leaks — это ВИТРИНА уже импортированных утечек. Найденные проходят
+    // ревью во вкладке Leaks отчёта фермы и попадают сюда только после импорта.
+    const allLeaks: ApiLeak[] = (report?.leaks ?? []).filter((l) => l.imported);
+    const pendingLeaks = (report?.leaks ?? []).filter((l) => !l.imported).length;
 
-    // Фильтр по источнику — на клиенте, чтобы набор пилюль был стабилен.
-    const filtered = state.leaksSource ? allLeaks.filter((l) => l.source === state.leaksSource) : allLeaks;
-    // Пилюли источников — из полного набора (не из отфильтрованного).
+    // Фильтры (все на клиенте, чтобы наборы пилюль были стабильны): движок
+    // (l.source: github/intelx/…), тип (l.kind: email/account/api key/…) и поиск.
+    const lq = state.leaksQuery.trim().toLowerCase();
+    const filtered = allLeaks.filter((l) => {
+      if (state.leaksSource && l.source !== state.leaksSource) return false;
+      if (state.leaksKind && l.kind !== state.leaksKind) return false;
+      if (lq && !(
+        (l.value ?? "").toLowerCase().includes(lq) ||
+        (l.subject ?? "").toLowerCase().includes(lq) ||
+        (l.kind ?? "").toLowerCase().includes(lq) ||
+        (l.source ?? "").toLowerCase().includes(lq)
+      )) return false;
+      return true;
+    });
+    // Пилюли движков/типов — из полного набора (не из отфильтрованного).
     const sources = Array.from(new Set(allLeaks.map((l) => l.source).filter(Boolean))).sort();
+    const kinds = Array.from(new Set(allLeaks.map((l) => l.kind).filter(Boolean))).sort();
 
     // Выбор уважает фильтр и не трогает импортированные (мирроринг фермы).
     const selectable = filtered.filter((l) => !l.imported);
@@ -7288,7 +8042,8 @@ export function FrostApp() {
       else setState((s) => ({ leaksSel: Array.from(new Set([...s.leaksSel, ...ids])) }));
     };
 
-    const grid = "30px 108px minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.3fr) 168px";
+    // Колонки: Engine | Kind | Value | Source (+чекбокс и статус-бейджи по краям).
+    const grid = "30px 132px 128px minmax(0,1.3fr) minmax(0,1.3fr) 150px";
 
     // Ресурс, откуда получена утечка (из detail): github → repo/ссылка;
     // брич-источники → имена брич-баз / домен. Показываем строкой под Subject.
@@ -7326,36 +8081,48 @@ export function FrostApp() {
     const importedBadge = (imported: boolean) =>
       imported ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "700 10.5px Inter,sans-serif", letterSpacing: ".3px", textTransform: "uppercase", borderRadius: 6, padding: "3px 9px", background: "var(--fr-success-soft)", color: "var(--fr-success)" }}><Icon name="check" size={12} color="var(--fr-success)" sw={2.6} />{t("imported")}</span> : null;
 
+    const clearLabel = state.leaksSource ? t("Clear engine") : t("Clear all");
+
+    // Пустое/загрузочное состояние — как у всех разделов без данных (см. Creds):
+    // простая карточка с одной строкой, без тулбара, тяжёлой шапки и футбара.
+    if (state.leaksReport === null && loading) {
+      return <div className="route" style={{ ...CARD, padding: 48, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>{t("Loading leaks…")}</div>;
+    }
+    if (allLeaks.length === 0) {
+      return (
+        <div className="route" style={{ ...CARD, padding: 52, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 14 }}>
+          {pendingLeaks > 0
+            ? `${pendingLeaks} ${t("leaks are waiting for review in the Recon farm report — import them there to add them here.")}`
+            : t("No leaks yet. Run the Recon farm with the Leaks stage enabled.")}
+        </div>
+      );
+    }
     return (
       <div className="route">
-        {/* Сводка + фильтр по источнику. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-          {stat(t("Total"), summary.total)}
-          {stat(t("Verified"), summary.verified)}
-          {stat(t("Imported"), summary.imported)}
-          {Object.entries(summary.by_source).map(([src, n]) => (
-            <span key={src} className="mono" style={{ display: "inline-flex", alignItems: "baseline", gap: 6, padding: "5px 12px", borderRadius: 20, background: "var(--fr-elevated)", color: "var(--fr-text-3)", fontSize: 11.5, fontWeight: 700 }}>{src} <b style={{ color: "var(--fr-text)" }}>{n}</b></span>
-          ))}
+        {/* Фильтры в одном месте над таблицей: поиск + движок + тип. Total — в шапке раздела. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {searchBox(t("Filter by value, kind or engine…"), state.leaksQuery, (v) => setState({ leaksQuery: v }), 260)}
+          {sources.length > 0 && (
+            <>
+              <span style={{ font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)", marginLeft: 4 }}>{t("Engine")}</span>
+              {filterPill(t("All"), state.leaksSource === "", () => setState({ leaksSource: "" }))}
+              {sources.map((s) => filterPill(s, state.leaksSource === s, () => setState((st) => ({ leaksSource: st.leaksSource === s ? "" : s }))))}
+            </>
+          )}
+          {kinds.length > 0 && (
+            <>
+              <span style={{ font: "700 10.5px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)", marginLeft: 4 }}>{t("Kind")}</span>
+              {filterPill(t("All"), state.leaksKind === "", () => setState({ leaksKind: "" }))}
+              {kinds.map((k) => filterPill(k, state.leaksKind === k, () => setState((st) => ({ leaksKind: st.leaksKind === k ? "" : k }))))}
+            </>
+          )}
+          <div style={{ flex: 1 }} />
+          <button className="clk" onClick={() => void reloadLeaks()} disabled={loading} style={{ height: 38, padding: "0 15px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>
+            <Icon name="activity" size={15} sw={2.2} color="var(--fr-accent-2)" />{loading ? t("Refreshing…") : t("Refresh")}
+          </button>
         </div>
 
-        {sources.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-            <span style={{ font: "700 11px Inter,sans-serif", letterSpacing: ".5px", textTransform: "uppercase", color: "var(--fr-text-faint)" }}>{t("Source")}</span>
-            {filterPill(t("All"), state.leaksSource === "", () => setState({ leaksSource: "" }))}
-            {sources.map((s) => filterPill(s, state.leaksSource === s, () => setState((st) => ({ leaksSource: st.leaksSource === s ? "" : s }))))}
-          </div>
-        )}
-
-        <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 420px)", minHeight: 280 }}>
-          {/* Шапка + обновление. */}
-          <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "16px 22px", borderBottom: "1px solid var(--fr-divider)" }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--fr-text)" }}>{t("Leaks")}</h2>
-            <div style={{ flex: 1 }} />
-            <button className="clk" onClick={() => void reloadLeaks()} disabled={loading} style={{ height: 38, padding: "0 15px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 12.5px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7, cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}>
-              <Icon name="activity" size={15} sw={2.2} color="var(--fr-accent-2)" />{loading ? t("Refreshing…") : t("Refresh")}
-            </button>
-          </div>
-
+        <div style={{ ...CARD, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "calc(100vh - 360px)", minHeight: 280 }}>
           {/* Список (прокручивается внутри карточки). */}
           <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
             {loading && allLeaks.length === 0 ? (
@@ -7365,60 +8132,67 @@ export function FrostApp() {
                 <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, borderRadius: 12, background: "var(--fr-accent-soft)", marginBottom: 14 }}>
                   <Icon name="globe" size={22} color="var(--fr-accent)" sw={2} />
                 </div>
-                <div style={{ font: "800 16px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{t("No leaks yet")}</div>
-                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>{t("No leaks yet — run the Recon farm with the Leaks stage enabled, and add API keys in Integrations")}</div>
+                <div style={{ font: "800 16px Inter,sans-serif", color: "var(--fr-text)", marginBottom: 6 }}>{pendingLeaks > 0 ? t("Nothing imported yet") : t("No leaks yet")}</div>
+                <div style={{ fontSize: 13.5, color: "var(--fr-text-3)", maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>{pendingLeaks > 0 ? `${pendingLeaks} ${t("leaks are waiting for review in the Recon farm report — import them there to add them here.")}` : t("No leaks yet — run the Recon farm with the Leaks stage enabled, and add API keys in Integrations")}</div>
               </div>
             ) : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
+                {/* Шапка колонок: Engine | Kind | Value | Source. Корзина справа —
+                    массовая очистка (учитывает фильтр движка), как в других таблицах. */}
+                <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
                   <input type="checkbox" checked={allSel} onChange={toggleAll} disabled={!canEditProject || selectable.length === 0} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectable.length > 0 ? "pointer" : "default" }} />
-                  <div>{t("Source")}</div>
+                  <div>{t("Engine")}</div>
                   <div>{t("Kind")}</div>
-                  <div>{t("Subject")}</div>
                   <div>{t("Value")}</div>
-                  <div />
+                  <div>{t("Source")}</div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    {canEditProject && (
+                      <button className="clk" title={clearLabel} aria-label={clearLabel} disabled={busy || allLeaks.length === 0} onClick={() => void clearLeaks()} style={{ width: 27, height: 27, flex: "none", padding: 0, border: "1px solid var(--fr-border)", borderRadius: 8, background: "var(--fr-surface)", color: "var(--fr-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: busy || allLeaks.length === 0 ? "not-allowed" : "pointer", opacity: busy || allLeaks.length === 0 ? 0.4 : 1 }}>
+                        <Icon name="trash" size={15} sw={2.2} color="var(--fr-danger)" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {filtered.map((l) => {
                   const selectableRow = !l.imported && canEditProject;
-                  const revealed = state.leaksRevealed.includes(l.id);
+                  const rl = resourceLabel(l);
+                  const href = resourceLink(l);
                   return (
-                    <div key={l.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleLeak(l.id) : undefined} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "13px 22px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: l.imported ? 0.55 : 1 }}>
+                    <div key={l.id} className={selectableRow ? "prow clk" : "prow"} onClick={selectableRow ? () => toggleLeak(l.id) : undefined} style={{ display: "grid", gridTemplateColumns: grid, gap: 14, alignItems: "center", padding: "13px 20px", borderBottom: "1px solid var(--fr-divider)", cursor: selectableRow ? "pointer" : "default", opacity: l.imported ? 0.55 : 1 }}>
                       <input type="checkbox" checked={selSet.has(l.id)} disabled={l.imported || !canEditProject} onChange={() => toggleLeak(l.id)} onClick={stop} style={{ width: 16, height: 16, accentColor: "var(--fr-accent)", cursor: selectableRow ? "pointer" : "default" }} />
+                      {/* Engine */}
                       <div style={{ minWidth: 0 }}>{sourceChip(l.source)}</div>
-                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.kind}</div>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="mono" title={l.subject} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.subject || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
-                        {(() => {
-                          const rl = resourceLabel(l);
-                          if (!rl) return null;
-                          const href = resourceLink(l);
-                          const st: CSSProperties = { fontSize: 11, color: href ? "var(--fr-accent-2)" : "var(--fr-text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2, display: "block", textDecoration: href ? "underline" : "none" };
-                          return href
-                            ? <a className="mono" href={href} target="_blank" rel="noreferrer" title={href} onClick={stop} style={st}>{rl}</a>
-                            : <div className="mono" title={rl} style={st}>{rl}</div>;
-                        })()}
-                      </div>
-                      {/* Значение маскируется; клик по глазу раскрывает (не выбирая строку). */}
+                      {/* Kind */}
+                      <div className="mono" style={{ minWidth: 0, fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.kind || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
+                      {/* Value — открыто (не маскируется), с копированием. subject как подпись. */}
                       <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
-                        <span className="mono" title={revealed ? l.value : undefined} style={{ minWidth: 0, fontSize: 12.5, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{revealed ? (l.value || "—") : CRED_MASK}</span>
-                        {l.value && <div className="actbtn" title={revealed ? t("Hide value") : t("Reveal value")} onClick={(e) => { stop(e); toggleLeakReveal(l.id); }}><Icon name={revealed ? "lock" : "eye"} size={14} /></div>}
+                        <div style={{ minWidth: 0 }}>
+                          <div className="mono" title={l.value || l.subject} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fr-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.value || l.subject || <span style={{ color: "var(--fr-text-faint)" }}>—</span>}</div>
+                          {l.value && l.subject && l.subject !== l.value && <div className="mono" title={l.subject} style={{ fontSize: 11, color: "var(--fr-text-faint)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.subject}</div>}
+                        </div>
+                        {(l.value || l.subject) && <div className="actbtn" title={t("Copy value")} onClick={(e) => { stop(e); copyText(l.value || l.subject, "Value"); }}><Icon name="copy" size={14} /></div>}
+                      </div>
+                      {/* Source — путь к файлу/ресурсу, где найдено (ссылка, если есть). */}
+                      <div style={{ minWidth: 0 }}>
+                        {rl
+                          ? (href
+                            ? <a className="mono" href={href} target="_blank" rel="noreferrer" title={href} onClick={stop} style={{ fontSize: 12, color: "var(--fr-accent-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "underline" }}>{rl}</a>
+                            : <div className="mono" title={rl} style={{ fontSize: 12, color: "var(--fr-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rl}</div>)
+                          : <span style={{ color: "var(--fr-text-faint)" }}>—</span>}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>{verifiedBadge(l.verified)}{importedBadge(l.imported)}</div>
                     </div>
                   );
                 })}
                 {filtered.length === 0 && (
-                  <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No leaks match this source filter.")}</div>
+                  <div style={{ padding: 44, textAlign: "center", color: "var(--fr-text-faint)", fontSize: 13.5 }}>{t("No leaks match these filters.")}</div>
                 )}
               </>
             )}
           </div>
 
-          {/* Действия: очистить (danger) и импортировать выбранное. */}
+          {/* Нижняя панель: импорт выбранного. Очистка переехала в корзину над таблицей. */}
           <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, padding: "14px 22px", borderTop: "1px solid var(--fr-divider)" }}>
-            <button className="clk" onClick={() => void clearLeaks()} disabled={busy || allLeaks.length === 0 || !canEditProject} style={{ height: 42, padding: "0 18px", border: "1px solid var(--fr-danger)", borderRadius: 11, background: "var(--fr-danger-soft, var(--fr-surface))", color: "var(--fr-danger)", font: "700 13px Inter,sans-serif", cursor: busy || allLeaks.length === 0 || !canEditProject ? "not-allowed" : "pointer", opacity: busy || allLeaks.length === 0 || !canEditProject ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <Icon name="trash" size={15} color="var(--fr-danger)" sw={2.2} />{state.leaksSource ? t("Clear source") : t("Clear all")}
-            </button>
             <div style={{ flex: 1 }} />
             {state.leaksSel.length > 0 && <span style={{ font: "600 12.5px Inter,sans-serif", color: "var(--fr-text-3)" }}>{state.leaksSel.length} {t("selected")}</span>}
             <button className="clk" onClick={() => void importLeaksSelected(state.leaksSel)} disabled={busy || state.leaksSel.length === 0 || !canEditProject} style={{ height: 42, padding: "0 22px", border: "none", borderRadius: 11, background: busy || state.leaksSel.length === 0 || !canEditProject ? "var(--fr-accent-muted)" : "var(--fr-accent)", color: "var(--fr-on-accent)", font: "700 13px Inter,sans-serif", cursor: busy || state.leaksSel.length === 0 || !canEditProject ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -8059,7 +8833,7 @@ export function FrostApp() {
 
           {/* Список: чекбокс select-all в шапке, по строке на объект. */}
           <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-            <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 22px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
+            <div style={{ display: "grid", gridTemplateColumns: grid, gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--fr-divider)", font: "700 11px Inter,sans-serif", letterSpacing: ".5px", color: "var(--fr-text-faint)", textTransform: "uppercase", position: "sticky", top: 0, background: "var(--fr-surface)", zIndex: 1 }}>
               <input type="checkbox" checked={allSel} onChange={toggleAll} disabled={filtered.length === 0} style={{ width: 16, height: 16, accentColor: "var(--fr-danger)", cursor: filtered.length ? "pointer" : "default" }} />
               <div>{cfg.col}</div>
             </div>
@@ -8634,6 +9408,9 @@ export function FrostApp() {
           </div>
         </div>
       )}
+
+      {/* attachment preview — click a finding's file to view it before downloading */}
+      {state.filePreview && <FilePreview file={state.filePreview} onClose={() => setState({ filePreview: null })} />}
     </div>
   );
 }

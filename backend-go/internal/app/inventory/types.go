@@ -97,6 +97,15 @@ type Endpoint struct {
 	UpdatedAt          time.Time
 }
 
+// EndpointRow — плоская строка постраничного списка эндпоинтов всего проекта
+// (project-wide /endpoints). Method — пустая строка, если колонка NULL.
+type EndpointRow struct {
+	ID     int32
+	HostID int32
+	Path   string
+	Method string
+}
+
 // ─────────────────────────── агрегаты дерева хоста ───────────────────────────
 
 // HostAggregate — хост с вложенными ip_addresses (→ ports → services) и endpoints.

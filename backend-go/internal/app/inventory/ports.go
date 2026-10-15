@@ -45,6 +45,9 @@ type Store interface {
 
 	// endpoints
 	ListEndpointsForHost(ctx context.Context, hostID int32) ([]Endpoint, error)
+	// ListEndpointsPage — постраничный плоский список эндпоинтов всего проекта
+	// (join hosts по host_id), сортировка по e.id. Возвращает страницу и общий счёт.
+	ListEndpointsPage(ctx context.Context, projectID int32, offset, limit int) ([]EndpointRow, int64, error)
 	ListEndpointsForHostOrdered(ctx context.Context, hostID int32) ([]Endpoint, error)
 	GetEndpointForHost(ctx context.Context, hostID, endpointID int32) (*Endpoint, error)
 	FindEndpointDup(ctx context.Context, hostID int32, path string, method *string, excludeID int32) (*Endpoint, error)

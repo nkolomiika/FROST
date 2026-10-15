@@ -104,6 +104,40 @@ func (q *Queries) ClearStagedJs(ctx context.Context, arg ClearStagedJsParams) (i
 	return result.RowsAffected(), nil
 }
 
+const countStagedEndpointsForJob = `-- name: CountStagedEndpointsForJob :one
+SELECT count(*) FROM recon_farm_staged_endpoints
+WHERE project_id = $1 AND job_id = $2
+`
+
+type CountStagedEndpointsForJobParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+func (q *Queries) CountStagedEndpointsForJob(ctx context.Context, arg CountStagedEndpointsForJobParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countStagedEndpointsForJob, arg.ProjectID, arg.JobID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countStagedJsForJob = `-- name: CountStagedJsForJob :one
+SELECT count(*) FROM recon_farm_staged_js
+WHERE project_id = $1 AND job_id = $2
+`
+
+type CountStagedJsForJobParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+}
+
+func (q *Queries) CountStagedJsForJob(ctx context.Context, arg CountStagedJsForJobParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countStagedJsForJob, arg.ProjectID, arg.JobID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteHiddenIPs = `-- name: DeleteHiddenIPs :exec
 DELETE FROM project_hidden_ips
 WHERE project_id = $1 AND ip_address = ANY($2::text[])
@@ -830,6 +864,57 @@ func (q *Queries) ListStagedEndpointsByIDs(ctx context.Context, arg ListStagedEn
 	return items, nil
 }
 
+const listStagedEndpointsForJobPage = `-- name: ListStagedEndpointsForJobPage :many
+SELECT id, project_id, job_id, host, url, method, source, imported, created_at
+FROM recon_farm_staged_endpoints
+WHERE project_id = $1 AND job_id = $2
+ORDER BY id
+LIMIT $4 OFFSET $3
+`
+
+type ListStagedEndpointsForJobPageParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+	Off       int32 `json:"off"`
+	Lim       int32 `json:"lim"`
+}
+
+// Страница staged-эндпоинтов одного прогона (для постраничного ревью), по id.
+func (q *Queries) ListStagedEndpointsForJobPage(ctx context.Context, arg ListStagedEndpointsForJobPageParams) ([]ReconFarmStagedEndpoint, error) {
+	rows, err := q.db.Query(ctx, listStagedEndpointsForJobPage,
+		arg.ProjectID,
+		arg.JobID,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedEndpoint{}
+	for rows.Next() {
+		var i ReconFarmStagedEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Host,
+			&i.Url,
+			&i.Method,
+			&i.Source,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStagedHosts = `-- name: ListStagedHosts :many
 SELECT id, project_id, job_id, hostname, ip, alive, source, ports, imported, created_at
 FROM recon_farm_staged_hosts
@@ -978,6 +1063,58 @@ type ListStagedJsByIDsParams struct {
 // Выбранные staged-находки JS проекта по id (для импорта). Скоуп проекта обязателен.
 func (q *Queries) ListStagedJsByIDs(ctx context.Context, arg ListStagedJsByIDsParams) ([]ReconFarmStagedJ, error) {
 	rows, err := q.db.Query(ctx, listStagedJsByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReconFarmStagedJ{}
+	for rows.Next() {
+		var i ReconFarmStagedJ
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.JobID,
+			&i.Host,
+			&i.Url,
+			&i.Kind,
+			&i.Value,
+			&i.Severity,
+			&i.Imported,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStagedJsForJobPage = `-- name: ListStagedJsForJobPage :many
+SELECT id, project_id, job_id, host, url, kind, value, severity, imported, created_at
+FROM recon_farm_staged_js
+WHERE project_id = $1 AND job_id = $2
+ORDER BY id
+LIMIT $4 OFFSET $3
+`
+
+type ListStagedJsForJobPageParams struct {
+	ProjectID int32 `json:"project_id"`
+	JobID     int32 `json:"job_id"`
+	Off       int32 `json:"off"`
+	Lim       int32 `json:"lim"`
+}
+
+// Страница staged-находок JS одного прогона (для постраничного ревью), по id.
+func (q *Queries) ListStagedJsForJobPage(ctx context.Context, arg ListStagedJsForJobPageParams) ([]ReconFarmStagedJ, error) {
+	rows, err := q.db.Query(ctx, listStagedJsForJobPage,
+		arg.ProjectID,
+		arg.JobID,
+		arg.Off,
+		arg.Lim,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -84,6 +84,9 @@ func (f *fakeStore) ProjectOriginHostMap(context.Context, int32) (map[string]int
 	return nil, nil
 }
 func (f *fakeStore) ListJsFiles(context.Context, int32) ([]JSFileView, error) { return nil, nil }
+func (f *fakeStore) ListJsFilesPage(context.Context, int32, int, int) ([]JSFileView, int64, error) {
+	return nil, 0, nil
+}
 func (f *fakeStore) JSFileURLs(context.Context, int32, *int32) ([]string, error) {
 	return nil, nil
 }
@@ -105,7 +108,7 @@ func (f *fakeStore) LatestFarmRunJobID(context.Context, int32) (int32, bool, err
 func (f *fakeStore) ListFarmRuns(context.Context, int32, int32) ([]FarmRunListItem, error) {
 	return nil, nil
 }
-func (f *fakeStore) DeleteFarmRunJob(context.Context, int32, int32) error { return nil }
+func (f *fakeStore) DeleteFarmRunJob(context.Context, int32, int32) error     { return nil }
 func (f *fakeStore) MarkStagedImported(context.Context, int32, []int32) error { return nil }
 func (f *fakeStore) ClearStagedHosts(context.Context, int32, int32) (int64, error) {
 	return 0, nil
@@ -116,6 +119,12 @@ func (f *fakeStore) ListStagedEndpoints(context.Context, int32, int32) ([]Staged
 }
 func (f *fakeStore) ListStagedEndpointsByIDs(context.Context, int32, []int32) ([]StagedEndpoint, error) {
 	return nil, nil
+}
+func (f *fakeStore) ListStagedEndpointsForJobPage(context.Context, int32, int32, int, int) ([]StagedEndpoint, error) {
+	return nil, nil
+}
+func (f *fakeStore) CountStagedEndpointsForJob(context.Context, int32, int32) (int64, error) {
+	return 0, nil
 }
 func (f *fakeStore) MarkStagedEndpointsImported(context.Context, int32, []int32) error { return nil }
 func (f *fakeStore) ClearStagedEndpoints(context.Context, int32, int32) (int64, error) {
@@ -130,6 +139,12 @@ func (f *fakeStore) ListStagedJs(context.Context, int32, int32) ([]StagedJs, err
 }
 func (f *fakeStore) ListStagedJsByIDs(context.Context, int32, []int32) ([]StagedJs, error) {
 	return nil, nil
+}
+func (f *fakeStore) ListStagedJsForJobPage(context.Context, int32, int32, int, int) ([]StagedJs, error) {
+	return nil, nil
+}
+func (f *fakeStore) CountStagedJsForJob(context.Context, int32, int32) (int64, error) {
+	return 0, nil
 }
 func (f *fakeStore) MarkStagedJsImported(context.Context, int32, []int32) error { return nil }
 func (f *fakeStore) ClearStagedJs(context.Context, int32, int32) (int64, error) {

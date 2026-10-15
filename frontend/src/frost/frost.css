@@ -137,7 +137,9 @@ html, body, #root {
 .frost .frostmd-input li > p { margin: 0; }
 .frost .frostmd-input blockquote { border-left: 3px solid var(--fr-border-strong); padding-left: 12px; margin: 8px 0; color: var(--fr-text-2); }
 .frost .frostmd-input code { background: var(--fr-divider); border-radius: 5px; padding: 1px 5px; font: 500 12.5px 'JetBrains Mono', ui-monospace, monospace; color: var(--fr-text-2); }
-.frost .frostmd-input pre { background: var(--fr-code-bg); color: var(--fr-code-text); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font: 500 12.5px 'JetBrains Mono', ui-monospace, monospace; }
+/* Код-блок в редакторе заметок/шагов следует теме (в светлой — светлый фон, а не
+   тёмно-синий): берём surface-токены, которые сами переключаются по теме. */
+.frost .frostmd-input pre { background: var(--fr-sunken); color: var(--fr-text-2); border: 1px solid var(--fr-divider); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font: 500 12.5px 'JetBrains Mono', ui-monospace, monospace; }
 .frost .frostmd-input pre code { background: none; color: inherit; padding: 0; }
 .frost .frostmd-input a { color: var(--fr-accent-2); text-decoration: underline; }
 .frost .frostmd-input hr { border: none; border-top: 1px solid var(--fr-border-light); margin: 12px 0; }

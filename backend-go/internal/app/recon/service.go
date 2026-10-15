@@ -149,6 +149,10 @@ func (s *Service) maybeInline(view JobView) {
 
 func (s *Service) createHostsJob(ctx context.Context, projectID, actorID int32, raw string) (JobView, error) {
 	targets, _ := reconnet.ParseTargets(raw)
+	// Заодно заводим и пробиваем регистрируемый корень каждого поддомена — чтобы
+	// основной домен стал реальным хостом со своим статусом/портами, а не пустой
+	// синтетической шапкой-группой в дереве.
+	targets = reconnet.WithRegistrableRoots(targets)
 	if len(targets) > s.settings.FarmMaxTargets {
 		return JobView{}, apperr.Validation(fmt.Sprintf("Слишком много хостов: %d (максимум %d)", len(targets), s.settings.FarmMaxTargets))
 	}

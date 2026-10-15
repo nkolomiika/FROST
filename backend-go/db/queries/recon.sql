@@ -262,6 +262,18 @@ FROM recon_farm_staged_endpoints
 WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id')
 ORDER BY id;
 
+-- name: ListStagedEndpointsForJobPage :many
+-- Страница staged-эндпоинтов одного прогона (для постраничного ревью), по id.
+SELECT id, project_id, job_id, host, url, method, source, imported, created_at
+FROM recon_farm_staged_endpoints
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id')
+ORDER BY id
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
+
+-- name: CountStagedEndpointsForJob :one
+SELECT count(*) FROM recon_farm_staged_endpoints
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id');
+
 -- name: ListStagedEndpointsByIDs :many
 -- Выбранные staged-эндпоинты проекта по id (для импорта). Скоуп проекта обязателен.
 SELECT id, project_id, job_id, host, url, method, source, imported, created_at
@@ -295,6 +307,18 @@ SELECT id, project_id, job_id, host, url, kind, value, severity, imported, creat
 FROM recon_farm_staged_js
 WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id')
 ORDER BY id;
+
+-- name: ListStagedJsForJobPage :many
+-- Страница staged-находок JS одного прогона (для постраничного ревью), по id.
+SELECT id, project_id, job_id, host, url, kind, value, severity, imported, created_at
+FROM recon_farm_staged_js
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id')
+ORDER BY id
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
+
+-- name: CountStagedJsForJob :one
+SELECT count(*) FROM recon_farm_staged_js
+WHERE project_id = sqlc.arg('project_id') AND job_id = sqlc.arg('job_id');
 
 -- name: ListStagedJsByIDs :many
 -- Выбранные staged-находки JS проекта по id (для импорта). Скоуп проекта обязателен.

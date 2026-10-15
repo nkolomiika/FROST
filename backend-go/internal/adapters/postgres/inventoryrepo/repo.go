@@ -498,6 +498,30 @@ func (r *Repo) ListEndpointsForHostOrdered(ctx context.Context, hostID int32) ([
 	return mapEndpoints(rows), nil
 }
 
+func (r *Repo) ListEndpointsPage(ctx context.Context, projectID int32, offset, limit int) ([]inventory.EndpointRow, int64, error) {
+	total, err := r.q.CountEndpointsForProject(ctx, projectID)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.q.ListEndpointsForProjectPage(ctx, sqlc.ListEndpointsForProjectPageParams{
+		ProjectID: projectID, Limit: int32(limit), Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]inventory.EndpointRow, 0, len(rows))
+	for _, row := range rows {
+		method := ""
+		if row.Method.Valid {
+			method = string(row.Method.HttpMethod)
+		}
+		out = append(out, inventory.EndpointRow{
+			ID: row.ID, HostID: row.HostID, Path: row.Path, Method: method,
+		})
+	}
+	return out, total, nil
+}
+
 func mapEndpoints(rows []sqlc.Endpoint) []inventory.Endpoint {
 	out := make([]inventory.Endpoint, 0, len(rows))
 	for _, row := range rows {
