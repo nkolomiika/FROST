@@ -29,6 +29,7 @@ type Deps struct {
 	Integrations  *IntegrationsHandler  // nil до подключения workspace-интеграций
 	Leaks         *LeaksHandler         // nil до подключения контекста leaks
 	Wordlists     *WordlistHandler      // nil до подключения контекста wordlists
+	Tasks         *TasksHandler         // nil до подключения контекста tasks (Jira)
 }
 
 // NewRouter собирает chi-роутер с базовыми middleware и служебными эндпоинтами.
@@ -85,6 +86,9 @@ func NewRouter(d Deps) http.Handler {
 	}
 	if d.Wordlists != nil {
 		d.Wordlists.Register(r)
+	}
+	if d.Tasks != nil {
+		d.Tasks.Register(r)
 	}
 
 	return r

@@ -51,6 +51,8 @@ import type {
   Vulnerability,
   VulnerabilityAsset,
   AgentApiToken,
+  JiraTask,
+  JiraTaskDetail,
 } from "./types";
 
 const api = axios.create({
@@ -1409,4 +1411,26 @@ export async function getAuditLogs(
 /** Удалить все JS-находки указанного хоста в проекте. */
 export async function deleteJsFilesForHost(projectId: number, hostId: number): Promise<void> {
   await api.delete(`/projects/${projectId}/js-files/hosts/${hostId}`);
+}
+
+// ── Jira «Tasks» (раздел Tasks) ──────────────────────────────────────────────
+// Бэкенд проксирует задачи Jira-проекта STS (read-only). Поиск по имени и фильтр
+// по категории статуса выполняются на бэкенде (JQL), но фронт также фильтрует
+// загруженную страницу на клиенте — как список уязвимостей.
+
+/** Список задач Jira (проект STS). category: "todo"|"inprogress"|"done"|"". */
+export async function getTasks(params: {
+  query?: string;
+  category?: string;
+  page?: number;
+  size?: number;
+} = {}): Promise<PaginatedResponse<JiraTask>> {
+  const { data } = await api.get<PaginatedResponse<JiraTask>>("/tasks", { params });
+  return data;
+}
+
+/** Полная карточка одной задачи Jira по ключу (напр. "STS-123"). */
+export async function getTask(key: string): Promise<JiraTaskDetail> {
+  const { data } = await api.get<JiraTaskDetail>(`/tasks/${encodeURIComponent(key)}`);
+  return data;
 }
