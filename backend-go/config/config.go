@@ -147,15 +147,15 @@ type Config struct {
 	ServicesMaxConcurrency       int     `env:"SERVICES_MAX_CONCURRENCY" envDefault:"6"`
 
 	// --- Scanner: поддомены ---
-	SubsCrtshEnabled              bool    `env:"SUBS_CRTSH_ENABLED" envDefault:"true"`
-	SubsCrtshTimeoutSeconds       float64 `env:"SUBS_CRTSH_TIMEOUT_SECONDS" envDefault:"30.0"`
-	SubsSubfinderEnabled          bool    `env:"SUBS_SUBFINDER_ENABLED" envDefault:"true"`
-	SubsSubfinderBin              string  `env:"SUBS_SUBFINDER_BIN" envDefault:"subfinder"`
-	SubsSubfinderTimeoutSeconds   float64 `env:"SUBS_SUBFINDER_TIMEOUT_SECONDS" envDefault:"120.0"`
+	SubsCrtshEnabled            bool    `env:"SUBS_CRTSH_ENABLED" envDefault:"true"`
+	SubsCrtshTimeoutSeconds     float64 `env:"SUBS_CRTSH_TIMEOUT_SECONDS" envDefault:"30.0"`
+	SubsSubfinderEnabled        bool    `env:"SUBS_SUBFINDER_ENABLED" envDefault:"true"`
+	SubsSubfinderBin            string  `env:"SUBS_SUBFINDER_BIN" envDefault:"subfinder"`
+	SubsSubfinderTimeoutSeconds float64 `env:"SUBS_SUBFINDER_TIMEOUT_SECONDS" envDefault:"120.0"`
 	SubsAssetfinderEnabled        bool    `env:"SUBS_ASSETFINDER_ENABLED" envDefault:"true"`
 	SubsAssetfinderBin            string  `env:"SUBS_ASSETFINDER_BIN" envDefault:"assetfinder"`
 	SubsAssetfinderTimeoutSeconds float64 `env:"SUBS_ASSETFINDER_TIMEOUT_SECONDS" envDefault:"120.0"`
-	SubsMaxResults                int     `env:"SUBS_MAX_RESULTS" envDefault:"100000"`
+	SubsMaxResults              int     `env:"SUBS_MAX_RESULTS" envDefault:"100000"`
 
 	// --- Scanner: скан портов (nmap) ---
 	PortscanEnabled        bool    `env:"PORTSCAN_ENABLED" envDefault:"true"`
@@ -178,20 +178,6 @@ type Config struct {
 	ReconDnsxBruteTimeoutSecs float64 `env:"RECON_DNSX_BRUTE_TIMEOUT_SECONDS" envDefault:"600.0"`
 	// Каталог тир-словарей в образе; пустой → адаптер берёт DefaultWordlistDir.
 	ReconWordlistDir string `env:"RECON_WORDLIST_DIR"`
-
-	// --- Jira (раздел Tasks) ---
-	// Проксирование задач из Jira (проект STS) в раздел Tasks. Все поля
-	// опциональны: пустые BaseURL/APIToken → адаптер отвечает ErrNotConfigured,
-	// роут существует, но сообщает «не настроено». JiraEmail задан → Jira Cloud
-	// (Basic email:token); пустой → Server/DC (Bearer PAT). JiraAPIVersion: "2"
-	// (Server/DC и старый Cloud) или "3" (Cloud).
-	JiraBaseURL        string  `env:"JIRA_BASE_URL"`
-	JiraEmail          string  `env:"JIRA_EMAIL"`
-	JiraAPIToken       string  `env:"JIRA_API_TOKEN"`
-	JiraProjectKey     string  `env:"JIRA_PROJECT_KEY" envDefault:"STS"`
-	JiraAPIVersion     string  `env:"JIRA_API_VERSION" envDefault:"2"`
-	JiraTimeoutSeconds float64 `env:"JIRA_TIMEOUT_SECONDS" envDefault:"15.0"`
-	JiraMaxResults     int     `env:"JIRA_MAX_RESULTS" envDefault:"50"`
 }
 
 // Load читает .env (если есть) и переменные окружения в Config.

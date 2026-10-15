@@ -25,7 +25,6 @@ import (
 	"github.com/nkolomiika/frost/config"
 	"github.com/nkolomiika/frost/db"
 	httpadapter "github.com/nkolomiika/frost/internal/adapters/http"
-	"github.com/nkolomiika/frost/internal/adapters/jira"
 	"github.com/nkolomiika/frost/internal/adapters/leaksink"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/agenttokenrepo"
 	"github.com/nkolomiika/frost/internal/adapters/postgres/auditrepo"
@@ -53,7 +52,6 @@ import (
 	"github.com/nkolomiika/frost/internal/app/projects"
 	"github.com/nkolomiika/frost/internal/app/recon"
 	"github.com/nkolomiika/frost/internal/app/report"
-	"github.com/nkolomiika/frost/internal/app/tasks"
 	"github.com/nkolomiika/frost/internal/app/users"
 	"github.com/nkolomiika/frost/internal/app/vulns"
 	"github.com/nkolomiika/frost/internal/app/wordlists"
@@ -210,22 +208,7 @@ func run() error {
 		}, nil),
 		authSvc, cfg.CSRFOrigins())
 
-	// Контекст tasks (раздел Tasks): задачи из Jira (проект STS), read-only.
-	// Клиент всегда конструируется — если Jira не настроена (пустые env), роут
-	// существует и отвечает понятным «не настроено» на вызове.
-	tasksHandler := httpadapter.NewTasksHandler(
-		tasks.NewService(jira.New(jira.Config{
-			BaseURL:    cfg.JiraBaseURL,
-			Email:      cfg.JiraEmail,
-			Token:      cfg.JiraAPIToken,
-			APIVersion: cfg.JiraAPIVersion,
-			ProjectKey: cfg.JiraProjectKey,
-			Timeout:    time.Duration(cfg.JiraTimeoutSeconds * float64(time.Second)),
-			MaxResults: cfg.JiraMaxResults,
-		}), tasks.Config{ProjectKey: cfg.JiraProjectKey}),
-		authSvc, cfg.CSRFOrigins())
-
-	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler, Reports: reportsHandler, Integrations: integrationsHandler, Leaks: leaksHandler, Wordlists: wordlistHandler, Tasks: tasksHandler})
+	router := httpadapter.NewRouter(httpadapter.Deps{Logger: logger, Auth: authHandler, Audit: auditHandler, AgentTokens: agentTokenHandler, Projects: projectsHandler, Inventory: inventoryHandler, Vulns: vulnsHandler, Users: usersHandler, AgentV2: agentV2Handler, Notifications: notificationsHandler, Recon: reconHandler, Reports: reportsHandler, Integrations: integrationsHandler, Leaks: leaksHandler, Wordlists: wordlistHandler})
 
 	addr := net.JoinHostPort(cfg.BackendHost, strconv.Itoa(cfg.BackendPort))
 	srv := &http.Server{
