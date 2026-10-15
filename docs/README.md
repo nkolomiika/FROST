@@ -4,38 +4,35 @@
 
 | Файл | Что это |
 |------|---------|
-| `openapi-v1.json` | OpenAPI 3.1 спецификация пользовательского API `/api/v1` (cookie-auth, 62 endpoint) |
-| `openapi-v2.json` | OpenAPI 3.1 спецификация machine API `/api/v2` для AI-агентов (bearer-auth, 6 endpoint) |
+| `openapi-v1.json` | OpenAPI 3.1 спецификация пользовательского API `/api/v1` (cookie-auth) |
+| `openapi-v2.json` | OpenAPI 3.1 спецификация machine API `/api/v2` для AI-агентов (bearer-auth) |
 
 Оба файла — `application/json`, можно импортировать в Postman / Insomnia / Bruno / Swagger UI / Stoplight и сравнивать diff'ом в PR.
 
-## Как пересоздать
+## Источник истины и кодогенерация
 
-После любого изменения роутеров или Pydantic-схем обновите файлы:
+> **Направление изменилось.** В Go-бэкенде `openapi-v{1,2}.json` — это **рукотворный контракт
+> и источник истины**, а не экспорт из кода. Серверные интерфейсы и типы генерируются ИЗ этих
+> файлов через [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen), а не наоборот.
 
-```bash
-# вариант 1: через docker-compose (поднимает только backend без БД)
-docker compose run --rm backend python -m scripts.export_openapi
+Порядок при изменении API:
 
-# вариант 2: локально, если установлен Python 3.12 и зависимости
-cd backend
-python -m scripts.export_openapi
-```
-
-Скрипт: [`backend/scripts/export_openapi.py`](../backend/scripts/export_openapi.py).
-
-При первом запуске нужно задать обязательные env-переменные
-(скрипт использует `pydantic-settings` для валидации конфига). Минимальный набор для
-генерации (без реального коннекта к БД/MinIO):
+1. Отредактируйте контракт — `docs/openapi-v1.json` (или `openapi-v2.json`) вручную.
+2. Перегенерируйте Go-код:
 
 ```bash
-export DATABASE_URL='postgresql+asyncpg://x:x@localhost:5432/x'
-export JWT_SECRET_KEY='dummy_key_for_export_only_min_32_chars'
-export MINIO_ENDPOINT='x:9000'
-export MINIO_ACCESS_KEY='x'
-export MINIO_SECRET_KEY='x'
-export MINIO_BUCKET_NAME='x'
+cd backend-go
+make oapi            # oapi-codegen по apiv1/cfg.yaml и apiv2/cfg.yaml
 ```
+
+3. Реализуйте/обновите хендлеры под новые сигнатуры, соберите и прогоните тесты:
+
+```bash
+make build && make test
+```
+
+Сгенерированные файлы (`internal/adapters/http/apiv{1,2}/*.gen.go`) руками не редактируются —
+только контракт и реализация хендлеров.
 
 ## Просмотр
 

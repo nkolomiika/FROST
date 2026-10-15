@@ -1,8 +1,11 @@
 # Правила разработки FROST
-## Pentest Collaboration Framework
+## Findings, Research, Offensive Security & Testing
 
 > Этот документ обязателен к прочтению перед началом работы над проектом.  
 > Соблюдение правил обязательно для всех участников команды разработки.
+>
+> Backend переписан на **Go 1.26** (гексагональная архитектура, `backend-go/`). Единственный
+> оставшийся Python — временный sidecar генерации Word-отчётов `report-sidecar`.
 
 ---
 
@@ -24,9 +27,9 @@ docs/*        ← только документация
 **Именование веток:**
 ```
 feature/vulnerability-import
-feature/report-pdf-generation
+feature/report-pp-landscape
 fix/jwt-refresh-token-expiry
-refactor/host-repository-cleanup
+refactor/inventory-repo-cleanup
 docs/api-endpoints-update
 ```
 
@@ -65,10 +68,10 @@ docs/api-endpoints-update
 **Примеры:**
 
 ```
-feat(vulnerabilities): добавить создание и редактирование уязвимости
+feat(vulns): добавить создание и редактирование уязвимости
 
 Реализован полный CRUD для уязвимостей.
-Добавлена валидация CVSS-скора (0.0-10.0) и полиморфная привязка к активам.
+Добавлена валидация CVSS-вектора и полиморфная привязка к активам.
 Аудит-лог записывается при каждой операции.
 
 Closes #42
@@ -79,7 +82,7 @@ fix(auth): исправить ошибку валидации истёкшего
 ```
 
 ```
-feat(websocket): добавить рассылку событий при CRUD операциях над хостами
+feat(recon): добавить DB-поллер рекон-джобов в cmd/recon-worker
 ```
 
 **Запрещено:**
@@ -99,7 +102,7 @@ git commit -m "update"
 - В описании PR обязательно указать: **что реализовано**, **как проверить**
 - PR требует ревью хотя бы одного другого разработчика перед мёржем
 - Нельзя мёрджить PR с незакрытыми замечаниями
-- Нельзя мёрджить PR, если упали тесты
+- Нельзя мёрджить PR, если упали тесты (`go test ./... -race`, `vitest`)
 
 ---
 
@@ -108,53 +111,47 @@ git commit -m "update"
 ## 2.1 Язык комментариев
 
 **Все комментарии пишутся на русском языке.**  
-Имена переменных, функций, классов — на английском (стандарт индустрии).
+Имена переменных, функций, типов — на английском (стандарт индустрии).
 
-```python
-# Хорошо
-# Проверяем доступ пользователя к проекту перед возвратом данных
-async def get_project(project_id: UUID, current_user: User) -> Project:
+```go
+// Хорошо
+// Проверяем доступ пользователя к проекту перед возвратом данных
+func (s *Service) GetProject(ctx context.Context, projectID int32, actor Actor) (Project, error) {
     ...
+}
 
-# Плохо
-# Check user access to project before returning data
-async def get_project(project_id: UUID, current_user: User) -> Project:
+// Плохо
+// Check user access to project before returning data
+func (s *Service) GetProject(ctx context.Context, projectID int32, actor Actor) (Project, error) {
     ...
+}
 ```
 
-## 2.2 Документация к методам (Docstring)
+## 2.2 Документация к экспортируемым идентификаторам (doc-комментарии)
 
-**Каждый публичный метод сервиса и репозитория обязан иметь docstring.**
+**Каждый экспортируемый тип, функция, метод use-case и репозитория обязан иметь
+doc-комментарий** (аналог прежних docstring'ов). По конвенции Go комментарий начинается
+с имени идентификатора.
 
-Формат для Python:
+Формат для Go:
 
-```python
-async def create_vulnerability(
-    self,
-    project_id: UUID,
-    data: VulnerabilityCreate,
-    current_user: User,
-) -> Vulnerability:
-    """
-    Создать новую уязвимость в проекте.
-
-    Проверяет, что пользователь является участником проекта.
-    После создания записывает событие в audit_log и рассылает
-    WebSocket-уведомление всем участникам проекта.
-
-    Args:
-        project_id: UUID проекта, к которому привязывается уязвимость.
-        data: Валидированные данные уязвимости (Pydantic-схема).
-        current_user: Текущий авторизованный пользователь.
-
-    Returns:
-        Созданный объект Vulnerability с заполненными полями.
-
-    Raises:
-        ForbiddenError: Если пользователь не является участником проекта.
-        NotFoundError: Если проект не существует.
-    """
+```go
+// CreateVulnerability создаёт новую уязвимость в проекте.
+//
+// Проверяет, что пользователь является участником проекта. После создания
+// записывает событие в audit_log и создаёт строки notifications для участников
+// (WebSocket-push отложен — см. TODO(phase2)).
+//
+// Возвращает apperr.Forbidden, если пользователь не участник проекта,
+// и apperr.NotFound, если проект не существует.
+func (s *Service) CreateVulnerability(
+    ctx context.Context,
+    projectID int32,
+    in CreateVulnerabilityInput,
+    actor Actor,
+) (Vulnerability, error) {
     ...
+}
 ```
 
 Формат для TypeScript:
@@ -163,13 +160,13 @@ async def create_vulnerability(
 /**
  * Загружает список уязвимостей проекта с пагинацией.
  *
- * @param projectId - UUID проекта
+ * @param projectId - ID проекта
  * @param params - Параметры фильтрации и пагинации
  * @returns Пагинированный список уязвимостей
  * @throws ApiError при ошибках сети или авторизации
  */
 async function getVulnerabilities(
-  projectId: string,
+  projectId: number,
   params: VulnerabilityListParams,
 ): Promise<PaginatedResponse<Vulnerability>> {
   ...
@@ -180,33 +177,35 @@ async function getVulnerabilities(
 
 **Комментируй «почему», а не «что»:**
 
-```python
-# Хорошо — объясняет причину решения
-# MinIO не поддерживает транзакции, поэтому сначала удаляем из БД,
-# а затем из хранилища. Если удаление из MinIO упадёт — вызываем rollback вручную.
-await file_repo.delete(file_id)
-await minio_client.delete(file.minio_key)
+```go
+// Хорошо — объясняет причину решения
+// MinIO не поддерживает транзакции, поэтому сначала удаляем из БД,
+// а затем из хранилища. Если удаление из MinIO упадёт — строка уже удалена
+// в рамках tx, поэтому делаем это после commit и логируем ошибку.
+if err := r.deleteFileRow(ctx, fileID); err != nil { ... }
+if err := s.storage.Delete(ctx, key); err != nil { ... }
 
-# Плохо — просто пересказывает код
-# Удаляем файл из репозитория
-await file_repo.delete(file_id)
-# Удаляем файл из MinIO
-await minio_client.delete(file.minio_key)
+// Плохо — просто пересказывает код
+// Удаляем файл из репозитория
+r.deleteFileRow(ctx, fileID)
+// Удаляем файл из MinIO
+s.storage.Delete(ctx, key)
 ```
 
 **Не оставляй мёртвый код — удаляй его:**
 
-```python
-# Запрещено — закомментированный код без пояснений
-# old_result = await legacy_service.get(id)
-result = await new_service.get(id)
+```go
+// Запрещено — закомментированный код без пояснений
+// oldResult, _ := legacyService.Get(ctx, id)
+result, err := newService.Get(ctx, id)
 ```
 
 **TODO и FIXME должны содержать имя автора и описание:**
 
-```python
-# TODO(nikita): добавить кэширование результата после внедрения Redis
-# FIXME(ivan): временное решение, до рефакторинга импорта (#87)
+```go
+// TODO(nikita): добавить кэширование результата после внедрения Redis
+// FIXME(ivan): временное решение, до рефакторинга импорта (#87)
+// TODO(phase2): push уведомления по WebSocket (строки notifications уже создаются)
 ```
 
 ---
@@ -215,231 +214,235 @@ result = await new_service.get(id)
 
 ## 3.1 Аутентификация и авторизация
 
-- Каждый эндпоинт **явно** указывает требуемую роль через Dependency Injection — не полагаться на «неявную» защиту
-- Проверка прав выполняется **на уровне сервиса**, а не только на уровне роутера
-- Никогда не возвращать `password_hash` в ответах API — использовать схемы ответа без этого поля
-- JWT-секрет и все секреты — только из переменных окружения, никогда в коде
+- Каждый роут **явно** навешивает требуемую проверку через middleware (`requireAuth`,
+  `requireAdmin`, `requireProjectAccessFor`) — не полагаться на «неявную» защиту
+- Проверка прав выполняется **на уровне use-case**, а не только в HTTP-слое
+- Никогда не возвращать `password_hash` в ответах API — использовать отдельные DTO ответа
+- JWT-секрет и все секреты — только из переменных окружения (пакет `config`), никогда в коде
 
-```python
-# Хорошо
-@router.get("/projects/{project_id}")
-async def get_project(
-    project_id: UUID,
-    project: Project = Depends(require_project_access),  # явная проверка доступа
-):
-    return project
+```go
+// Хорошо — доступ проверяется явным middleware, хендлер делегирует use-case
+r.With(requireProjectAccessFor(authz)).Get("/projects/{projectID}", h.getProject)
 
-# Запрещено — авторизация не указана явно
-@router.get("/projects/{project_id}")
-async def get_project(project_id: UUID):
-    return await project_repo.get(project_id)  # любой может получить любой проект
+func (h *Handler) getProject(w http.ResponseWriter, r *http.Request) {
+    project := projectFromContext(r.Context()) // уже проверен middleware
+    writeJSON(w, http.StatusOK, toProjectDTO(project))
+}
+
+// Запрещено — доступ не проверяется, любой может получить любой проект
+r.Get("/projects/{projectID}", func(w http.ResponseWriter, r *http.Request) {
+    p, _ := repo.GetProject(r.Context(), pathInt32(r, "projectID"))
+    writeJSON(w, http.StatusOK, p)
+})
 ```
 
 ## 3.2 Валидация входных данных
 
-- **Всегда** валидировать входные данные через Pydantic-схемы на бэкенде
-- Максимальные длины строк — указывать явно в схемах (`max_length`)
-- Числовые диапазоны — ограничивать через `ge`, `le` в Pydantic
-- Файлы — проверять MIME-тип по содержимому (`python-magic`), а не только по расширению
+- Входные DTO генерируются из OpenAPI-контракта (`oapi-codegen`); дополнительная
+  доменная валидация — явными функциями в `internal/app/<ctx>` (например
+  `internal/app/auth/validate.go`)
+- Максимальные длины строк и диапазоны чисел проверять явно (регэкспы/границы),
+  не полагаться только на типы
+- Файлы — проверять MIME-тип **по содержимому** (`http.DetectContentType` + ручная
+  проверка WEBP `RIFF....WEBP`), а не только по расширению
 
-```python
-class VulnerabilityCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=500)
-    cvss_score: float | None = Field(None, ge=0.0, le=10.0)
-    severity: Literal["critical", "high", "medium", "low", "info"]
+```go
+var (
+    usernameRe   = regexp.MustCompile(`^[A-Za-z0-9._-]{3,100}$`)
+    errBadUser   = apperr.Validation("Некорректное имя пользователя")
+    errBadPass   = apperr.Validation("Пароль должен быть от 8 до 128 символов")
+)
 
-    @validator("cvss_vector")
-    def validate_cvss_vector(cls, v, values):
-        # Проверяем соответствие вектора выбранной версии CVSS
-        if v and values.get("cvss_version") == "3.1":
-            if not v.startswith("CVSS:3.1/"):
-                raise ValueError("Вектор должен начинаться с CVSS:3.1/")
-        return v
+// validateCredentials проверяет имя пользователя и длину пароля.
+func validateCredentials(username, password string) error {
+    if !usernameRe.MatchString(username) {
+        return errBadUser
+    }
+    if n := len(password); n < 8 || n > 128 {
+        return errBadPass
+    }
+    return nil
+}
 ```
 
 ## 3.3 Работа с БД — защита от SQL-инъекций
 
-- Использовать **только параметризованные запросы** через SQLAlchemy ORM или `text()` с bind-параметрами
-- Никогда не форматировать SQL-строку через f-string или `.format()`
+- Использовать **только** sqlc-сгенерированные типизированные запросы поверх pgx
+  (параметры всегда биндятся, не интерполируются)
+- Никогда не собирать SQL-строку через `fmt.Sprintf`/конкатенацию с пользовательским вводом
+- Динамические фильтры — через `sqlc.narg`/условия в самом `.sql`-запросе, а не строкой
 
-```python
-# Хорошо
-result = await db.execute(
-    select(Vulnerability).where(Vulnerability.project_id == project_id)
-)
+```go
+// Хорошо — типизированный запрос из db/queries/*.sql, параметр биндится
+vulns, err := q.ListVulnerabilitiesByProject(ctx, projectID)
 
-# Хорошо (raw SQL с параметрами)
-result = await db.execute(
-    text("SELECT * FROM vulnerabilities WHERE project_id = :pid"),
-    {"pid": str(project_id)},
-)
+// Хорошо — динамический фильтр описан в .sql через sqlc.narg
+logs, err := q.ListAuditLogs(ctx, sqlc.ListAuditLogsParams{
+    EntityType: pgtype.Text{String: "project", Valid: true},
+})
 
-# ЗАПРЕЩЕНО — SQL-инъекция
-query = f"SELECT * FROM vulnerabilities WHERE project_id = '{project_id}'"
-result = await db.execute(text(query))
+// ЗАПРЕЩЕНО — SQL-инъекция
+sql := fmt.Sprintf("SELECT id FROM vulnerabilities WHERE project_id = %d", projectID)
+rows, _ := pool.Query(ctx, sql)
 ```
 
 ## 3.4 Хранение секретов
 
-- Секреты — только в `.env` файлах, которые добавлены в `.gitignore`
-- В репозитории хранить только `.env.example` с пустыми значениями
+- Секреты — только в `.env` файлах, добавленных в `.gitignore` (`.env`, `.env.prod`)
+- В репозитории хранить только `.env.example` / `.env.prod.example` с пустыми значениями
 - Никогда не логировать токены, пароли, ключи API
+- Секреты интеграций хранятся Fernet-совместимо зашифрованными (ключ =
+  urlsafe_b64(sha256(jwt_secret_key)))
 
-```python
-# ЗАПРЕЩЕНО
-logger.info(f"Пользователь авторизован, токен: {access_token}")
+```go
+// ЗАПРЕЩЕНО
+slog.Info("пользователь авторизован", "token", accessToken)
 
-# Хорошо
-logger.info(f"Пользователь {user.username} успешно авторизован")
+// Хорошо
+slog.Info("пользователь успешно авторизован", "username", user.Username)
 ```
 
 ## 3.5 Защита от распространённых атак
 
 | Угроза | Реализация защиты |
 |---|---|
-| SQL Injection | Только ORM / параметризованные запросы |
-| XSS | Токены в `httpOnly` cookie — JavaScript не имеет к ним доступа. Sanitize HTML если используется markdown-рендер |
-| CSRF | Cookie с атрибутом `SameSite=Strict` + проверка заголовка `Origin` на бэкенде для мутирующих запросов |
-| Brute Force | Rate limiting на `/auth/login` (например, slowapi) |
-| Path Traversal | Никогда не использовать пользовательский ввод в путях файлов; ключ MinIO генерировать на сервере |
-| Mass Assignment | Использовать отдельные схемы для Create/Update — никогда не передавать dict из request напрямую в модель |
-| IDOR | Проверять принадлежность ресурса к проекту, а не только существование по ID |
-| Утечка токена | Токен никогда не попадает в тело ответа, URL, логи — только через `Set-Cookie` заголовок |
+| SQL Injection | Только sqlc-типизированные/параметризованные запросы поверх pgx |
+| XSS | Токены в `HttpOnly` cookie — JavaScript не имеет к ним доступа. Whitelist URL в Markdown-рендере (`http/https/mailto` + `data:image/...`) |
+| CSRF | Cookie `SameSite=Strict` + проверка заголовка `Origin` на бэкенде (`enforceCSRF`) для мутирующих методов |
+| Brute Force | (рекомендовано) rate limiting на nginx/reverse proxy перед `/auth/login` |
+| Path Traversal | Никогда не использовать пользовательский ввод в путях файлов; ключ MinIO генерировать на сервере (`{uuid4}-{sanitized_name}`) |
+| Mass Assignment | Отдельные DTO для Create/Update — никогда не писать произвольный map из запроса прямо в модель |
+| IDOR | `requireProjectAccessFor` проверяет принадлежность ресурса проекту на каждый запрос (403, не 404) |
+| Утечка токена | Токен никогда не попадает в тело ответа, URL, логи — только через `Set-Cookie` |
+| SSRF (рекон-ферма) | `internal/adapters/recon/netguard`: блок-лист loopback/private/link-local/169.254.169.254 + повторная DNS-валидация перед запросом (DNS-rebind) + `follow_redirects=false` |
 
-**Пример защиты от IDOR:**
+**Пример защиты от IDOR (запрос всегда скоупится проектом):**
 
-```python
-async def get_vulnerability(vuln_id: UUID, project_id: UUID, db) -> Vulnerability:
-    """
-    Получаем уязвимость только в рамках конкретного проекта,
-    чтобы пользователь не мог получить данные чужого проекта,
-    зная только ID уязвимости.
-    """
-    vuln = await db.execute(
-        select(Vulnerability).where(
-            Vulnerability.id == vuln_id,
-            Vulnerability.project_id == project_id,  # ← обязательная проверка
-        )
-    )
-    if not vuln:
-        raise NotFoundError("Уязвимость не найдена")
-    return vuln
+```go
+// GetVulnerability возвращает уязвимость только в рамках конкретного проекта,
+// чтобы пользователь не мог получить данные чужого проекта, зная только ID.
+func (r *Repo) GetVulnerability(ctx context.Context, projectID, vulnID int32) (Vulnerability, error) {
+    row, err := r.q.GetVulnerabilityInProject(ctx, sqlc.GetVulnerabilityInProjectParams{
+        ID:        vulnID,
+        ProjectID: projectID, // ← обязательная проверка принадлежности
+    })
+    if errors.Is(err, pgx.ErrNoRows) {
+        return Vulnerability{}, apperr.NotFound("Уязвимость не найдена")
+    }
+    return toVulnerability(row), err
+}
 ```
 
 ---
 
 # 4. Масштабируемость и архитектура
 
-## 4.1 Не нарушать слои архитектуры
+## 4.1 Не нарушать слои (гексагональная архитектура)
 
 ```
-Router  → только HTTP: принять запрос, вернуть ответ
-Service → только бизнес-логика
-Repository → только работа с БД
+internal/adapters/http   → только HTTP: распарсить запрос, вызвать use-case, отдать ответ
+internal/app/<ctx>       → только бизнес-логика (use-cases), зависит от портов
+internal/domain/<ctx>    → сущности и порты (интерфейсы), без внешних зависимостей
+internal/adapters/postgres/<ctx>repo → только работа с БД (реализация порта Store)
 ```
 
-```python
-# ЗАПРЕЩЕНО в роутере — бизнес-логика не место здесь
-@router.post("/vulnerabilities")
-async def create_vulnerability(data: VulnerabilityCreate, db = Depends(get_db)):
-    vuln = Vulnerability(**data.dict())
-    db.add(vuln)
-    await db.commit()
-    return vuln
+```go
+// ЗАПРЕЩЕНО в HTTP-слое — бизнес-логика и прямой доступ к БД здесь не место
+func (h *Handler) createVulnerability(w http.ResponseWriter, r *http.Request) {
+    var dto apiv1.VulnerabilityCreate
+    json.NewDecoder(r.Body).Decode(&dto)
+    row, _ := h.pool.Exec(r.Context(), "INSERT INTO vulnerabilities ...")
+    writeJSON(w, 201, row)
+}
 
-# Хорошо — роутер делегирует сервису
-@router.post("/vulnerabilities", status_code=201)
-async def create_vulnerability(
-    data: VulnerabilityCreate,
-    project: Project = Depends(require_project_access),
-    service: VulnerabilityService = Depends(get_vulnerability_service),
-    current_user: User = Depends(get_current_user),
-):
-    return await service.create_vulnerability(project.id, data, current_user)
+// Хорошо — хендлер делегирует use-case
+func (h *Handler) createVulnerability(w http.ResponseWriter, r *http.Request) {
+    var dto apiv1.VulnerabilityCreate
+    if err := decodeJSON(r, &dto); err != nil { writeErr(w, err); return }
+    v, err := h.vulns.CreateVulnerability(r.Context(), projectFromContext(r.Context()).ID, fromDTO(dto), actorFrom(r))
+    if err != nil { writeErr(w, err); return }
+    writeJSON(w, http.StatusCreated, toVulnerabilityDTO(v))
+}
 ```
 
 ## 4.2 Не хардкодить константы
 
-Все конфигурационные значения выносить в `config.py` из переменных окружения:
+Все конфигурационные значения выносить в пакет `config` (чтение из env):
 
-```python
-# ЗАПРЕЩЕНО
-MAX_FILE_SIZE = 52428800  # встречаться в коде не должно
-JWT_EXPIRE = 30
+```go
+// ЗАПРЕЩЕНО
+const maxFileSize = 52428800 // не должно встречаться в коде
+const jwtExpire = 30
 
-# Хорошо
-# config.py
-class Settings(BaseSettings):
-    max_file_size_bytes: int = 52_428_800      # 50 МБ
-    jwt_access_expire_minutes: int = 30
-    jwt_refresh_expire_days: int = 30
-    allowed_mime_types: list[str] = [
-        "image/png", "image/jpeg", "image/gif", "image/webp",
-        "text/plain", "application/pdf", "application/xml",
-        "application/json", "application/zip",
-    ]
-
-settings = Settings()
+// Хорошо — config/config.go, значения из env с дефолтами
+type Config struct {
+    MaxFileSizeBytes       int64         `env:"MAX_FILE_SIZE_BYTES" envDefault:"52428800"` // 50 МБ
+    JWTAccessExpire        time.Duration `env:"JWT_ACCESS_EXPIRE" envDefault:"30m"`
+    JWTRefreshExpire       time.Duration `env:"JWT_REFRESH_EXPIRE" envDefault:"720h"`
+    AllowedMIMETypes       []string      // png/jpeg/gif/webp/plain/pdf/xml/json/zip
+}
 ```
 
 ## 4.3 Не дублировать логику (DRY)
 
-Общая логика — в базовые классы, хелперы или декораторы:
+Общая логика — в middleware, хелперы или общие пакеты:
 
-```python
-# Проверка доступа к проекту — одна функция, используется везде
-async def require_project_access(
-    project_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> Project:
-    """
-    Dependency: проверяет доступ пользователя к проекту.
-    Admin видит все проекты. Pentester — только назначенные.
-    """
-    ...
+```go
+// Проверка доступа к проекту — одно middleware, используется везде.
+// Admin видит все проекты; pentester — только те, где он участник (иначе 403).
+func requireProjectAccessFor(authz Authorizer) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            project, err := authz.ProjectForActor(r.Context(), pathInt32(r, "projectID"), actorFrom(r))
+            if err != nil { writeErr(w, err); return }
+            next.ServeHTTP(w, r.WithContext(withProject(r.Context(), project)))
+        })
+    }
+}
 ```
 
-## 4.4 Асинхронность
+## 4.4 Конкурентность и блокирующие операции
 
-- Весь I/O (БД, MinIO, сеть) — только `async/await`
-- Не использовать синхронные блокирующие вызовы внутри async-функций
-- Для CPU-heavy задач (генерация PDF) — использовать `asyncio.run_in_executor`
+- Внешний I/O (БД, MinIO, сеть) всегда принимает `context.Context` — отмена и таймауты
+  пробрасываются сквозь все слои
+- Параллельный рекон — через `errgroup` + `golang.org/x/sync/semaphore` (ограничение
+  параллелизма), а не неограниченные горутины
+- CPU-тяжёлая генерация Word-отчётов вынесена во внешний процесс — Python-sidecar
+  `report-sidecar` (Go-API обращается к нему по HTTP), event loop'а нет
 
-```python
-# Генерация PDF — блокирующая операция, выносим в executor
-async def generate_pdf(self, content: str) -> bytes:
-    """Генерирует PDF в пуле потоков, не блокируя event loop."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, self._sync_generate_pdf, content)
+```go
+// Ограниченный параллелизм рекон-пробов
+g, ctx := errgroup.WithContext(ctx)
+sem := semaphore.NewWeighted(maxParallel)
+for _, target := range targets {
+    target := target
+    if err := sem.Acquire(ctx, 1); err != nil { break }
+    g.Go(func() error { defer sem.Release(1); return probe(ctx, target) })
+}
+err := g.Wait()
 ```
 
 ## 4.5 Единая обработка ошибок
 
-Централизованный обработчик исключений — не разбрасывать `raise HTTPException` по всему коду:
+Доменные ошибки — через пакет `internal/apperr`; HTTP-слой маппит их в статус-коды
+централизованно, а не рассыпает `http.Error` по коду:
 
-```python
-# exceptions.py — кастомные исключения
-class PCFError(Exception):
-    """Базовое исключение приложения."""
+```go
+// internal/apperr — доменные ошибки с «видом»
+func NotFound(msg string) error   { return &Error{Kind: KindNotFound, Msg: msg} }
+func Forbidden(msg string) error  { return &Error{Kind: KindForbidden, Msg: msg} }
+func Conflict(msg string) error   { return &Error{Kind: KindConflict, Msg: msg} }
+func Validation(msg string) error { return &Error{Kind: KindValidation, Msg: msg} }
 
-class NotFoundError(PCFError):
-    pass
-
-class ForbiddenError(PCFError):
-    pass
-
-class ConflictError(PCFError):
-    pass
-
-# main.py — централизованный обработчик
-@app.exception_handler(NotFoundError)
-async def not_found_handler(request, exc):
-    return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-@app.exception_handler(ForbiddenError)
-async def forbidden_handler(request, exc):
-    return JSONResponse(status_code=403, content={"detail": str(exc)})
+// HTTP-слой — единый маппинг kind → статус + тело {"detail": "..."}
+func writeErr(w http.ResponseWriter, err error) {
+    var ae *apperr.Error
+    status := http.StatusInternalServerError
+    if errors.As(err, &ae) {
+        status = ae.HTTPStatus() // 400/403/404/409/422
+    }
+    writeJSON(w, status, map[string]string{"detail": userMessage(err)})
+}
 ```
 
 ---
@@ -450,19 +453,19 @@ async def forbidden_handler(request, exc):
 
 Инструменты запускаются автоматически (pre-commit hook или CI):
 
-**Backend (Python):**
+**Backend (Go):**
 
 | Инструмент | Назначение |
 |---|---|
-| `ruff` | Линтер (заменяет flake8, isort, pyupgrade) |
-| `black` | Форматирование кода |
-| `mypy` | Статическая типизация |
+| `gofmt` / `goimports` | Форматирование и порядок импортов |
+| `go vet` | Статический анализ ошибок |
+| `golangci-lint` | Металинтер (staticcheck, errcheck, ineffassign и др.) |
 
 ```bash
-# Запустить перед коммитом
-ruff check .
-black .
-mypy app/
+# Запустить перед коммитом (из backend-go/)
+gofmt -l .
+go vet ./...
+golangci-lint run          # make lint
 ```
 
 **Frontend (TypeScript):**
@@ -471,7 +474,7 @@ mypy app/
 |---|---|
 | `eslint` | Линтер |
 | `prettier` | Форматирование |
-| `typescript` | Проверка типов |
+| `tsc` | Проверка типов |
 
 ```bash
 npm run lint
@@ -483,37 +486,33 @@ npm run type-check
 
 ## 5.2 Типизация
 
-- В Python: **обязательные аннотации типов** для всех аргументов и возвращаемых значений публичных методов
-- В TypeScript: **запрещено использовать `any`** без явного комментария-обоснования
-- Pydantic-схемы — для всех входящих и исходящих данных API (не `dict`)
+- Go статически типизирован — не терять типы: избегать `interface{}`/`any`, кроме
+  действительно динамических границ (JSON-поля, generic-хелперы) с комментарием-обоснованием
+- DTO запросов/ответов — всегда сгенерированные из OpenAPI типы, не `map[string]any`
+- В TypeScript: **запрещено `any`** без явного комментария-обоснования
 
-```python
-# Хорошо
-async def get_by_id(self, vuln_id: UUID) -> Vulnerability | None:
-    ...
+```go
+// Хорошо
+func (r *Repo) GetByID(ctx context.Context, vulnID int32) (*Vulnerability, error) { ... }
 
-# Плохо
-async def get_by_id(self, vuln_id):
-    ...
+// Плохо — теряется типобезопасность
+func (r *Repo) GetByID(ctx context.Context, vulnID any) (any, error) { ... }
 ```
 
 ## 5.3 Тесты
 
 - Каждая новая функциональность сопровождается тестами
-- Минимальное покрытие сервисного слоя: **70%**
-- Используй фикстуры для БД (тестовая БД, не production)
-- Тесты не должны обращаться к реальному MinIO — использовать mock
+- Юнит-тесты use-case'ов — табличные, с in-memory реализациями портов (Store/Tokens/Cipher/Storage)
+- Тесты не должны ходить в реальный MinIO/SMTP — использовать stub-реализации портов
+- DB-поведение (tx, SQL-фильтры, merge при импорте) покрывается env-gated e2e против
+  одноразового `postgres:16-alpine`
 
 ```
-tests/
-├── unit/                # Тесты сервисов с замоканными репозиториями
-│   ├── test_auth_service.py
-│   ├── test_vulnerability_service.py
-│   └── ...
-├── integration/         # Тесты роутеров с тестовой БД
-│   ├── test_auth_api.py
-│   └── ...
-└── conftest.py          # Фикстуры: тестовый клиент, тестовая БД, тестовые пользователи
+backend-go/
+├── internal/app/<ctx>/*_test.go           # табличные юнит-тесты use-case'ов (in-memory порты)
+├── internal/adapters/security/*_test.go    # JWT/bcrypt/Fernet/TOTP round-trip
+├── internal/adapters/cvss/*_test.go        # CVSS 4.0 против эталонных векторов
+└── internal/adapters/http/*_e2e_test.go    # DB-backed e2e (по флагу FROST_TEST_DATABASE_URL)
 ```
 
 ---
@@ -522,29 +521,29 @@ tests/
 
 ## 6.1 Что логировать
 
-```python
-import logging
-logger = logging.getLogger(__name__)
+Структурное логирование через `log/slog`:
 
-# Логировать — запуск ключевых операций и их результат
-logger.info("Пользователь %s создал уязвимость %s в проекте %s", user.username, vuln.id, project.id)
-logger.warning("Неудачная попытка входа для пользователя: %s", username)
-logger.error("Ошибка при удалении файла из MinIO: %s", exc, exc_info=True)
+```go
+import "log/slog"
 
-# НЕ логировать
-logger.debug(f"token={access_token}")   # секреты
-logger.debug(f"password={password}")    # секреты
+// Логировать — запуск ключевых операций и их результат
+slog.Info("создана уязвимость", "user", user.Username, "vuln_id", v.ID, "project_id", p.ID)
+slog.Warn("неудачная попытка входа", "username", username)
+slog.Error("ошибка удаления файла из MinIO", "err", err, "key", key)
+
+// НЕ логировать секреты
+slog.Debug("token", "value", accessToken) // ЗАПРЕЩЕНО
+slog.Debug("password", "value", password) // ЗАПРЕЩЕНО
 ```
 
 ## 6.2 Уровни логирования
 
 | Уровень | Когда |
 |---|---|
-| `DEBUG` | Детали для отладки (только в dev-окружении) |
-| `INFO` | Ключевые бизнес-события (вход, создание, изменение статуса) |
-| `WARNING` | Нестандартные ситуации, не являющиеся ошибкой |
-| `ERROR` | Ошибки, требующие внимания (падение внешнего сервиса и т.д.) |
-| `CRITICAL` | Критические сбои системы |
+| `Debug` | Детали для отладки (только в dev-окружении) |
+| `Info` | Ключевые бизнес-события (вход, создание, изменение статуса) |
+| `Warn` | Нестандартные ситуации, не являющиеся ошибкой |
+| `Error` | Ошибки, требующие внимания (падение внешнего сервиса и т.д.) |
 
 ---
 
@@ -552,65 +551,83 @@ logger.debug(f"password={password}")    # секреты
 
 ## 7.1 Миграции
 
-- Все изменения схемы БД — **только через Alembic-миграции**
+- Все изменения схемы БД — **только через goose-миграции** (`db/migrations/*.sql`)
+- Миграции применяются автоматически на старте `cmd/api`
 - Никогда не изменять БД вручную в prod
-- Каждая миграция должна содержать описание: что изменено и зачем
-- Миграции должны быть **обратимыми** (иметь `downgrade`)
+- Каждая миграция должна быть **обратимой**: секции `-- +goose Up` и `-- +goose Down`
 
-```python
-# migrations/versions/20240101_add_notifications_table.py
-"""Добавить таблицу notifications для in-app уведомлений об @-упоминаниях
+```sql
+-- db/migrations/00007_add_notifications.sql
+-- Добавить таблицу notifications для in-app уведомлений
 
-Revision ID: abc123
-"""
+-- +goose Up
+CREATE TABLE notifications ( ... );
 
-def upgrade():
-    op.create_table("notifications", ...)
-
-def downgrade():
-    op.drop_table("notifications")
+-- +goose Down
+DROP TABLE notifications;
 ```
+
+После изменения схемы/запросов — перегенерировать типы: `make sqlc`.
 
 ## 7.2 N+1 запросы
 
-- Использовать `joinedload` / `selectinload` для связанных объектов вместо lazy loading
-- При разработке включать логирование SQL-запросов (`echo=True`) и проверять их количество
+- ORM и ленивой загрузки нет — связи выбираются явными запросами. Избегать N+1,
+  формируя SQL с JOIN или батч-выборкой по списку id (`= ANY($1)`), а не запросом на
+  каждой итерации
+- При разработке проверять число запросов на горячих путях (список уязвимостей, экспорт отчёта)
 
-```python
-# Хорошо — один запрос с JOIN
-result = await db.execute(
-    select(Vulnerability)
-    .options(selectinload(Vulnerability.assets))
-    .options(selectinload(Vulnerability.files))
-    .where(Vulnerability.project_id == project_id)
-)
+```go
+// Хорошо — связанные активы выбираются одним батч-запросом по списку vuln_id
+assets, _ := q.ListAssetsForVulns(ctx, vulnIDs) // WHERE vulnerability_id = ANY($1)
+byVuln := groupBy(assets, func(a Asset) int32 { return a.VulnerabilityID })
 
-# Плохо — N+1: для каждой уязвимости будет отдельный запрос за assets
-vulns = await db.execute(select(Vulnerability).where(...))
-for vuln in vulns:
-    assets = vuln.assets  # <- вызывает запрос на каждой итерации
+// Плохо — N+1: отдельный запрос за активами на каждую уязвимость
+for _, v := range vulns {
+    v.Assets, _ = q.ListAssetsForVuln(ctx, v.ID) // ← запрос на каждой итерации
+}
+```
+
+## 7.3 Транзакции
+
+Составные операции (запись сущности + аудит + уведомление) выполнять в одной транзакции
+через хелпер репозитория:
+
+```go
+err := r.tx(ctx, func(q *sqlc.Queries) error {
+    v, err := q.CreateVulnerability(ctx, params)
+    if err != nil { return err }
+    if err := q.InsertAuditLog(ctx, auditFor(v)); err != nil { return err }
+    return q.InsertNotifications(ctx, notificationsFor(v))
+})
 ```
 
 ---
 
 # 8. Переменные окружения и конфигурация
 
-- В репозитории хранить только `.env.example` с описанием всех переменных (без значений)
-- `.env` — в `.gitignore`, никогда не коммитить
-- Все секреты читаются через `pydantic.BaseSettings` — с валидацией типов при старте
+- В репозитории хранить только `.env.example` / `.env.prod.example` с описанием всех
+  переменных (без значений)
+- `.env`, `.env.prod` — в `.gitignore`, никогда не коммитить
+- Все секреты читаются пакетом `config` при старте — с валидацией
 - При отсутствии обязательной переменной окружения приложение **не должно стартовать** (fail fast)
 
-```python
-class Settings(BaseSettings):
-    jwt_secret_key: str                      # обязательная — упадёт если не задана
-    database_url: str
-    minio_access_key: str
-    debug: bool = False
+```go
+// config/config.go — загрузка и валидация при старте
+type Config struct {
+    JWTSecretKey   string `env:"JWT_SECRET_KEY,required"` // мин. 32 символа — иначе fail
+    DatabaseURL    string `env:"DATABASE_URL,required"`
+    MinioAccessKey string `env:"MINIO_ACCESS_KEY,required"`
+    Debug          bool   `env:"DEBUG" envDefault:"false"`
+}
 
-    class Config:
-        env_file = ".env"
-
-settings = Settings()  # при старте — валидация всех переменных
+func Load() (Config, error) {
+    var c Config
+    if err := env.Parse(&c); err != nil { return c, err }
+    if len(c.JWTSecretKey) < 32 {
+        return c, errors.New("JWT_SECRET_KEY должен быть не короче 32 символов")
+    }
+    return c, nil
+}
 ```
 
 ---
@@ -620,16 +637,16 @@ settings = Settings()  # при старте — валидация всех п�
 Ревьюер проверяет:
 
 - [ ] Нет хардкода секретов, URL, констант
-- [ ] Все публичные методы задокументированы
+- [ ] Все экспортируемые идентификаторы задокументированы doc-комментарием
 - [ ] Комментарии на русском языке
-- [ ] Покрытие тестами добавлено
-- [ ] Нет нарушений слоёв архитектуры (SQL в роутере, HTTP в репозитории)
+- [ ] Покрытие тестами добавлено (юнит и/или e2e)
+- [ ] Нет нарушений слоёв архитектуры (SQL в HTTP-слое, HTTP в репозитории)
 - [ ] Нет N+1 запросов
 - [ ] Входные данные валидируются
-- [ ] Права доступа проверяются явно
+- [ ] Права доступа проверяются явно (middleware + use-case)
 - [ ] Нет закомментированного кода без объяснения
-- [ ] Миграция БД добавлена (если изменена схема)
-- [ ] Линтер проходит без ошибок
+- [ ] Миграция goose добавлена (если изменена схема), `make sqlc` выполнен
+- [ ] `go vet` и `golangci-lint` проходят без ошибок
 
 ---
 
@@ -637,19 +654,23 @@ settings = Settings()  # при старте — валидация всех п�
 
 | Запрещено | Почему | Альтернатива |
 |---|---|---|
-| `SELECT *` в запросах | Нагрузка, утечка лишних полей | Явно перечислять нужные колонки |
-| Бизнес-логика в роутере | Нарушение слоёв, несовместимость с тестами | Вынести в Service |
-| SQL через f-string | SQL-инъекция | ORM / параметризованные запросы |
-| Секреты в коде | Утечка при компрометации репозитория | `.env` + `BaseSettings` |
-| `except Exception: pass` | Скрывает ошибки | Логировать и пробрасывать далее |
-| Мутация глобального состояния | Непредсказуемое поведение | Dependency Injection |
-| `time.sleep()` в async-коде | Блокирует event loop | `asyncio.sleep()` |
-| Прямое обращение к `request.json()` в сервисе | Нарушение слоёв | Передавать Pydantic-схему |
-| Хранение токена в `localStorage` или `sessionStorage` | XSS-уязвимость: JS имеет доступ к хранилищу | Только `httpOnly` cookie, выставляемая сервером |
-| Передача токена в URL (`?token=...`) | Токен попадает в логи сервера и историю браузера | Cookie передаётся автоматически браузером |
-| Ручная установка `Authorization: Bearer` | Нарушает принятую архитектуру (cookie-based) | `withCredentials: true` — браузер сам отправляет cookie |
+| `SELECT *` в запросах | Нагрузка, утечка лишних полей | Явный список колонок в `db/queries/*.sql` |
+| Бизнес-логика в HTTP-слое | Нарушение слоёв, несовместимость с тестами | Вынести в use-case `internal/app/<ctx>` |
+| SQL через `fmt.Sprintf`/конкатенацию | SQL-инъекция | sqlc / параметризованные запросы |
+| Секреты в коде | Утечка при компрометации репозитория | `.env` + пакет `config` |
+| Проглоченная ошибка (`_ = err`, пустой `if err != nil {}`) | Скрывает сбои | Обработать, обернуть (`fmt.Errorf("...: %w", err)`) и пробросить |
+| Мутация глобального состояния | Непредсказуемое поведение | Внедрение зависимостей через конструкторы в `cmd/api` |
+| Горутина без ограничения/отмены | Утечки, перегрузка цели | `errgroup` + `semaphore`, проброс `context` |
+| `panic` в обычном потоке запроса | Падение обработчика | Вернуть `error` (apperr) и смаппить в статус |
+| Декодирование JSON напрямую в доменную модель | Нарушение слоёв, mass assignment | Декодировать в DTO, затем маппить |
+| Хранение токена в `localStorage`/`sessionStorage` | XSS: JS имеет доступ к хранилищу | Только `HttpOnly` cookie, выставляемая сервером |
+| Передача токена в URL (`?token=...`) | Токен попадает в логи и историю браузера | Cookie передаётся браузером автоматически |
+| Ручная установка `Authorization: Bearer` для `/api/v1` | Нарушает cookie-архитектуру | `withCredentials: true` — браузер сам шлёт cookie |
 | `any` в TypeScript без обоснования | Теряется типизация | Явный тип или `unknown` |
 | Коммит в `main` напрямую | Нарушение Git Flow | Только через PR |
+
+> `Authorization: Bearer` допустим и обязателен **только** для machine-API `/api/v2`
+> (агентские токены) — это отдельный контур аутентификации.
 
 ---
 
@@ -658,23 +679,24 @@ settings = Settings()  # при старте — валидация всех п�
 Прежде чем открыть Pull Request, убедись:
 
 **Код:**
-- [ ] Линтер не выдаёт ошибок (`ruff`, `mypy` / `eslint`, `tsc`)
-- [ ] Код отформатирован (`black` / `prettier`)
-- [ ] Все публичные методы задокументированы
+- [ ] Линтер не выдаёт ошибок (`go vet`, `golangci-lint` / `eslint`, `tsc`)
+- [ ] Код отформатирован (`gofmt`/`goimports` / `prettier`)
+- [ ] Все экспортируемые идентификаторы задокументированы
 - [ ] Комментарии на русском языке
 
 **Git:**
 - [ ] Ветка создана от актуального `develop`
 - [ ] Коммит содержит тип, область и описание на русском
-- [ ] Нет лишних файлов (`.env`, `__pycache__`, `node_modules`)
+- [ ] Нет лишних файлов (`.env`, `.env.prod`, бинарников сборки, `node_modules`)
 
 **Функциональность:**
 - [ ] Реализованное поведение соответствует требованиям в `TASK.md`
-- [ ] Написаны тесты на новую логику
-- [ ] Если изменена схема БД — добавлена Alembic-миграция с `upgrade` и `downgrade`
+- [ ] Написаны тесты на новую логику (`go test ./... -race` зелёный)
+- [ ] Если изменена схема БД — добавлена goose-миграция с `Up`/`Down` и выполнен `make sqlc`
+- [ ] Если изменён API-контракт — обновлены `docs/openapi-v{1,2}.json` и выполнен `make oapi`
 - [ ] Проверена авторизация: нельзя получить чужие данные
 
 **Безопасность:**
 - [ ] Нет хардкода секретов
-- [ ] Входные данные валидируются через схемы
+- [ ] Входные данные валидируются через DTO/доменные валидаторы
 - [ ] Нет SQL через строковое форматирование

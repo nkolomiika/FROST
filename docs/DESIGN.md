@@ -14,9 +14,12 @@ The product is **FROST — Findings, Research, Offensive Security & Testing**: a
 
 ---
 
+
+
 ## AESTHETIC DIRECTION
 
 Commit to this aesthetic: **industrial-terminal meets modern SaaS** — think Vercel Dashboards crossed with a monochrome hacker terminal. Key traits:
+
 - Dark theme, near-black backgrounds (`#0a0a0b`), subtle cool-gray surfaces
 - Monospace font for all data-dense elements (IPs, CVEs, port numbers, CVSS vectors)
 - A single accent color — deep red (`#dc2626`) used exclusively for critical severity badges, danger actions, and primary CTAs
@@ -24,8 +27,9 @@ Commit to this aesthetic: **industrial-terminal meets modern SaaS** — think Ve
 - No rounded corners on tables, sharp 2px borders on interactive elements
 - Severity colors strictly follow industry standard: Critical=red, High=orange, Medium=yellow, Low=blue, Info=gray
 
-
 ---
+
+
 
 ## TECH STACK
 
@@ -39,19 +43,29 @@ Commit to this aesthetic: **industrial-terminal meets modern SaaS** — think Ve
 
 ---
 
+
+
 ## APPLICATION STRUCTURE
 
+
+
 ### Routes
-| Path | Page | Access |
-|---|---|---|
-| `/login` | LoginPage | Public |
-| `/projects` | ProjectsPage | All authenticated |
-| `/projects/:projectId` | ProjectDetailPage | Project member or admin |
+
+
+| Path                                           | Page                    | Access                  |
+| ---------------------------------------------- | ----------------------- | ----------------------- |
+| `/login`                                       | LoginPage               | Public                  |
+| `/projects`                                    | ProjectsPage            | All authenticated       |
+| `/projects/:projectId`                         | ProjectDetailPage       | Project member or admin |
 | `/projects/:projectId/vulnerabilities/:vulnId` | VulnerabilityDetailPage | Project member or admin |
-| `/admin/users` | UsersPage | Admin only |
-| `/admin/audit` | AuditLogsPage | Admin only |
+| `/admin/users`                                 | UsersPage               | Admin only              |
+| `/admin/audit`                                 | AuditLogsPage           | Admin only              |
+
+
+
 
 ### Global Layout (authenticated pages)
+
 ```
 ┌─────────────────────────────────────────────────────┐
 │ TopBar: [FROST logo] [breadcrumb] [🔔 badge] [user] │
@@ -63,11 +77,14 @@ Commit to this aesthetic: **industrial-terminal meets modern SaaS** — think Ve
 ```
 
 Sidebar items:
+
 - Projects (all roles)
 - Users (admin only)
 - Audit Log (admin only)
 
 ---
+
+
 
 ## DATA MODELS (from DB schema — use these exact types)
 
@@ -202,9 +219,12 @@ interface Notification {
 
 ---
 
+
+
 ## SCREENS TO DESIGN
 
 Design each screen below. For each screen provide:
+
 1. **Full JSX component** (TypeScript, functional, with mock data inline)
 2. **Inline comments** explaining every key UX decision
 3. **State variants** where relevant: loading skeleton, empty state, error state
@@ -212,11 +232,14 @@ Design each screen below. For each screen provide:
 
 ---
 
+
+
 ### SCREEN 1 — LoginPage (`/login`)
 
 **Context:** Entry point. The system is closed — no registration link. Admin creates accounts.
 
 **Requirements:**
+
 - Username + Password fields (not email — users log in by username)
 - "Sign in" button — POST /api/v1/auth/login with `withCredentials: true`
 - On 401 — show "Invalid credentials" inline (not toast)
@@ -228,11 +251,14 @@ Design each screen below. For each screen provide:
 
 ---
 
+
+
 ### SCREEN 2 — ProjectsPage (`/projects`)
 
 **Context:** Landing page after login. Pentesters see only their projects. Admins see all.
 
 **Layout:**
+
 ```
 [Header: "Projects"]  [+ New Project (admin only)]
 [Filter tabs: All | Active | Completed | Archived]
@@ -240,6 +266,7 @@ Design each screen below. For each screen provide:
 ```
 
 **Each project card must show:**
+
 - Project name (large, monospace)
 - Status badge: active=green, completed=gray, archived=dimmed
 - Date range (start — end) or "No deadline"
@@ -250,10 +277,13 @@ Design each screen below. For each screen provide:
 **Empty state:** "No projects assigned. Contact your administrator."
 
 **Admin extras:**
+
 - "+ New Project" button → opens Dialog with form
 - Project card has "⋮" menu: Edit, Archive, Delete
 
 ---
+
+
 
 ### SCREEN 3 — ProjectDetailPage (`/projects/:projectId`)
 
@@ -267,12 +297,14 @@ Design each screen below. For each screen provide:
 ```
 
 **Tab: Overview**
+
 - Stats row: Total hosts, Open vulns, Critical vulns, Fixed vulns (4 stat cards)
 - Severity distribution donut chart (or horizontal bar)
 - Status distribution bar: open / in_progress / fixed / wont_fix / accepted_risk
 - Recent activity feed (last 10 WebSocket events in project)
 
 **Tab: Hosts**
+
 - Toolbar: [Search by IP/hostname] [+ Add Host] [Import JSON]
 - Table columns: IP Address | Hostname | OS | Status (up/down/unknown) | Ports | Endpoints | Actions
 - Expandable row: clicking a host row expands it to show ports tree:
@@ -289,6 +321,7 @@ Design each screen below. For each screen provide:
 - "+ Add Port" and "+ Add Endpoint" inline within expanded row
 
 **Tab: Vulnerabilities**
+
 - Toolbar: [Search] [Filter: severity ▾] [Filter: status ▾] [+ Add Vulnerability]
 - Table columns: Severity | Title | CVSS | Status | Assets | Files | Comments | Created | Actions
 - Severity column: colored icon + label (Critical/High/Medium/Low/Info)
@@ -298,16 +331,20 @@ Design each screen below. For each screen provide:
 - Pagination controls at bottom
 
 **Tab: Members (admin only)**
+
 - List of members: Avatar | Username | Role | Added date | Remove button
 - "+ Add Member" → dropdown/autocomplete to search existing users
 
 ---
+
+
 
 ### SCREEN 4 — VulnerabilityDetailPage (`/projects/:projectId/vulnerabilities/:vulnId`)
 
 **Context:** Full vulnerability record — the most information-dense page.
 
 **Layout (two-column on desktop):**
+
 ```
 Left column (60%):           Right column (40%):
 ──────────────────           ───────────────────
@@ -325,23 +362,27 @@ Comments section (full width below)
 **Severity badge:** When severity is Critical — show pulsing red dot animation.
 
 **CVSS section:**
+
 - Large number (e.g. "9.8") in accent color
 - Version selector: v3.1 / v4.0 toggle
 - Vector field: monospace, inline edit
 - Visual CVSS score bar (0-10 color gradient: green→yellow→red)
 
 **Linked Assets section (right column):**
+
 - Each asset shown as a chip: `[host] 192.168.1.1` or `[endpoint] POST /api/login`
 - "+ Link Asset" → opens modal with tree selector (Host → Port → Service / Endpoint)
 - Clicking an asset chip highlights it / navigates to host context
 
 **Files section:**
+
 - Grid of file thumbnails (images shown as preview, other types as icon + filename)
 - Drag-and-drop upload zone with dotted border
 - On hover: overlay with Download and Delete icons
 - Max file size: 50MB — show progress bar on upload
 
 **Comments section (full width, below both columns):**
+
 - Chronological list of comments
 - Each comment: Avatar | Username (monospace) | Timestamp | Content | Edit/Delete (own only)
 - @mentions highlighted in accent color
@@ -352,9 +393,12 @@ Comments section (full width below)
 
 ---
 
+
+
 ### SCREEN 5 — UsersPage (`/admin/users`) — Admin only
 
 **Layout:**
+
 ```
 [Heading: "Users"]  [+ Create User]
 [Table: Username | Email | Role | Status | Created | Actions]
@@ -368,17 +412,22 @@ Comments section (full width below)
 
 ---
 
+
+
 ### SCREEN 6 — AuditLogsPage (`/admin/audit`) — Admin only
 
 **Context:** Security audit trail. Append-only. Read-only view.
 
 **Layout:**
+
 - Filters bar: [User dropdown] [Action type] [Entity type] [Date range picker]
 - Table (dense, monospace for key fields):
 
-| Timestamp | User | Action | Entity | Details | IP |
-|---|---|---|---|---|---|
+
+| Timestamp        | User   | Action        | Entity        | Details      | IP       |
+| ---------------- | ------ | ------------- | ------------- | ------------ | -------- |
 | 2024-01-01 14:32 | nikita | STATUS_CHANGE | vulnerability | open → fixed | 10.0.0.1 |
+
 
 - Action badge colors: LOGIN=blue, CREATE=green, UPDATE=yellow, DELETE=red, STATUS_CHANGE=purple
 - "Details" column: renders JSONB details field inline (collapsed, click to expand)
@@ -386,11 +435,14 @@ Comments section (full width below)
 
 ---
 
+
+
 ### SCREEN 7 — Notifications Panel (global, in TopBar)
 
 **Context:** Bell icon in TopBar. Click → slide-in panel from right.
 
 **Panel:**
+
 - Header: "Notifications" + "Mark all as read"
 - List: each notification = type 'mention':
   - "@ivan mentioned you in: **SQL Injection in login form**"
@@ -401,6 +453,8 @@ Comments section (full width below)
 - Unread badge count on bell icon (WebSocket-updated in real time)
 
 ---
+
+
 
 ## REUSABLE DESIGN SYSTEM COMPONENTS
 
@@ -424,9 +478,12 @@ PaginationBar          — props: total, page, size, onPageChange.
 
 ---
 
+
+
 ## WEBSOCKET INTEGRATION NOTE
 
 Implement a `useProjectWebSocket(projectId)` hook that:
+
 1. Connects to `WS /ws/projects/{projectId}` (cookie auth — no token param)
 2. On `event: "created" | "updated" | "deleted"` for any entity → invalidate relevant queries (use react-query or update Zustand store)
 3. On `event: "notification"` → push to notification store, increment unread count badge
@@ -435,9 +492,12 @@ Implement a `useProjectWebSocket(projectId)` hook that:
 
 ---
 
+
+
 ## OUTPUT FORMAT
 
 For each screen:
+
 ```
 ## [Screen Name]
 
@@ -450,17 +510,11 @@ For each screen:
 ```
 
 ### Sub-components to extract
+
 - ComponentName — purpose
+
 ```
 
 ---
+```
 
-## RULES
-
-- Every component must compile (no missing imports, correct TypeScript)
-- Use Tailwind classes only (no inline styles except for dynamic values like CVSS score width)
-- All mock data must be realistic: real-looking IPs, CVE-style titles, real CVSS vectors
-- Accessibility: all interactive elements have aria-labels, keyboard navigation works
-- No `any` TypeScript types
-- Comment every non-obvious design decision
-- After all screens, write a `DESIGN_DECISIONS.md` section summarising 5 architectural choices made and why

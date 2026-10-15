@@ -156,19 +156,21 @@ FROST — корпоративная закрытая платформа для 
 
 | Сервис | Назначение |
 |--------|------------|
-| `frontend` | SPA на React + TypeScript (Vite), HTTPS на порту 3000 |
-| `backend` | REST API `/api/v1`, `/api/v2`, WebSocket — FastAPI (uvicorn, порт 8000) |
+| `frontend` | SPA на React + TypeScript (Vite) за nginx с TLS, HTTPS на порту 3000 |
+| `backend` | REST API `/api/v1`, `/api/v2`, WebSocket — Go (chi), порт 8000; на старте применяет миграции и создаёт стартового администратора |
+| `report-sidecar` | Генерация Word-отчётов (.docx) — временный Python-сервис (единственный оставшийся Python-компонент) |
 | `db` | СУБД PostgreSQL 16 — доменные данные и журнал аудита |
 | `minio` | S3-совместимое хранилище для файлов и аватаров |
-| `rabbitmq` | Брокер очередей сообщений (очередь отправки e-mail) |
-| `mail-worker` | Sidecar-процесс отправки писем по SMTP |
+| `rabbitmq` | Брокер очередей сообщений (опциональный путь масштабирования) |
+| `mail-worker` | Go-процесс отправки писем по SMTP — поллер таблицы `mail_jobs` |
+| `recon-worker` | Go-процесс рекон-фермы — поллер очереди задач в БД |
 | `mailpit` (dev) | Перехват исходящих писем в среде разработки |
 
 #### 1.4.1.2. Численность и квалификация персонала
 
 - Администратор: знание основ администрирования Linux/Docker, знание JSON;
 - Пентестер: знание методологий пентеста, владение интерфейсом веб-приложений;
-- Разработчик (сопровождение продукта): Python 3.12 / FastAPI / SQLAlchemy /
+- Разработчик (сопровождение продукта): Go 1.26 / chi / pgx + sqlc /
   TypeScript / React.
 
 #### 1.4.1.3. Показатели назначения
@@ -197,12 +199,12 @@ FROST — корпоративная закрытая платформа для 
   (`admin`, `password`, `12345678`);
 - bcrypt для паролей пользователей;
 - SHA-256 для хранения хэшей refresh-токенов и agent-токенов;
-- File uploads — проверка реального MIME через `python-magic`,
-  whitelist допустимых типов, sanitization имени;
+- File uploads — проверка реального MIME через `http.DetectContentType`
+  (+ ручной разбор WEBP), whitelist допустимых типов, sanitization имени;
 
 #### 1.4.1.6. Эргономика и техническая эстетика
 
-- Веб-интерфейс на базе MUI 6 (Material Design);
+- Веб-интерфейс собран на обычном DOM и `frost.css` (кастомная дизайн-система, без MUI);
 - Поддержка тёмной / светлой тем (см. [DESIGN.md](DESIGN.md));
 - Real-time обновление списков и счётчиков через WebSocket
   (без принудительного refresh страницы);
@@ -217,7 +219,7 @@ FROST — корпоративная закрытая платформа для 
 
 - Развёртывание через `docker compose up --build`;
 - Конфигурация через `.env` (см. `.env.example`);
-- Применение миграций Alembic при необходимости;
+- Миграции goose применяются автоматически при старте `cmd/api` (при необходимости — вручную через `goose`);
 - Логи доступны через `docker logs <service>`;
 - Метрики: стандартный healthcheck `GET /health`.
 
@@ -245,7 +247,7 @@ FROST — корпоративная закрытая платформа для 
 #### 1.4.1.12. Патентная чистота
 
 Используются только свободно распространяемые open-source-компоненты
-(FastAPI/Pydantic/SQLAlchemy/React/MUI/MinIO/RabbitMQ/PostgreSQL/python-docx
+(Go/chi/pgx/sqlc/React/MinIO/RabbitMQ/PostgreSQL/python-docx (sidecar)
 и др.) под совместимыми лицензиями (MIT/Apache 2.0/PostgreSQL License и т.п.).
 
 #### 1.4.1.13. Стандартизация и унификация
@@ -306,7 +308,7 @@ FROST — корпоративная закрытая платформа для 
 | Технический проект | Разделы 2–13 настоящего документа + [API_PROCESSES.md](API_PROCESSES.md) |
 | Рабочая документация | Разделы 14–17 настоящего документа |
 | Ввод в действие | Развёртывание через `docker compose`; bootstrap admin |
-| Сопровождение АС | Поправки через миграции Alembic, обновления `.env`, обновление образов |
+| Сопровождение АС | Поправки через миграции goose, обновления `.env`, обновление образов |
 
 ## 1.6. Порядок контроля и приёмки системы
 
@@ -366,11 +368,11 @@ FROST — корпоративная закрытая платформа для 
 Архитектура системы — клиент-серверная с разделением на:
 
 - **Front-end** — одностраничное приложение (SPA) на React 18 + TypeScript;
-- **Back-end** — приложение на FastAPI с двумя API-поверхностями (`/api/v1`
-  для веб-клиента и `/api/v2` для AI-агентов) и WebSocket-каналами;
+- **Back-end** — приложение на Go (chi), гексагональная архитектура, с двумя
+  API-поверхностями (`/api/v1` для веб-клиента и `/api/v2` для AI-агентов) и WebSocket-каналами;
 - **Хранилища** — PostgreSQL (структурированные данные и журнал аудита),
   MinIO (бинарные данные: аватары пользователей, файлы доказательной базы);
-- **Шина сообщений** — RabbitMQ + sidecar mail-worker для асинхронной отправки писем;
+- **Фоновые процессы** — Go-воркеры `mail-worker` и `recon-worker`, читающие долговечные очереди-таблицы в PostgreSQL (`mail_jobs` и задачи рекон-фермы); RabbitMQ — опциональный путь масштабирования;
 
 ```mermaid
 flowchart LR
@@ -381,38 +383,37 @@ flowchart LR
     Frontend -- "/api, /ws (proxy)" --> Backend
     Agent -- "HTTPS /api/v2 (Bearer)" --> Backend
 
-    Backend -- "asyncpg" --> Postgres[(PostgreSQL)]
-    Backend -- "S3 SDK" --> MinIO[(MinIO)]
-    Backend -- "AMQP publish" --> Rabbit[(RabbitMQ)]
+    Backend -- "pgx" --> Postgres[(PostgreSQL)]
+    Backend -- "minio-go" --> MinIO[(MinIO)]
+    Backend -- "INSERT mail_jobs" --> Postgres
 
-    Rabbit -- "AMQP consume" --> MailWorker[mail-worker]
+    Postgres -- "poll mail_jobs" --> MailWorker[mail-worker]
     MailWorker -- "SMTP" --> SMTP[(SMTP / Mailpit)]
 ```
 
 ## 3.2. Структура программного комплекса
 
-### 3.2.1. Backend (плоская структура)
+### 3.2.1. Backend (гексагональная структура)
 
 См. [ARCH.md](ARCH.md). Кратко:
 
-- `app/main.py` — точка входа FastAPI, монтирование роутеров, error handlers,
-  startup-инициализация (создание схемы БД, расширение enum'ов, bootstrap-admin);
-- `app/config.py` — Pydantic Settings (загружаются из `.env`);
-- `app/database.py` — async-движок и `async_sessionmaker`;
-- `app/dependencies.py` — `get_current_user`, `require_admin`,
-  `require_project_access`, `enforce_csrf`, `get_agent_token_context`,
-  `require_agent_scope`, `require_agent_project_access`;
-- `app/models.py` — все ORM-модели одним файлом;
-- `app/schemas.py` — все Pydantic-схемы (request/response);
-- `app/services.py` — сервисный слой (бизнес-логика);
-- `app/security.py` — bcrypt, JWT, SHA-256 для refresh- и agent-токенов;
-- `app/ws_manager.py` — менеджер WebSocket-подключений;
-- `app/messaging.py` — публикация сообщений в RabbitMQ;
-- `app/mail.py` — рендеринг шаблонов писем;
-- `app/routers/` — REST-роутеры по доменам;
-- `app/reports/` — генерация Word-отчётов;
-- `app/storage/minio_client.py` — клиент MinIO;
-- `app/worker/mail_worker.py` — sidecar отправки писем.
+- `cmd/api` — точка входа HTTP-сервера (composition root): применение миграций goose,
+  bootstrap стартового администратора, монтирование роутеров и middleware;
+- `cmd/mail-worker`, `cmd/recon-worker` — точки входа фоновых воркеров (поллеры БД);
+- `config/` — загрузка настроек из env;
+- `internal/domain/<контекст>` — сущности и порты (без внешних зависимостей);
+- `internal/app/<контекст>` — сценарии (use-cases) по ограниченным контекстам
+  (auth, users, projects, inventory, vulns, notifications, recon, reports, audit, agenttokens);
+- `internal/adapters/http` — HTTP-хендлеры из oapi-codegen и middleware
+  (аутентификация по cookie-JWT, `requireAdmin`, доступ к проекту, CSRF по Origin,
+  Bearer-контекст и scope для `/api/v2`);
+- `internal/adapters/postgres/<ctx>repo` — репозитории поверх sqlc + pgxpool;
+- `internal/adapters/security` — bcrypt, JWT, SHA-256 для refresh- и agent-токенов, TOTP;
+- `internal/adapters/storage` — клиент MinIO (minio-go);
+- `internal/adapters/cvss` — расчёт CVSS 3.1/4.0;
+- `internal/adapters/{mail,messaging,ws,recon,report}` — почта, RabbitMQ, WebSocket,
+  рекон-ферма и генерация отчётов (через `report-sidecar`);
+- `db/{migrations,queries}` — goose-миграции и sqlc-запросы.
 
 ### 3.2.2. Frontend
 
@@ -429,15 +430,18 @@ flowchart LR
 
 ### 3.3.1. Выбор стека
 
-- **FastAPI** — современный асинхронный Python-фреймворк, нативная поддержка
-  OpenAPI, простая интеграция с Pydantic;
-- **SQLAlchemy 2 async** — стандартный ORM Python с поддержкой `asyncio`;
+- **Go (chi)** — компилируемый язык и минималистичный HTTP-роутер; строгая типизация,
+  предсказуемая конкурентность, единый статически слинкованный бинарь;
+- **pgx + sqlc** — типобезопасный доступ к PostgreSQL по рукописным SQL-запросам (без ORM);
+- **goose** — версионируемые SQL-миграции, применяются на старте `cmd/api`;
+- **oapi-codegen** — генерация серверных интерфейсов и типов из контракта OpenAPI
+  (`docs/openapi-v{1,2}.json` — поддерживается вручную как источник истины);
 - **PostgreSQL** — зрелая реляционная СУБД, наличие JSONB, full-text search,
   поддержка ENUM-типов;
 - **MinIO** — S3-совместимое хранилище для контента, не требующее облака;
-- **RabbitMQ** — корпоративный стандарт для асинхронной обработки;
-- **React 18 + Vite 6** — современный фронтенд-стек;
-- **MUI 6** — готовая дизайн-система Material Design.
+- **RabbitMQ** — опциональный путь масштабирования для многоинстансного развёртывания;
+- **React 18 + Vite 6** — современный фронтенд-стек; интерфейс собран на обычном DOM
+  и `frost.css` (без MUI; прежний UI на MUI в `src/pages/` не используется).
 
 ### 3.3.2. Плоская структура backend
 
@@ -575,13 +579,13 @@ Backend намеренно реализован без Repository pattern — с
 
 ## 6.2. Организация информационной базы
 
-- Доступ к БД — только через сервисный слой backend'а через `AsyncSession`;
-- Доступ к MinIO — через `MinioStorage` (`backend/app/storage/minio_client.py`);
+- Доступ к БД — только через слой репозиториев backend'а (sqlc + pgxpool);
+- Доступ к MinIO — через адаптер хранилища (`internal/adapters/storage`, minio-go);
 - Транзакционность: операции, изменяющие более одной таблицы (например,
   загрузка файла = `files` + объект MinIO), выполняются с проверкой
   целостности на уровне приложения;
 - Удаление файлов: при удалении записи `files` приложение обязано
-  также удалить объект из MinIO (см. `FileService.delete`).
+  также удалить объект из MinIO (см. сценарий удаления файла доказательной базы).
 
 ## 6.3. Описание классификаторов
 
@@ -670,7 +674,7 @@ erDiagram
 - Все временные метки — `TIMESTAMPTZ` (UTC);
 - ENUM-типы создаются как нативные PostgreSQL `CREATE TYPE`;
 - Удаление — физическое (hard delete);
-- Миграции — Alembic (`backend/migrations/versions/`).
+- Миграции — goose (`backend-go/db/migrations/`), применяются на старте `cmd/api`.
 
 ---
 
@@ -817,24 +821,23 @@ erDiagram
 
 | Библиотека | Версия | Назначение |
 |------------|--------|------------|
-| Python | 3.12 | Runtime |
-| FastAPI | latest | HTTP-фреймворк |
-| Uvicorn | latest | ASGI-сервер |
-| SQLAlchemy | 2.x (async) | ORM |
-| Alembic | latest | Миграции БД |
-| asyncpg | latest | Драйвер PostgreSQL |
-| Pydantic | 2.x | Валидация и сериализация |
-| pydantic-settings | latest | Конфигурация из `.env` |
-| python-jose | latest | JWT |
-| passlib[bcrypt] | latest | Хэширование паролей |
-| python-magic | latest | Детекция MIME-типа |
-| Pillow | latest | Обработка изображений |
-| cvss | latest | Расчёт CVSS |
-| httpx | latest | HTTP-клиент |
-| minio | latest | SDK MinIO |
-| aio-pika | latest | AMQP-клиент |
-| aiosmtplib | latest | SMTP-клиент (worker) |
-| python-docx | latest | Генерация DOCX-отчётов |
+| Go | 1.26 | Runtime / компилятор |
+| chi | v5 | HTTP-роутер |
+| pgx | v5 | Драйвер и пул соединений PostgreSQL |
+| sqlc | latest | Генерация типобезопасного кода из SQL |
+| goose | latest | Миграции БД |
+| oapi-codegen | v2 | Генерация серверного кода из OpenAPI |
+| golang-jwt | v5 | JWT |
+| golang.org/x/crypto (bcrypt) | latest | Хэширование паролей |
+| pquerna/otp | latest | TOTP (2FA) |
+| net/http (DetectContentType) | stdlib | Детекция MIME-типа |
+| disintegration/imaging | latest | Обработка изображений |
+| internal/adapters/cvss | — | Расчёт CVSS 3.1/4.0 (Go) |
+| net/http + netguard | stdlib | HTTP-клиент рекон-фермы |
+| minio-go | v7 | SDK MinIO |
+| amqp091-go | latest | AMQP-клиент (опционально) |
+| coder/websocket | latest | WebSocket |
+| report-sidecar (python-docx) | latest | Генерация DOCX-отчётов (временный Python-сервис) |
 
 ## 11.3. Программная платформа frontend
 
@@ -844,7 +847,7 @@ erDiagram
 | React | 18 | UI-фреймворк |
 | TypeScript | 5.x | Типизация |
 | Vite | 6 | Сборщик |
-| MUI | 6 | Дизайн-система |
+| frost.css | — | Кастомная дизайн-система (DOM, без MUI) |
 | React Router | 6 | Маршрутизация |
 | Zustand | latest | State management |
 | axios | latest | HTTP-клиент |
@@ -859,7 +862,7 @@ erDiagram
 
 | Ключ | Назначение |
 |------|------------|
-| `DATABASE_URL` | URL подключения к PostgreSQL (asyncpg) |
+| `DATABASE_URL` | URL подключения к PostgreSQL (pgx) |
 | `JWT_SECRET_KEY` | Секрет для подписи JWT (≥ 32 символа) |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | TTL access cookie (по умолчанию 30) |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | TTL refresh cookie (по умолчанию 30) |
@@ -951,7 +954,7 @@ flowchart TD
 flowchart TD
     A([POST /vulns/id/files multipart]) --> B[require_project_access]
     B --> C[Прочитать заголовок файла<br/>~512 байт]
-    C --> D[python-magic: реальный MIME]
+    C --> D[http.DetectContentType: реальный MIME]
     D --> E{MIME в whitelist?}
     E -- "нет" --> X1([415])
     E -- "да" --> F{Размер ≤ 50 МБ?}
@@ -971,18 +974,18 @@ flowchart TD
   Base Score, нормализация до диапазона `0..10` с шагом 0.1.
 - **Версия v4.0:** парсинг по спецификации FIRST CVSS v4.0; учёт
   CIA-метрик, Threat-метрик, Environmental-метрик.
-- Расчёт выполняется в backend (`cvss` Python) и frontend (`cvss.ts`);
+- Расчёт выполняется в backend (`internal/adapters/cvss`, Go) и frontend (`cvss.ts`);
   значения сверяются на отображении.
 
 ## 12.7. Алгоритм генерации Word-отчёта (ПП / СЗИ)
 
 ```mermaid
 flowchart TD
-    A([POST /projects/id/reports/pp]) --> B[require_project_access]
-    B --> C[ReportService.build_pp]
+    A([POST /projects/id/reports/pp]) --> B[Проверка доступа к проекту]
+    B --> C[Go-хендлер отчётов → report-sidecar]
     C --> D[Загрузить проект + связанные<br/>хосты/vulns/команду]
     D --> E[Открыть шаблон шаблон.docx]
-    E --> F[Подставить плейсхолдеры<br/>через python-docx]
+    E --> F[Подставить плейсхолдеры<br/>через python-docx (sidecar)]
     F --> G[Стрим .docx в HTTP-ответ]
     G --> H([Content-Disposition: attachment])
 ```
@@ -1130,8 +1133,8 @@ PCF — веб-приложение. Установки клиентского �
 
 ## 15.5. Обслуживание базы данных
 
-- Применение миграций Alembic выполняется вручную через
-  `alembic upgrade head` (внутри контейнера backend).
+- Миграции goose применяются автоматически при старте `cmd/api`; при необходимости
+  — вручную через `goose` (внутри контейнера backend).
 - Резервное копирование PostgreSQL и MinIO — по корпоративному
   регламенту (вне scope FROST).
 - Логи RabbitMQ / mail-worker доступны через `docker logs`.
@@ -1167,7 +1170,8 @@ PCF — веб-приложение. Установки клиентского �
 
 ## 16.2. Состав тестового покрытия
 
-- Backend: `pytest` + `pytest-asyncio` (≥ 94 теста; модули `tests/`);
+- Backend: `go test ./... -race` (табличные тесты в пакетах) + e2e с БД
+  (postgres:16-alpine) под флагом `FROST_TEST_DATABASE_URL`;
 - Frontend: `vitest` + Testing Library;
 - Ручные тест-кейсы — см. [TEST_CASES.md](TEST_CASES.md).
 
@@ -1212,7 +1216,7 @@ PCF — веб-приложение. Установки клиентского �
 | Контейнеры | Сборка из репозитория командой `docker compose build` |
 | Конфигурация | `.env.example` — шаблон |
 | Документация | Каталог `/` и `docs/` репозитория |
-| Тестовые данные | `backend/scripts/reset_and_seed.py` (только для dev) |
+| Тестовые данные | Стартовый админ создаётся `cmd/api` при первом запуске (пустая таблица `users`) из `INITIAL_ADMIN_*` |
 
 ## 17.2. Срок службы и условия эксплуатации
 

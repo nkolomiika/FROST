@@ -1,8 +1,8 @@
 # Архитектура FROST (Findings, Research, Offensive Security & Testing)
 
-> Документ описывает АКТУАЛЬНОЕ состояние кода в репозитории. Структура backend — плоская: один `app/services.py`, один `app/schemas.py`, один `app/models.py` (без Repository pattern и без подкаталога `repositories/`).
+> Документ описывает АКТУАЛЬНОЕ состояние кода в репозитории. Backend переписан на **Go** и организован по гексагональной архитектуре (ports & adapters): доменные bounded-контексты в `internal/app/<context>`, порты-реализации в `internal/adapters/*`, точки входа в `cmd/*`. Единый god-service `services.py` из Python-версии разбит на контексты; Repository pattern теперь используется (порт `Store` над sqlc).
 >
-> См. также: [`ARCH_DIAGRAM.md`](./ARCH_DIAGRAM.md) — Mermaid-диаграммы.
+> См. также: [`ARCH_DIAGRAMS.md`](./ARCH_DIAGRAMS.md) — Mermaid-диаграммы.
 
 ---
 
@@ -12,128 +12,101 @@
 
 Развёртывание состоит из следующих сервисов:
 
-- `frontend` — React + Vite (HTTPS, порт 3000), проксирует `/api` и `/ws` на `backend`.
-- `backend` — FastAPI (uvicorn, порт 8000): REST API `/api/v1`, машинный API `/api/v2` для AI-агентов, WebSocket `/ws/*`.
-- `db` — PostgreSQL: основная БД (async-доступ через asyncpg). Хранит и доменные данные, и audit-журнал.
+- `frontend` — React + Vite за nginx (HTTPS, порт 3000), проксирует `/api` и `/ws` на `backend`.
+- `backend` — Go-бинарь `cmd/api` (порт 8000): REST API `/api/v1`, машинный API `/api/v2` для AI-агентов, WebSocket `/ws/*`. Применяет goose-миграции и создаёт стартового админа при старте.
+- `db` — PostgreSQL 16: основная БД (доступ через pgx/pgxpool). Хранит и доменные данные, и audit-журнал.
 - `minio` — S3-совместимое хранилище для аватаров пользователей и evidence-файлов уязвимостей.
-- `rabbitmq` — брокер сообщений для очереди отправки писем (`pcf.mail`).
-- `mail-worker` — отдельный sidecar-процесс, потребляющий `pcf.mail` и отправляющий письма по SMTP.
+- `rabbitmq` — брокер сообщений (опциональный путь масштабирования; воркеры работают как DB-поллеры и не требуют RabbitMQ на старте).
+- `mail-worker` / `recon-worker` — отдельные Go-бинари (`cmd/mail-worker`, `cmd/recon-worker`), DB-поллеры очередей `mail_jobs` и recon/farm.
+- `report-sidecar` — временный Python-sidecar генерации `.docx`-отчётов (единственный остаток Python).
 - `mailpit` (dev) / внешний SMTP (prod) — приём писем.
 
 ### Стек
 
 **Backend**
-- Python 3.12, FastAPI
-- SQLAlchemy 2.x (async, `AsyncSession`) + Alembic
-- Pydantic v2 / pydantic-settings
-- JWT через `python-jose`, bcrypt через `passlib`
-- `python-magic` (детекция MIME), Pillow (обработка изображений)
-- `cvss` (вычисление CVSS), `httpx` (HTTP-клиент)
-- `minio` (SDK MinIO)
-- `aio-pika` (RabbitMQ), `aiosmtplib` (SMTP в worker)
+- Go 1.26, гексагональная архитектура (модуль `github.com/nkolomiika/frost` в `backend-go/`)
+- chi v5 (роутер), pgx v5 + sqlc (типобезопасный SQL), goose (миграции, применяются на старте)
+- oapi-codegen — генерация серверного кода и типов из контракта `docs/openapi-v{1,2}.json`
+- JWT через `golang-jwt/jwt v5`, bcrypt через `golang.org/x/crypto`, TOTP через `pquerna/otp`
+- детекция MIME через `http.DetectContentType` (+ ручной разбор WEBP), обработка изображений через `disintegration/imaging`
+- CVSS 4.0 — `internal/adapters/cvss` (референс FIRST.org, портирован и сверен с Python)
+- `minio-go/v7` (SDK MinIO), `amqp091-go` (RabbitMQ), `coder/websocket`, логирование через `slog`
 
 **Frontend**
 - React 18 + TypeScript, сборка через Vite 6
-- MUI 6 (`@mui/material`, `@mui/icons-material`)
-- React Router 6
 - Zustand (state) — `useAuthStore`, `useToastStore`
 - `axios` (HTTP-клиент), `react-markdown` (рендер Markdown)
 - TipTap 2.x — WYSIWYG/Markdown-редактор (`@tiptap/react`, `@tiptap/starter-kit`, `tiptap-markdown`)
 - `js-yaml` — парсинг OpenAPI YAML на клиенте
 - Vitest + Testing Library — unit-тесты
 
+> Актуальный интерфейс — `frontend/src/frost/` (обычный DOM + `frost.css`, без MUI). Каталог `frontend/src/pages/` — прежний MUI-интерфейс, в приложении не используется.
+
 ---
 
-## 2. Структура backend (фактическая, плоская)
+## 2. Структура backend (Go, гексагональная)
 
 ```
-backend/
-├── app/
-│   ├── main.py                    # FastAPI startup, монтирование роутеров, error handlers,
-│   │                              # ad-hoc ALTER TABLE миграции для совместимости
-│   ├── config.py                  # Pydantic Settings (.env), валидация JWT-секрета (>= 32 симв.)
-│   ├── database.py                # async engine + async_sessionmaker, Base
-│   ├── dependencies.py            # get_current_user, require_admin, require_project_access,
-│   │                              # enforce_csrf, get_agent_token_context, require_agent_scope,
-│   │                              # require_agent_project_access
-│   ├── enums.py                   # UserRole, ProjectStatus, Severity, VulnerabilityStatus,
-│   │                              # AssetType, HostStatus, Protocol, PortState, HttpMethod,
-│   │                              # CvssVersion, NotificationType
-│   ├── exceptions.py              # PCFError, NotFoundError, UnauthorizedError, ForbiddenError,
-│   │                              # ConflictError, ValidationError
-│   ├── models.py                  # ВСЕ ORM-модели одним файлом: User, RefreshToken,
-│   │                              # AgentApiToken, AgentApiTokenProjectGrant, MailJob,
-│   │                              # Project, ProjectFolder, ProjectMember,
-│   │                              # ProjectNote, ProjectNoteComment,
-│   │                              # Host, HostIpAddress, Port, Service, Endpoint,
-│   │                              # Vulnerability, VulnerabilityAsset,
-│   │                              # File, Comment, CommentMention,
-│   │                              # Notification, AuditLog
-│   ├── schemas.py                 # ВСЕ Pydantic-схемы (request/response) одним файлом
-│   ├── services.py                # ВСЕ сервисные классы одним файлом:
-│   │                              #   AuditService, AgentTokenService,
-│   │                              #   AuthService, UserService, ProjectService, AssetService,
-│   │                              #   VulnerabilityService, FileService, CommentService,
-│   │                              #   ProjectNoteService, NotificationService,
-│   │                              #   ImportService, ReportService
-│   ├── security.py                # bcrypt (hash_password / verify_password), JWT encode/decode,
-│   │                              # hash_refresh_token (SHA-256), hash_agent_token (SHA-256)
-│   ├── pagination.py              # PageParams, to_paginated_response
-│   ├── ws_manager.py              # WebSocket connection manager:
-│   │                              #   broadcast по project_id, notify_user по user_id,
-│   │                              #   projects-index общий канал
-│   ├── messaging.py               # publish_mail_job в RabbitMQ
-│   ├── mail.py                    # build_temporary_password_email (рендер шаблона)
-│   ├── routers/
-│   │   ├── auth.py                # /auth — login, refresh (rotation), logout,
-│   │   ├── users.py               # /users — CRUD, /me, /me/profile, /me/avatar,
-│   │   │                          # password reset (admin)
-│   │   ├── projects.py            # /projects — CRUD проектов и папок (folders + move),
-│   │   │                          # members
-│   │   ├── project_notes.py       # /projects/{id}/notes — Confluence-like заметки
-│   │   │                          # (иерархия parent/sort_order) и комментарии к ним
-│   │   ├── assets.py              # /projects/{id}/hosts/* — hosts, ports, services,
-│   │   │                          # endpoints (HostIpAddress управляется через Host)
-│   │   ├── vulnerabilities.py     # /projects/{id}/vulnerabilities — CRUD, status,
-│   │   │                          # workflow_steps, привязка к assets
-│   │   ├── files.py               # загрузка/скачивание/удаление evidence-файлов
-│   │   ├── comments.py            # комментарии к уязвимостям + @mention
-│   │   ├── notifications.py       # список, unread-count, mark-read, read-all
-│   │   ├── import_.py             # импорт PCF JSON, импорт/экспорт OpenAPI для хоста
-│   │   ├── reports.py             # генерация Word-отчётов: ПП и СЗИ
-│   │   ├── audit_logs.py          # чтение audit-логов из PostgreSQL (full-text + фильтры)
-│   │   ├── agent_tokens.py        # /agent-tokens — управление Bearer-токенами для AI агентов
-│   │   ├── v2_agent.py            # публичный /api/v2 для AI агентов (Bearer auth)
-│   │   └── websocket.py           # /ws/notifications, /ws/projects/{id}, /ws/projects-index
-│   ├── reports/
-│   │   ├── __init__.py            # build_pp(...), build_szi(...)
-│   │   └── word_builder.py        # генерация .docx через python-docx
-│   ├── storage/
-│   │   └── minio_client.py        # MinioStorage: ensure_bucket, upload/download/delete bytes
-│   └── worker/
-│       └── mail_worker.py         # RabbitMQ consumer: разбирает MailJob, шлёт по SMTP,
-│                                  # ретраи (mail_max_attempts), relay_pending_jobs
-├── migrations/                    # Alembic
-│   ├── env.py
-│   └── versions/
-│       ├── 20260415_0001_initial_schema.py
-│       ├── 20260416_0002_drop_host_os_column.py
-│       ├── 20260420_0003_create_mail_jobs.py
-│       ├── 20260430_0004_create_project_notes.py
-│       ├── 20260512_0005_create_host_ip_addresses.py
-│       └── 20260513_0006_create_agent_api_tokens.py
-├── scripts/
-│   └── reset_and_seed.py          # сброс и заполнение БД для dev-окружения
-├── tests/                         # pytest + pytest-asyncio (94+ тестов)
+backend-go/
+├── cmd/
+│   ├── api/                       # composition root HTTP-сервиса: читает config,
+│   │                              # поднимает pgxpool, применяет goose-миграции,
+│   │                              # bootstrap стартового админа, монтирует роуты chi
+│   ├── mail-worker/               # DB-поллер очереди mail_jobs (рендер + SMTP)
+│   └── recon-worker/              # DB-поллер recon/farm job-очереди
+├── config/                        # загрузка Settings из env (валидация JWT-секрета >= 32 симв.)
+├── db/
+│   ├── migrations/                # goose SQL-миграции (00001_baseline.sql и далее)
+│   └── queries/                   # *.sql для sqlc (auth, users, projects, inventory,
+│                                  #  vulns, recon, js, notifications, audit, agent-tokens)
+├── internal/
+│   ├── domain/<context>/          # сущности и порты (без внешних зависимостей)
+│   ├── apperr/                    # kind ошибки → HTTP-код
+│   ├── app/                       # use-cases по bounded-контекстам:
+│   │   ├── auth/                  #   login, refresh (rotation), logout, 2FA,
+│   │   │                          #   invite/password-reset + validate.go
+│   │   ├── users/                 #   CRUD, профиль, аватар, сброс пароля
+│   │   ├── projects/              #   проекты, папки, участники, заметки, креды, активность
+│   │   ├── inventory/             #   hosts/ips/ports/services/endpoints + OpenAPI import/export
+│   │   ├── vulns/                 #   CRUD, status, workflow_steps, assets, CVSS
+│   │   ├── notifications/         #   список, unread, mark-read
+│   │   ├── recon/                 #   farm + scanner (6 видов задач)
+│   │   ├── reports/               #   сбор данных для СЗИ/ПП (генерация — sidecar)
+│   │   ├── audit/                 #   запись и чтение audit-логов
+│   │   ├── agenttokens/           #   выпуск/отзыв Bearer-токенов /api/v2 + скоупы/гранты
+│   │   └── mailer/                #   постановка и доставка mail_jobs
+│   ├── adapters/
+│   │   ├── http/                  # chi-хендлеры (*_handlers.go), DTO из oapi-codegen,
+│   │   │                          #   middleware: auth, csrf, requireAdmin,
+│   │   │                          #   requireProjectAccessFor; cookies, pagination, apperr
+│   │   │   ├── apiv1/             #   сгенерённый сервер/типы для /api/v1 (chi-server)
+│   │   │   └── apiv2/             #   сгенерённый сервер/типы для /api/v2 (strict JSON)
+│   │   ├── postgres/
+│   │   │   ├── sqlc/              #   сгенерённые модели + Querier (из db/queries)
+│   │   │   ├── <context>repo/     #   реализация порта Store над sqlc+pgxpool, tx для compound ops
+│   │   │   └── pgconv/            #   конвертеры pgtype ↔ domain
+│   │   ├── security/             # bcrypt, SHA-256 токены, JWT, Fernet-совместимый шифр, TOTP
+│   │   ├── cvss/                 # CVSS 4.0 (референс FIRST.org)
+│   │   ├── storage/             # MinIO (Minio + Stub)
+│   │   ├── recon/               # parse/resolve/probe/fingerprint/jsscan + netguard (SSRF-гард)
+│   │   ├── mail/               # рендер шаблонов + SMTP/XOAUTH2
+│   │   ├── messaging/         # amqp091-go (опциональный fanout)
+│   │   ├── ws/               # WebSocket-хаб (push уведомлений/событий)
+│   │   └── report/           # сбор .docx через sidecar
+│   └── platform/{log,postgres}/   # инфраструктурные помощники
 ├── Dockerfile
-├── pytest.ini
-├── alembic.ini
-└── requirements.txt
+├── Makefile                       # make sqlc / oapi / tools / migrate-up/down / test / lint
+├── sqlc.yaml
+└── go.mod
 ```
+
+> Генерация кода: контракт `docs/openapi-v{1,2}.json` + goose-схема → `make oapi` (oapi-codegen) и `make sqlc` (sqlc) собирают серверные типы и типобезопасные запросы. Контракт правится руками, код — пересобирается.
 
 ---
 
 ## 3. Структура frontend (фактическая)
+
+> Ниже — прежний MUI-интерфейс (`frontend/src/pages/`, `frontend/src/components/`), оставленный в репозитории, но в приложении не используемый. Актуальный интерфейс живёт в `frontend/src/frost/` (обычный DOM + `frost.css`, без MUI). Технологический стек (React 18 + TS + Vite 6 + Zustand + axios + TipTap) общий для обоих.
 
 ```
 frontend/src/
@@ -182,10 +155,10 @@ frontend/src/
 
 | Сервис      | Назначение                                                   | Доступ из backend                                          |
 |-------------|--------------------------------------------------------------|------------------------------------------------------------|
-| PostgreSQL  | основная БД                                                  | `database_url` (asyncpg), `app/database.py`                |
-| MinIO       | хранилище файлов (avatars, vulnerability evidence)           | `app/storage/minio_client.py` (`MinioStorage`)             |
-| RabbitMQ    | очередь `pcf.mail` для асинхронной отправки писем            | publish — `app/messaging.py`, consume — `app/worker/`      |
-| Mailpit/SMTP| отправка писем (dev — Mailpit, prod — внешний SMTP)          | `app/worker/mail_worker.py` (aiosmtplib)                   |
+| PostgreSQL  | основная БД                                                  | `DATABASE_URL` (pgx/pgxpool), `internal/platform/postgres`  |
+| MinIO       | хранилище файлов (avatars, vulnerability evidence)           | `internal/adapters/storage` (minio-go v7)                   |
+| RabbitMQ    | опциональный fanout для mail/событий (не нужен на старте)     | `internal/adapters/messaging` (amqp091-go)                  |
+| Mailpit/SMTP| отправка писем (dev — Mailpit, prod — внешний SMTP)          | `cmd/mail-worker` + `internal/adapters/mail` (SMTP/XOAUTH2) |
 
 ---
 
@@ -206,12 +179,12 @@ frontend/src/
 
 ### CSRF
 
-- `enforce_csrf` (`dependencies.py`) проверяет заголовок `Origin` для всех state-changing запросов (`POST/PUT/PATCH/DELETE`).
-- Origin должен входить в whitelist `csrf_allowed_origins`.
+- CSRF-middleware (`internal/adapters/http/csrf.go`) проверяет заголовок `Origin` для всех state-changing запросов (`POST/PUT/PATCH/DELETE`).
+- Origin должен входить в whitelist `CSRF_ALLOWED_ORIGINS`.
 
 ### Bootstrap admin
 
-- При запуске, если таблица `users` пуста, создаётся пользователь из `initial_admin_username` / `initial_admin_email` / `initial_admin_password`.
+- При запуске `cmd/api`, если таблица `users` пуста, создаётся пользователь из `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD`.
 
 ### Роли
 
@@ -221,7 +194,7 @@ frontend/src/
 
 - `admin` — доступ ко всем проектам.
 - Прочие роли — через `ProjectMember` (явное членство).
-- Проверка: `require_project_access` (web) и `require_agent_project_access` (agent token).
+- Проверка: middleware `requireProjectAccessFor(authz)` (web, `project_middleware.go`) и аналогичная проверка грантов для agent-токенов (`/api/v2`).
 
 ### Agent API v2 (Bearer)
 
@@ -236,17 +209,18 @@ frontend/src/
 
 ## 6. Безопасность
 
-- **Пароли**: bcrypt (`passlib`), хеш токенов в БД — SHA-256 (`security.hash_refresh_token`, `security.hash_agent_token`).
-- **CSRF**: проверка `Origin` на мутирующих методах против `csrf_origins` whitelist.
-- **CORS**: `allow_credentials=True`, фиксированный whitelist methods (`GET, POST, PUT, PATCH, DELETE, OPTIONS`) и headers (`Authorization, Content-Type, X-Requested-With, Origin, Accept`).
+- **Пароли**: bcrypt (`golang.org/x/crypto`), хеш токенов в БД — SHA-256 (`internal/adapters/security`).
+- **CSRF**: проверка `Origin` на мутирующих методах против `CSRF_ALLOWED_ORIGINS` whitelist.
+- **CORS**: credentials разрешены, фиксированный whitelist methods (`GET, POST, PUT, PATCH, DELETE, OPTIONS`) и headers (`Authorization, Content-Type, X-Requested-With, Origin, Accept`).
 - **File uploads** (evidence-файлы):
-  - Проверка реального MIME через `python-magic` (а не только `Content-Type`).
+  - Проверка реального MIME через `http.DetectContentType` (+ ручной разбор `RIFF..WEBP`), а не только `Content-Type`.
   - Whitelist разрешённых типов.
-  - Sanitization имени файла: `basename` + удаление управляющих символов.
+  - Sanitization имени файла: `basename` + удаление управляющих символов; MinIO-ключ = `{uuid4}-{sanitized_name}`.
   - Лимит размера: `CHECK size_bytes <= 50 MiB` на уровне БД.
 - **Аватары пользователей**: только `image/png|jpeg|webp|gif` (без SVG — антиXSS).
-- **SSRF-защита исходящих запросов** (рекон-ферма, `app/netguard.py`): запрет схем кроме `https`, отказ от `localhost`/loopback/private/link-local IP.
-- **Audit log**: единое хранилище — PostgreSQL-таблица `audit_logs` (`AuditService.log()` пишет один раз и сразу коммитит). Чтение через `GET /api/v1/audit-logs` с фильтрами и full-text-поиском по action/entity_type/ip/username/details.
+- **SSRF-защита исходящих запросов** (рекон-ферма, `internal/adapters/recon/netguard`): блок-лист loopback/private/link-local/reserved/multicast IP (включая `169.254.169.254`), повторная DNS-валидация перед connect (защита от DNS-rebinding), редиректы отключены.
+- **Секреты интеграций**: шифруются Fernet-совместимо (ключ = `urlsafe_b64(sha256(jwt_secret))`).
+- **Audit log**: единое хранилище — PostgreSQL-таблица `audit_logs` (use-case `audit` пишет запись синхронно с операцией). Чтение через `GET /api/v1/audit-logs` с фильтрами и full-text-поиском по action/entity_type/ip/username/details.
 - **Markdown XSS**: `react-markdown` с `urlTransform` whitelist — `http/https/mailto` + только `data:image/...;base64,...` (см. `markdownUrlTransform.ts`).
 
 ---
@@ -262,39 +236,40 @@ frontend/src/
 
 Аутентификация WS — через `access_token` cookie (JWT). Доступ к каналу проекта — через `ProjectMember` (или admin).
 
-`ws_manager` (`app/ws_manager.py`):
-- `connect(project_id, ws)` / `broadcast(project_id, event)` — события проекта.
-- `connect_user(user_id, ws)` / `notify_user(user_id, event)` — личные уведомления.
-- `connect_projects_index(ws)` / `broadcast_projects_index(event)` — общий список проектов.
+WebSocket-хаб (`internal/adapters/ws`, на `coder/websocket`):
+- подписка на канал проекта и broadcast события по `project_id`;
+- личный канал пользователя и push уведомлений по `user_id`;
+- общий канал списка проектов (`projects-index`).
 
 ---
 
 ## 8. Background jobs
 
-### mail_worker (`app/worker/mail_worker.py`)
+Воркеры — отдельные Go-бинари и работают как **DB-поллеры**: таблицы `mail_jobs` и recon/farm job — это durable-очереди. API вставляет строку `pending`, воркер опрашивает её (≤5 с) + reclaim. RabbitMQ на старте не требуется (нужен только как путь масштабирования на несколько инстансов).
 
-- Подключается к RabbitMQ (`rabbitmq_url`), потребляет очередь `mail_queue_name` (по умолчанию `pcf.mail`).
-- На каждое сообщение находит `MailJob` в БД, рендерит письмо (`app/mail.py`) и отправляет через SMTP (`smtp_host:smtp_port`, опц. STARTTLS/SSL).
-- Ретраи: до `mail_max_attempts` попыток; при неудаче статус `MailJob.status = failed`, ошибка пишется в `last_error`.
-- `relay_pending_jobs`: периодическая задача, которая перепубликует в очередь зависшие `pending` MailJob'ы (например, если воркер был недоступен в момент publish).
+### mail-worker (`cmd/mail-worker` + `internal/adapters/mail`)
 
-### Ad-hoc DB миграции при старте
+- Поллит `mail_jobs`; на каждую задачу рендерит письмо и отправляет через SMTP (`SMTP_HOST:SMTP_PORT`, опц. STARTTLS/SSL/XOAUTH2).
+- Ретраи: до `MAIL_MAX_ATTEMPTS` попыток; при неудаче статус `failed`, ошибка в `last_error`.
+- Зависшие `pending`/`failed` (с остатком попыток) переотправляются при следующем опросе.
 
-`main.py::startup()`:
-- Создаёт таблицы (`Base.metadata.create_all`).
-- Выполняет идемпотентные `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` для совместимости с уже задеплоенными базами (вместо полноценных Alembic-миграций для добавляемых колонок).
-- Расширяет PostgreSQL ENUM'ы (`ADD VALUE IF NOT EXISTS 'developer'`, `'handover_to_development'`, `'vulnerability_recheck'`).
-- Выполняет идемпотентную трансформацию `vulnerabilities.workflow_steps` — удаление поля `title` из элементов JSON-массива.
-- `MinioStorage().ensure_bucket()` — создание бакета MinIO при необходимости.
-- `UserService.bootstrap_admin()` — стартовый администратор.
+### recon-worker (`cmd/recon-worker` + `internal/adapters/recon`)
+
+- Поллит recon/farm job-очередь; выполняет 6 видов задач (parse/resolve/probe/fingerprint/jsscan и т. д.) с SSRF-гардом `netguard`.
+
+### Старт `cmd/api`
+
+- Применяет goose-миграции (`db/migrations`) к БД.
+- Создаёт бакет MinIO при необходимости.
+- Bootstrap стартового администратора, если таблица `users` пуста.
 
 ---
 
 ## 9. Особенности реализации
 
-- **Плоская структура**: один `models.py`, один `schemas.py`, один `services.py`. Repository pattern не используется — сервисы работают напрямую с `AsyncSession`.
-- **Пагинация**: offset-based через `PageParams(page, size)` и `to_paginated_response()`. Списочные endpoint'ы возвращают `{ items, total, page, size, pages }`.
-- **CVSS**: расчёт и валидация — на стороне backend (`cvss`) и frontend (`@rohit_coder/cvss` + `cvss.ts`); поддержка v2/v3.x/v4.0.
+- **Гексагональная структура**: bounded-контексты в `internal/app/<ctx>`, порты и реализации в `internal/adapters/*`. Repository pattern используется — use-case обращается к порту `Store`, реализованному в `postgres/<ctx>repo` над sqlc+pgxpool (compound-операции в транзакции).
+- **Пагинация**: offset-based через `page`/`size`-параметры (`internal/adapters/http/pagination.go`). Списочные endpoint'ы возвращают `{ items, total, page, size, pages }`.
+- **CVSS**: расчёт и валидация — на стороне backend источник истины (`internal/adapters/cvss`, референс FIRST.org) и frontend (`cvss.ts`); severity выводится из вектора. Поддержка v3.x/v4.0.
 - **Markdown-редактор**: TipTap с `tiptap-markdown` (round-trip Markdown ↔ ProseMirror), поддержка изображений в `data:` URL.
 - **Hosts с несколькими IP**: модель `Host` хранит «основной» IP (`Host.ip_address`) для обратной совместимости + полная таблица `HostIpAddress` (с флагом `is_primary`).
 - **Project notes**: иерархическое дерево (`parent_id`, `sort_order`), уникальность `(project_id, parent_id, title)`, отдельные комментарии (`ProjectNoteComment`).
@@ -329,7 +304,7 @@ frontend/src/
 
 ### Машинный API `/api/v2` (Bearer auth)
 
-Смонтирован как отдельное FastAPI-приложение по префиксу `/api/v2` (со своими `/docs` и `/redoc`).
+Смонтирован отдельным роутером по префиксу `/api/v2` (strict-server из `apiv2`, чистый JSON), со своей OpenAPI-спецификацией.
 
 | Endpoint                                            | Scope             |
 |-----------------------------------------------------|-------------------|

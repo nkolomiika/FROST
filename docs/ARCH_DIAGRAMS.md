@@ -19,8 +19,8 @@ flowchart LR
 
     subgraph FROST["FROST — Findings, Research, Offensive Security & Testing"]
         Frontend["Frontend<br/>React + Vite<br/>:3000"]
-        Backend["Backend<br/>FastAPI<br/>:8000"]
-        Worker["mail-worker<br/>(sidecar)"]
+        Backend["Backend<br/>Go (cmd/api)<br/>:8000"]
+        Worker["mail-worker /<br/>recon-worker<br/>(DB-поллеры)"]
     end
 
     SMTP[("Корпоративный SMTP<br/>Gmail / corporate")]
@@ -43,16 +43,17 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph Browser["Браузер"]
-        ClientApp["SPA<br/>(React 18 + MUI)"]
+        ClientApp["SPA<br/>(React 18, frost UI)"]
     end
 
     subgraph Compose["docker-compose"]
         direction TB
 
         subgraph App["Application tier"]
-            Frontend["frontend<br/>Vite dev server<br/>:3000"]
-            Backend["backend<br/>uvicorn FastAPI<br/>:8000"]
-            MailWorker["mail-worker<br/>RabbitMQ consumer"]
+            Frontend["frontend<br/>Vite + nginx TLS<br/>:3000"]
+            Backend["backend<br/>Go cmd/api<br/>:8000"]
+            MailWorker["mail-worker /<br/>recon-worker<br/>(Go, DB-поллеры)"]
+            ReportSidecar["report-sidecar<br/>(Python .docx)"]
         end
 
         subgraph Infra["Infrastructure tier"]
@@ -69,87 +70,81 @@ flowchart TB
     Frontend -->|proxy /api| Backend
     Frontend -->|proxy /ws| Backend
 
-    Backend -->|asyncpg| Postgres
-    Backend -->|S3 SDK| MinIO
-    Backend -->|aio-pika publish| Rabbit
+    Backend -->|pgx/pgxpool| Postgres
+    Backend -->|minio-go v7| MinIO
+    Backend -.->|amqp091 (опц. fanout)| Rabbit
+    Backend -->|HTTP (генерация .docx)| ReportSidecar
 
-    MailWorker -->|aio-pika consume| Rabbit
-    MailWorker -->|asyncpg<br/>read MailJob| Postgres
-    MailWorker -->|aiosmtplib<br/>dev| Mailpit
-    MailWorker -.->|aiosmtplib<br/>prod| ExternalSMTP
+    MailWorker -->|poll mail_jobs / farm| Postgres
+    MailWorker -->|SMTP/XOAUTH2<br/>dev| Mailpit
+    MailWorker -.->|SMTP<br/>prod| ExternalSMTP
 ```
 
 ---
 
-## 3. Backend — слоистая архитектура
+## 3. Backend — гексагональная архитектура
 
-Запрос проходит фиксированный путь Router → Dependency → Service → Model. Repository-pattern намеренно не вводится — сервисы работают с `AsyncSession` напрямую.
+Запрос проходит путь chi-хендлер (адаптер) → use-case (контекст) → порт `Store` → repo (адаптер) → sqlc/pgx. DI — явная сборка в `cmd/api` (composition root), а не DI-контейнер.
 
 ```mermaid
 flowchart TB
     HTTP["HTTP Request<br/>(/api/v1/...)"]
 
-    subgraph Middleware["Middleware"]
-        CORS["CORSMiddleware"]
-        ErrorHandlers["Error handlers<br/>(ValidationError, NotFoundError,<br/>UnauthorizedError, ForbiddenError, ...)"]
+    subgraph Middleware["Middleware (adapters/http)"]
+        CORS["CORS"]
+        Auth["requireAuth / requireAdmin<br/>cookie → JWT → User"]
+        CSRF["CSRF (Origin check)"]
+        Access["requireProjectAccessFor(authz)"]
+        AppErr["apperr → HTTP code<br/>{ detail }"]
     end
 
-    subgraph Routers["Routers (app/routers/*)"]
-        AuthR["auth"]
-        UsersR["users"]
-        ProjectsR["projects"]
-        AssetsR["assets"]
-        VulnR["vulnerabilities"]
-        FilesR["files"]
-        CommentsR["comments"]
-        NotesR["project_notes"]
-        NotifR["notifications"]
-        ImportR["import_"]
-        ReportsR["reports"]
-        AgentR["agent_tokens"]
-        AuditR["audit_logs"]
+    subgraph Handlers["HTTP handlers (adapters/http/*_handlers.go)"]
+        AuthH["auth"]
+        UsersH["users"]
+        ProjectsH["projects"]
+        InvH["inventory"]
+        VulnH["vulns"]
+        NotifH["notifications"]
+        ReconH["recon"]
+        ReportsH["reports"]
+        AgentH["agenttokens"]
+        AuditH["audit"]
     end
 
-    subgraph DI["Dependencies (app/dependencies.py)"]
-        GetDB["get_db()<br/>AsyncSession"]
-        GetUser["get_current_user()<br/>cookie → JWT → User"]
-        RequireAdmin["require_admin"]
-        RequireAccess["require_project_access"]
-        EnforceCSRF["enforce_csrf"]
+    subgraph UseCases["Use-cases (internal/app/<context>)"]
+        AuthUC["auth"]
+        UserUC["users"]
+        ProjUC["projects"]
+        InvUC["inventory"]
+        VulnUC["vulns"]
+        NotifUC["notifications"]
+        ReconUC["recon"]
+        RepUC["reports"]
+        AgentUC["agenttokens"]
+        AuditUC["audit"]
     end
 
-    subgraph Services["Service Layer (app/services.py)"]
-        AuthSrv["AuthService"]
-        UserSrv["UserService"]
-        ProjSrv["ProjectService"]
-        AssetSrv["AssetService"]
-        VulnSrv["VulnerabilityService"]
-        FileSrv["FileService"]
-        CommSrv["CommentService"]
-        NoteSrv["ProjectNoteService"]
-        NotifSrv["NotificationService"]
-        ImpSrv["ImportService"]
-        RepSrv["ReportService"]
-        AgentSrv["AgentTokenService"]
-        AuditSrv["AuditService"]
+    subgraph Ports["Порты Store + репозитории (postgres/<ctx>repo)"]
+        Repo["Store над sqlc + pgxpool<br/>(compound ops в tx)"]
+        DB[("PostgreSQL 16")]
     end
 
-    subgraph Models["ORM (app/models.py)"]
-        DB[("PostgreSQL<br/>asyncpg")]
+    subgraph External["External adapters"]
+        MinIOExt[("MinIO<br/>storage")]
+        CVSSExt["cvss"]
+        ReconExt["recon + netguard"]
+        ReportExt["report-sidecar"]
     end
 
-    subgraph External["External"]
-        MinIOExt[("MinIO")]
-        RabbitExt[("RabbitMQ")]
-    end
-
-    HTTP --> CORS --> Routers
-    Routers --> DI --> Services
-    Services --> Models --> DB
-    FileSrv --> MinIOExt
-    UserSrv --> RabbitExt
-    Services -->|при ошибке| ErrorHandlers
-    ErrorHandlers -->|JSONResponse| HTTP
+    HTTP --> Middleware --> Handlers
+    Handlers --> UseCases
+    UseCases --> Repo --> DB
+    VulnUC --> CVSSExt
+    VulnUC --> MinIOExt
+    ReconUC --> ReconExt
+    RepUC --> ReportExt
+    UseCases -->|apperr| AppErr
+    AppErr -->|JSON| HTTP
 ```
 
 ---
@@ -229,9 +224,9 @@ flowchart LR
     BrowserStrip --> Anon["Request приходит<br/>как anonymous"]
     Anon --> Deny401["401"]
 
-    CookieFlag -->|same-site| EnforceCSRF["enforce_csrf<br/>Depends"]
-    EnforceCSRF --> Origin{"Origin / Referer<br/>в csrf_allowed_origins?"}
-    Origin -->|нет| Deny403["403 ForbiddenError<br/>'CSRF Origin запрещён'"]
+    CookieFlag -->|same-site| EnforceCSRF["CSRF middleware<br/>(adapters/http/csrf.go)"]
+    EnforceCSRF --> Origin{"Origin / Referer<br/>в CSRF_ALLOWED_ORIGINS?"}
+    Origin -->|нет| Deny403["403 Forbidden<br/>'CSRF Origin запрещён'"]
     Origin -->|да| Pass["далее в роут"]
 ```
 
@@ -274,7 +269,7 @@ stateDiagram-v2
         severity: critical/high/medium/low/info
         CVSS: v3.1 или v4.0 (auto score)
         workflow_steps: list[step]
-          (раньше с title, сейчас без — миграция в main.py)
+          (раньше с title, сейчас без — учтено в goose-схеме)
     end note
 
     fixed --> [*]
@@ -293,22 +288,22 @@ sequenceDiagram
     autonumber
     participant FE as Frontend
     participant R as POST /vulnerabilities/{id}/files
-    participant FS as FileService
-    participant Mag as python-magic
+    participant FS as vulns use-case (upload)
+    participant Mag as http.DetectContentType
     participant DB as PostgreSQL
     participant M as MinIO
 
     FE->>R: multipart/form-data (file)
-    R->>FS: upload_file(vuln_id, file, user)
+    R->>FS: UploadFile(vuln_id, file, user)
     FS->>FS: read bytes (<=50 MiB)
-    FS->>Mag: detect MIME
+    FS->>Mag: detect MIME (+WEBP ручной)
     Mag-->>FS: content_type
     FS->>FS: проверка whitelist<br/>(png, jpeg, pdf, txt, ...)
     alt MIME запрещён или size > 50MB
-        FS-->>R: ValidationError
+        FS-->>R: apperr (validation)
         R-->>FE: 422
     end
-    FS->>FS: minio_key = f"{vuln_id}/{uuid}-{safe_name}"
+    FS->>FS: minio_key = f"{uuid}-{safe_name}"
     FS->>M: put_object(bucket, key, bytes)
     M-->>FS: ok
     FS->>DB: INSERT files (vuln_id, minio_key,<br/>content_type, size_bytes, uploaded_by)
@@ -322,44 +317,35 @@ sequenceDiagram
 
 ## 10. Mail outbox + worker
 
-Outbox pattern: письмо сначала сохраняется в БД как `MailJob`, потом ID публикуется в RabbitMQ. Воркер потребляет ID, забирает `MailJob` из БД и шлёт по SMTP.
+Outbox-паттерн поверх durable-очереди в БД: роут вставляет `MailJob(status=pending)`, Go-воркер `cmd/mail-worker` поллит таблицу `mail_jobs` (≤5 с), забирает задачу, рендерит письмо и шлёт по SMTP. RabbitMQ не участвует в базовом пути (только опциональный fanout на несколько инстансов).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant API as Backend (роут)
-    participant DB as PostgreSQL
-    participant MQ as RabbitMQ pcf.mail
-    participant W as mail-worker
+    participant API as Backend (cmd/api)
+    participant DB as PostgreSQL (mail_jobs)
+    participant W as mail-worker (DB-поллер)
     participant SMTP as SMTP сервер<br/>(mailpit / Gmail / corporate)
 
     API->>DB: INSERT MailJob (status="pending")
     DB-->>API: job.id
-    API->>MQ: publish job.id
-    API->>DB: UPDATE status="queued", published_at=now()
 
-    par Consumer loop
-        W->>MQ: consume message
-        MQ-->>W: job.id
-        W->>DB: SELECT MailJob WHERE id=?
+    loop Poll loop (≤5s) + reclaim
+        W->>DB: SELECT MailJob<br/>WHERE status="pending" OR<br/>(status="failed" AND attempts<MAX)
         DB-->>W: job
         W->>DB: UPDATE status="processing", attempts++
-        W->>SMTP: aiosmtplib send (STARTTLS / SSL / plain)
+        W->>SMTP: send (STARTTLS / SSL / XOAUTH2)
         alt success
             SMTP-->>W: 250 OK
             W->>DB: UPDATE status="sent", sent_at=now()
         else error
             SMTP-->>W: 5xx / network
-            alt attempts >= mail_max_attempts
+            alt attempts >= MAIL_MAX_ATTEMPTS
                 W->>DB: UPDATE status="failed",<br/>last_error=...
             else
                 W->>DB: UPDATE status="pending",<br/>last_error=... (retry)
             end
         end
-    and Relay loop (every 5s)
-        W->>DB: SELECT MailJob<br/>WHERE status="pending" OR (status="failed" AND attempts<MAX)
-        DB-->>W: пропущенные jobs
-        W->>MQ: republish (если воркер падал между publish и consume)
     end
 ```
 
@@ -367,31 +353,31 @@ sequenceDiagram
 
 ## 11. SSRF & DNS-rebind защита — внутренности
 
-Исходящие HTTP-запросы делает только рекон-ферма. Предикат `is_disallowed_ip`
-(`app/netguard.py`) — единый блок-лист внутренних адресов; `ProbeTransport`
-(`app/farm/core.py`) применяет его повторно прямо перед connect, закрывая окно
-DNS-rebinding между резолвом и подключением.
+Исходящие HTTP-запросы делает только рекон-ферма. Предикат блок-листа
+(`internal/adapters/recon/netguard`) — единый список внутренних адресов; кастомный
+`DialContext` в recon-probe применяет его повторно прямо перед connect, закрывая окно
+DNS-rebinding между резолвом и подключением. Редиректы отключены.
 
 ```mermaid
 flowchart TB
-    Client["httpx.AsyncClient(<br/>transport=ProbeTransport())"]
-    Client --> Request["client.request(...)"]
-    Request --> TransportCheck["ProbeTransport.handle_async_request"]
-    TransportCheck --> Resolve["getaddrinfo(host)<br/>(в отдельном потоке)"]
-    Resolve -->|gaierror| ConnectError["httpx.ConnectError"]
+    Client["http.Client{<br/>Transport с кастомным DialContext}"]
+    Client --> Request["client.Do(req)"]
+    Request --> TransportCheck["DialContext(host:port)"]
+    TransportCheck --> Resolve["resolver.LookupIP(host)"]
+    Resolve -->|ошибка| ConnectError["dial error"]
     Resolve --> ForEach["for ip in resolved:"]
-    ForEach --> Disallowed{"is_disallowed_ip<br/>(loopback / private /<br/>link_local / reserved /<br/>multicast / unspecified /<br/>нераспознанный)"}
+    ForEach --> Disallowed{"netguard блокирует?<br/>(loopback / private /<br/>link_local / reserved /<br/>multicast / unspecified /<br/>169.254.169.254)"}
     Disallowed -->|да| ConnectError
     Disallowed -->|нет| Embedded{"встроенный в IPv6 IPv4<br/>(mapped / 6to4 / Teredo)<br/>тоже внутренний?"}
     Embedded -->|да| ConnectError
-    Embedded -->|нет| ParentTransport["AsyncHTTPTransport.handle_async_request<br/>(реальный socket connect)"]
+    Embedded -->|нет| ParentTransport["net.Dialer.DialContext<br/>(реальный socket connect)"]
 ```
 
 ---
 
 ## 12. WebSocket — каналы и события
 
-Backend держит три типа каналов через `ConnectionManager`.
+Backend держит три типа каналов через WebSocket-хаб (`internal/adapters/ws`).
 
 ```mermaid
 flowchart TB
@@ -400,18 +386,18 @@ flowchart TB
     Browser3["Pentester @ ProjectsPage"]
     Browser4["Pentester в notification toast"]
 
-    subgraph WS["ws_manager (ConnectionManager)"]
+    subgraph WS["WebSocket-хаб (adapters/ws)"]
         ProjectsIdx["/ws/projects-index<br/>{ws_set}"]
         ProjectRoom["/ws/projects/{id}<br/>{project_id → ws_set}"]
         UserChan["/ws/notifications<br/>{user_id → ws_set}"]
     end
 
-    subgraph Services["Service-layer events"]
-        CreateVuln["VulnerabilityService.create"]
-        EditHost["AssetService.update_host"]
-        AddComment["CommentService.create<br/>(@mention)"]
-        CreateProj["ProjectService.create"]
-        AddNote["ProjectNoteService.create"]
+    subgraph Services["События use-cases"]
+        CreateVuln["vulns.Create"]
+        EditHost["inventory.UpdateHost"]
+        AddComment["projects/comment Create<br/>(@mention)"]
+        CreateProj["projects.Create"]
+        AddNote["projects/note Create"]
     end
 
     Browser1 -->|connect| ProjectRoom
@@ -438,7 +424,7 @@ flowchart TB
 
 ## 13. AI Agent API `/api/v2` — scoping и проверка доступа
 
-Отдельное FastAPI-приложение, смонтированное на `/api/v2`. Аутентификация — Bearer-токен, выпущенный администратором.
+Отдельный роутер (`apiv2`, strict JSON), смонтированный на `/api/v2`. Аутентификация — Bearer-токен, выпущенный администратором.
 
 ```mermaid
 flowchart TB
@@ -495,16 +481,16 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph Write
-        ServiceOp["любая Service-операция<br/>(CRUD, LOGIN, FILE_UPLOAD, ...)"]
-        ServiceOp --> Commit["self.db.commit()<br/>(основная транзакция)"]
-        Commit --> AuditLog["AuditService.log(<br/>action, user_id, entity_type,<br/>entity_id, details, ip_address)"]
-        AuditLog --> AuditAdd["db.add(AuditLog(...))"]
-        AuditAdd --> AuditCommit["db.commit()"]
+        ServiceOp["любая use-case операция<br/>(CRUD, LOGIN, FILE_UPLOAD, ...)"]
+        ServiceOp --> Commit["commit основной транзакции"]
+        Commit --> AuditLog["audit.Log(<br/>action, user_id, entity_type,<br/>entity_id, details, ip_address)"]
+        AuditLog --> AuditAdd["INSERT audit_logs (sqlc)"]
+        AuditAdd --> AuditCommit["commit"]
     end
 
     subgraph Read["GET /api/v1/audit-logs (admin)"]
         Query["параметры:<br/>user_id, username, action,<br/>entity_type, entity_id, ip_address,<br/>query, created_from, created_to,<br/>page, size"]
-        Query --> Join["select(AuditLog, User.username)<br/>.outerjoin(User on user_id)"]
+        Query --> Join["SELECT audit_logs LEFT JOIN users<br/>(username по user_id)"]
         Join --> Filters["WHERE conditions:<br/>• не показывать LOGIN with source=refresh<br/>• ILIKE для текстовых полей<br/>• datetime range для created_at"]
         Filters --> FullText{"query?"}
         FullText -->|есть| FTSearch["OR(<br/>action ILIKE,<br/>entity_type ILIKE,<br/>ip ILIKE,<br/>User.username ILIKE,<br/>cast(details::text) ILIKE)"]
@@ -519,19 +505,19 @@ flowchart TB
 
 ## 15. Word-отчёты — конвейер генерации
 
-ПП = все страницы landscape, СЗИ = portrait. Общая логика в `_build_common`.
+ПП = все страницы landscape, СЗИ = portrait. Общая логика в `_build_common`. Сбор данных — Go (use-case `reports` + sqlc + MinIO), сборка самого `.docx` — временный Python-sidecar `report-sidecar`, которому Go передаёт данные по HTTP и отдаёт поток обратно клиенту.
 
 ```mermaid
 flowchart TB
     Trigger["POST /projects/{id}/reports/{szi|pp}"]
-    Trigger --> Service["ReportService.generate(kind)"]
-    Service --> Collect["_collect_project_data<br/>(project, members, vulnerabilities,<br/>hosts, ports, assets, files)"]
-    Collect --> Indexes["_build_report_indexes<br/>(by_id, by_vuln_id, severity_stats, ...)"]
-    Indexes --> Hydrate["_hydrate_workflow_steps<br/>(совместимость старых записей)"]
-    Hydrate --> Images["_download_report_images<br/>(MinIO + EXIF normalize + Pillow)"]
-    Images --> ToThread["asyncio.to_thread(builder)<br/>(python-docx — sync)"]
+    Trigger --> Service["reports use-case (kind)"]
+    Service --> Collect["сбор данных (sqlc)<br/>(project, members, vulnerabilities,<br/>hosts, ports, assets, files)"]
+    Collect --> Indexes["индексы<br/>(by_id, by_vuln_id, severity_stats, ...)"]
+    Indexes --> Hydrate["hydrate workflow_steps<br/>(совместимость старых записей)"]
+    Hydrate --> Images["выгрузка картинок<br/>(MinIO + EXIF normalize)"]
+    Images --> ToThread["HTTP → report-sidecar<br/>(Python python-docx)"]
 
-    subgraph Builder["build_szi / build_pp → _build_common"]
+    subgraph Builder["report-sidecar: build_szi / build_pp → _build_common"]
         LoadTpl["load_template(kind)<br/>(.docx из templates/)"]
         Orient{"kind == pp?"}
         Orient -->|да| Landscape["_set_all_sections_landscape<br/>(swap width<->height, ORIENT=LANDSCAPE)"]
@@ -561,13 +547,13 @@ sequenceDiagram
     autonumber
     participant FE as Frontend (HostDetailPage)
     participant R as POST /hosts/{id}/import-openapi
-    participant IS as ImportService
+    participant IS as inventory use-case (import)
     participant DB as PostgreSQL
 
     FE->>R: { spec_text, format: "json"|"yaml" }
-    R->>IS: import_openapi_for_host(host_id, spec_text, format)
+    R->>IS: ImportOpenAPIForHost(host_id, spec_text, format)
     IS->>IS: validate size <= 2 MiB
-    IS->>IS: parse (yaml.safe_load / json.loads)
+    IS->>IS: parse (YAML / JSON → OpenAPI)
     IS->>IS: проверить openapi >= 3.0
     IS->>IS: проверить paths count <= 2000
     loop по каждому path × method

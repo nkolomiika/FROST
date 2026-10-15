@@ -1,8 +1,8 @@
 # Use Cases — FROST
 
 Документ описывает ключевые сценарии использования системы. Все use cases опираются на
-реализованный backend (`FastAPI` + `PostgreSQL` + `MinIO` + `RabbitMQ`)
-и SPA-фронтенд на `React 18 + MUI`.
+реализованный backend (`Go` + `PostgreSQL` + `MinIO` + `RabbitMQ`)
+и SPA-фронтенд на `React 18`.
 
 Роли:
 - `admin` — полный доступ, управление пользователями/проектами/agent-токенами;

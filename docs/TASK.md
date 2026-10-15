@@ -1,7 +1,7 @@
 # TASK — FROST
 
 Чек-лист реализованных задач (отмечено `[x]`) и backlog (`[ ]`), сгруппированный по
-эпикам/модулям. Источник истины — текущий код `backend/app` и `frontend/src`.
+эпикам/модулям. Источник истины — текущий код `backend-go/` и `frontend/src`.
 
 ---
 
@@ -174,7 +174,7 @@
 - [ ] Шаблон уведомления об упоминании
 - [ ] Дайджест по проекту раз в день
 
-## Эпик 15. Frontend (React + MUI)
+## Эпик 15. Frontend (React + TypeScript)
 
 - [x] Страницы: Login, ForceChangePassword, Profile, Projects, ProjectDetail, HostDetail, UsersAdmin, AuditLogs, AiAgentIntegration
 - [x] Компоненты: ProjectTreeNav, ProjectNotesSection / TreePopover, ProjectHostsTreePopover, MarkdownEditor / Image / OutlinedReadonlyField, VulnerabilityStagesEditor
@@ -189,13 +189,13 @@
 
 ## Эпик 16. Инфраструктура и DevOps
 
-- [x] FastAPI + SQLAlchemy 2.x async + asyncpg
-- [x] Alembic миграции (включая `mail_jobs`)
+- [x] Go 1.26, гексагональная архитектура + chi + pgx + sqlc
+- [x] goose-миграции (применяются на старте `cmd/api`, включая `mail_jobs`)
 - [x] PostgreSQL — основное хранилище
 - [x] MinIO — файлы и аватары
 - [x] RabbitMQ — очередь писем
 - [x] Docker / docker-compose для backend/frontend/инфры
-- [x] Pytest-тесты сервисов и роутеров
+- [x] Go-тесты (`go test ./... -race`) + DB-e2e под `FROST_TEST_DATABASE_URL`
 - [ ] CI/CD пайплайн (GitHub Actions)
 - [ ] Helm chart / Kubernetes-манифесты
 - [ ] Метрики Prometheus + Grafana дашборды

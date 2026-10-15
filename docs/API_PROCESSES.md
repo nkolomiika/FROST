@@ -291,7 +291,7 @@
 | 409 | Конфликт уникальности |
 | 413 | Файл превышает 50 МБ |
 | 415 | Недопустимый MIME |
-| 422 | Ошибка валидации (Pydantic / приложения) |
+| 422 | Ошибка валидации (контракт OpenAPI / приложение) |
 | 5xx | Внутренняя ошибка сервера |
 
 Тело ошибки:
@@ -320,9 +320,9 @@ sequenceDiagram
     autonumber
     participant U as Пользователь
     participant F as Frontend (SPA)
-    participant B as Backend (FastAPI)
+    participant B as Backend (Go)
     participant DB as PostgreSQL
-    participant WS as ws_manager
+    participant WS as WS-hub
 
     U->>F: Открывает /login, вводит креды
     F->>B: POST /api/v1/auth/login\nOrigin: pcf.example.com
@@ -427,7 +427,7 @@ sequenceDiagram
     participant A as Админ
     participant B as Backend
     participant DB as PostgreSQL
-    participant WS as ws_manager
+    participant WS as WS-hub
 
     A->>B: POST /projects/{id}/members { user_id }
     B->>B: require_admin
@@ -484,13 +484,13 @@ sequenceDiagram
     participant B as Backend
     participant DB as PostgreSQL
     participant M as MinIO
-    participant WS as ws_manager
+    participant WS as WS-hub
 
     P->>F: «Создать уязвимость»
     F->>F: Расчёт cvss_score из вектора (cvss.ts)
     F->>B: POST /projects/{id}/vulnerabilities { ... }
     B->>B: require_project_access
-    B->>B: ValidateCvssVector (cvss Python)
+    B->>B: ValidateCvssVector (internal/adapters/cvss)
     B->>DB: INSERT vulnerabilities (status='open')
     B->>DB: INSERT audit_logs (CREATE)
     B->>WS: broadcast /ws/projects/{id}\nevent=created entity=vulnerability
@@ -504,7 +504,7 @@ sequenceDiagram
 
     P->>F: Загрузить PNG-доказательство
     F->>B: POST /vulnerabilities/{vid}/files (multipart)
-    B->>B: python-magic real MIME; size<=50MB; sanitize name
+    B->>B: http.DetectContentType real MIME; size<=50MB; sanitize name
     B->>M: PUT s3 object
     B->>DB: INSERT files
     B->>DB: INSERT audit_logs (FILE_UPLOAD)
@@ -532,7 +532,7 @@ sequenceDiagram
 flowchart TD
     A([POST upload]) --> B[require_project_access]
     B --> C[Прочитать первые 512 байт]
-    C --> D[python-magic -> реальный MIME]
+    C --> D[http.DetectContentType -> реальный MIME]
     D --> E{MIME в whitelist?}
     E -- "нет" --> X1([415])
     E -- "да" --> F{Размер <= 50 МБ?}
@@ -575,7 +575,7 @@ sequenceDiagram
     participant F as Frontend
     participant B as Backend
     participant DB as PostgreSQL
-    participant WS as ws_manager
+    participant WS as WS-hub
 
     U->>F: Комментарий: «… @bob проверь, пожалуйста»
     F->>B: POST /vulnerabilities/{vid}/comments { content }
@@ -665,7 +665,7 @@ sequenceDiagram
 
     U->>B: POST /projects/{id}/import (JSON-файл)
     B->>B: require_project_access
-    B->>B: Pydantic.parse PcfImportPayload
+    B->>B: Parse + Validate PcfImportPayload
     B->>DB: BEGIN
     loop hosts
         B->>DB: SELECT host (по hostname/ip)
@@ -855,7 +855,7 @@ sequenceDiagram
 
     U2->>B: POST /projects/{id}/hosts {...}
     B->>DB: INSERT hosts
-    B->>B: ws_manager.broadcast({id},\n{event:created,entity:host,data})
+    B->>B: WS-hub.broadcast({id},\n{event:created,entity:host,data})
     B-->>F: WS message { event, entity, project_id, data }
     F->>F: Обновить дерево хостов в state
 ```
