@@ -5404,7 +5404,7 @@ export function FrostApp() {
               {sec === "hosts" && rv === "hosts" && !state.hostImportOpen && !_hd && (
                 <>
                   <button className="clk" onClick={() => openReconExport("hosts")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
+                    <Icon name="upload" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="clk" onClick={openHostImport} style={{ height: 42, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--fr-accent)", font: "700 13px Inter,sans-serif", color: "var(--fr-on-accent)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="upload" size={16} sw={2.2} color="var(--fr-on-accent)" />{t("Add hosts")}
@@ -5423,7 +5423,7 @@ export function FrostApp() {
               {sec === "hosts" && rv === "ips" && !state.ipImportOpen && !_ipd && (
                 <>
                   <button className="clk" onClick={() => openReconExport("ips")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
+                    <Icon name="upload" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="clk" onClick={openIpImport} style={{ height: 42, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--fr-accent)", font: "700 13px Inter,sans-serif", color: "var(--fr-on-accent)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="upload" size={16} sw={2.2} color="var(--fr-on-accent)" />{t("Add IPs")}
@@ -5439,7 +5439,7 @@ export function FrostApp() {
               {sec === "hosts" && rv === "endpoints" && !state.epImportOpen && (
                 <>
                   <button className="clk" onClick={() => openReconExport("endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="download" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
+                    <Icon name="upload" size={16} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="clk" onClick={openEpImport} style={{ height: 42, padding: "0 16px", border: "none", borderRadius: 10, background: "var(--fr-accent)", font: "700 13px Inter,sans-serif", color: "var(--fr-on-accent)", display: "inline-flex", alignItems: "center", gap: 7 }}>
                     <Icon name="upload" size={16} sw={2.2} color="var(--fr-on-accent)" />{t("Add endpoints")}
@@ -5453,7 +5453,7 @@ export function FrostApp() {
               {sec === "hosts" && rv === "js" && !state.jsScanSetupOpen && !state.exportPageOpen && !_jsd && (
                 <>
                   <button className="clk" onClick={() => openReconExport("js-endpoints")} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: "var(--fr-accent-2)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <Icon name="download" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
+                    <Icon name="upload" size={15} sw={2.2} color="var(--fr-accent-2)" />{t("Export")}
                   </button>
                   <button className="addbtn clk" onClick={openJsScanSetup} disabled={isFarmJobInFlight(state.jsFarmJob?.status ?? "")} style={{ height: 42, opacity: isFarmJobInFlight(state.jsFarmJob?.status ?? "") ? 0.6 : 1 }}>
                     <Icon name="search" size={15} color="var(--fr-on-accent)" sw={2.6} />{t("Select domains & scan")}
@@ -7452,7 +7452,7 @@ export function FrostApp() {
           </span>
           <div style={{ flex: 1 }} />
           <button className="clk" onClick={() => openReconExport(allPaths.length ? "js-endpoints" : "js-secrets")} disabled={!canExport} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canExport ? "pointer" : "default" }}>
-            <Icon name="download" size={16} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
+            <Icon name="upload" size={16} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
           </button>
         </div>
         <div style={{ ...CARD, padding: "22px 24px", marginBottom: 16 }}>
@@ -7541,7 +7541,7 @@ export function FrostApp() {
           const canExport = f.endpoints.length > 0 || f.secrets.length > 0;
           return (
             <button className="clk" onClick={() => openReconExport(f.endpoints.length ? "js-endpoints" : "js-secrets")} disabled={!canExport} style={{ height: 42, padding: "0 16px", border: "1px solid var(--fr-border)", borderRadius: 10, background: "var(--fr-surface)", font: "700 13px Inter,sans-serif", color: canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)", display: "inline-flex", alignItems: "center", gap: 7, cursor: canExport ? "pointer" : "default" }}>
-              <Icon name="download" size={16} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
+              <Icon name="upload" size={16} sw={2.2} color={canExport ? "var(--fr-accent-2)" : "var(--fr-text-faint)"} />{t("Export")}
             </button>
           );
         })()}
@@ -7752,8 +7752,12 @@ export function FrostApp() {
           </div>
           {/* Status / severity are multi-select: pills toggle, several can be held at
               once, and clearing the last one falls back to "All". Driven by the token
-              lists so they cannot drift from the backend's vocabularies. */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end", marginLeft: "auto", minWidth: 0 }}>
+              lists so they cannot drift from the backend's vocabularies.
+              Оба блока лежат в одном ряду с переносом: если по ширине всё помещается —
+              STATUS и SEVERITY стоят в одну строку; если нет — SEVERITY переносится
+              под STATUS. Каждый блок (лейбл + пилюли) — цельная единица: пилюли внутри
+              блока не рвутся по отдельности, переносится блок целиком. */}
+          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", rowGap: 10, columnGap: 24, alignItems: "center", justifyContent: "flex-end", marginLeft: "auto", minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <span className="mono" style={{ fontSize: 10.5, letterSpacing: 1, color: "var(--fr-text-faint)", fontWeight: 700 }}>{t("STATUS")}</span>
               {filterPill(t("All"), vfS.length === 0, () => setState({ vulnFilterStatuses: [] }))}
